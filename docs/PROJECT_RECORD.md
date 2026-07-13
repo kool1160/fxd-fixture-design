@@ -99,3 +99,19 @@ Evidence: `python -m unittest discover -s tests -v` passes 16 tests, `python
 scripts/concept_proof.py` prints all ranked concepts, and `bash scripts/ci.sh`
 passes. No kernel, vendor connector, dependency, customer geometry, or
 production-safety claim was added.
+
+## 2026-07-13 — Milestone 6 complete
+
+Milestone 6 adds a CAD-neutral access proof for weld approaches and explicit
+manual, robot, operator, and unload envelopes. Envelopes use millimetre AABBs,
+stable weld-joint identities, optional approach metadata, and a visible
+process-data completeness flag. Deterministic intersections with generated
+fixture features report blocked weld approaches, access conflicts, and blocked
+unload paths. Missing or incomplete process data remains a warning; no result
+claims weld quality, robot reachability, certification, or production approval.
+
+Evidence: `python -m unittest discover -s tests -v` passes 21 tests,
+`python scripts/access_proof.py` reports a blocked manual weld approach and a
+clear synthetic unload envelope, and `bash scripts/ci.sh` passes. No kernel,
+vendor connector, dependency, customer geometry, or proprietary rule pack was
+added.

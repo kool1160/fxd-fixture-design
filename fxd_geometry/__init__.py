@@ -7,5 +7,7 @@ from .annotations import AnnotationError, Assumption, CriticalCharacteristic, En
 from .fixture import FixtureConcept, FixtureFeature, FixtureFinding, FixtureGenerationError, FixtureParameters, generate_fixture_primitives
 from .concepts import (CompleteFixtureConcept, ConceptScore, ConstraintAnalysis,
                        FixtureCorrection, RankedFixtureConcepts, generate_fixture_concepts)
+from .access import (AccessAnalysis, AccessAnalysisError, AccessEnvelope, AccessFinding,
+                     WeldAccessRequest, evaluate_access)
 
-__all__ = ["Aabb", "AnnotationError", "Assumption", "Body", "Box", "Component", "CompleteFixtureConcept", "ConceptScore", "ConstraintAnalysis", "CriticalCharacteristic", "Edge", "EngineeringAnnotations", "Face", "FixtureConcept", "FixtureCorrection", "FixtureFeature", "FixtureFinding", "FixtureGenerationError", "FixtureParameters", "GeometryReference", "ProductModel", "RankedFixtureConcepts", "StepImportError", "Transform", "Vec3", "WeldJoint", "generate_fixture_concepts", "generate_fixture_primitives", "import_step", "neutral_export"]
+__all__ = ["Aabb", "AccessAnalysis", "AccessAnalysisError", "AccessEnvelope", "AccessFinding", "AnnotationError", "Assumption", "Body", "Box", "Component", "CompleteFixtureConcept", "ConceptScore", "ConstraintAnalysis", "CriticalCharacteristic", "Edge", "EngineeringAnnotations", "Face", "FixtureConcept", "FixtureCorrection", "FixtureFeature", "FixtureFinding", "FixtureGenerationError", "FixtureParameters", "GeometryReference", "ProductModel", "RankedFixtureConcepts", "StepImportError", "Transform", "Vec3", "WeldAccessRequest", "WeldJoint", "evaluate_access", "generate_fixture_concepts", "generate_fixture_primitives", "import_step", "neutral_export"]

@@ -82,7 +82,7 @@ Acceptance criteria:
 
 ## Milestone 6 — Model weld, operator, and robot access
 
-**Status:** Pending
+**Status:** Complete
 
 Represent weld seams and approach envelopes, then evaluate torch, hand, clamp, cobot, and unload access against fixture geometry.
 

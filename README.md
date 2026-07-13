@@ -49,7 +49,8 @@ FXD is in early research and prototyping. It does not yet generate production-ap
 ## Baseline checks
 
 Run `bash scripts/ci.sh` for repository health. The Milestone 1 synthetic
-geometry proof is `python scripts/geometry_proof.py`; its limitations and
+geometry proof is `python scripts/geometry_proof.py`; the access proof is
+`python scripts/access_proof.py`. Their limitations and
 candidate-kernel evaluation are recorded in `docs/GEOMETRY_STACK_SPIKE.md`.
 
 ## Rights
