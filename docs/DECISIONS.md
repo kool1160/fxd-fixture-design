@@ -50,3 +50,21 @@ future work.
 
 **Supporting evidence:** `docs/ANNOTATION_CONTRACT.md` and the 8 passing tests in
 `tests/test_annotations.py`.
+
+### 2026-07-13 — Rank fixture concepts with deterministic evidence
+
+**Decision:** Complete fixture concepts are generated as explicit alternatives
+for minimum cost, fast loading, and high repeatability. Ranking uses bounded,
+explainable score components and deterministic constraint findings before any
+future AI explanation or preference ranking.
+
+**Reasoning:** Engineers need tradeoffs and visible warnings, not one opaque
+answer. The proof layer can expose translation intent and traceability while
+honestly flagging rotational and force-validation limits.
+
+**Risks and tradeoffs:** The current score is a prioritization heuristic, not
+an engineering fitness or safety score. AABB geometry cannot prove contact
+normals, rotational restraint, clamp force, weld access, or tolerance stacks.
+
+**Supporting evidence:** `docs/FIXTURE_CONCEPT_CONTRACT.md`,
+`scripts/concept_proof.py`, and the complete-concept tests.
