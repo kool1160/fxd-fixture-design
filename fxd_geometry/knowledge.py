@@ -48,6 +48,17 @@ class ProposedFeature:
                    tuple(sorted((key, str(value)) for key, value in feature.parameters.items())),
                    feature.units, feature.assumptions, feature.warnings)
 
+    def to_training_dict(self) -> dict[str, object]:
+        """Return reusable feature semantics without project-local identity."""
+        return {
+            "kind": self.kind,
+            "rule": self.rule,
+            "parameters": self.parameters,
+            "units": self.units,
+            "warnings_present": bool(self.warnings),
+            "assumptions_present": bool(self.assumptions),
+        }
+
 
 @dataclass(frozen=True)
 class CorrectionRecord:
@@ -105,12 +116,24 @@ class CorrectionRecord:
         return asdict(self)
 
     def to_training_dict(self) -> dict[str, object]:
-        """Return reusable knowledge with project/source identity removed."""
-        result = self.to_dict()
-        result.pop("source_digest", None)
-        result.pop("concept_identity", None)
-        result["privacy"] = "source_geometry_excluded"
-        return result
+        """Return reusable engineering knowledge without audit or project identity.
+
+        The full local record keeps attribution and evidence for engineering audit.
+        The training view intentionally excludes author, timestamps, record ids,
+        source/concept ids, feature ids, and free-form evidence because those may
+        identify a person, customer, shop, or project.
+        """
+        return {
+            "proposed_features": [item.to_training_dict() for item in self.proposed_features],
+            "correction": asdict(self.correction),
+            "decision": self.decision,
+            "rejection_reason": self.rejection_reason,
+            "accepted_outcome": self.accepted_outcome,
+            "knowledge_kind": self.knowledge_kind,
+            "scope": self.scope,
+            "confidence": self.confidence,
+            "privacy": "audit_and_source_identity_excluded",
+        }
 
     @classmethod
     def from_dict(cls, data: dict[str, object]) -> "CorrectionRecord":
