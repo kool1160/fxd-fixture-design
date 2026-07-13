@@ -64,3 +64,22 @@ source geometry.
 Evidence: `python -m unittest discover -s tests -v` passes 8 tests. The
 annotation contract deliberately does not perform fixture constraint, access,
 collision, or production-safety validation; those belong to later milestones.
+
+## 2026-07-13 — Milestone 4 complete
+
+Milestone 4 adds a dependency-free, CAD-neutral fixture primitive proof. It
+generates an editable `FixtureConcept` containing a parameterized flat
+baseplate, one support pad per physical body, a loading-direction hard stop,
+round-pin envelope, and relieved-locator envelope. Every feature records its
+source references, deterministic rule, units, parameters, assumptions, and
+warnings. Product geometry remains immutable and separate.
+
+The proof reports missing locating intent, annotated forbidden contacts,
+insufficient unload margin, and obvious overlap findings. It deliberately
+does not claim B-Rep accuracy, physical force adequacy, tolerance-stack
+validation, weld/robot access, certification, or production approval.
+
+Evidence: `python -m unittest discover -s tests -v` passes 11 tests, `python
+scripts/fixture_proof.py` generates 7 features with explicit millimetre units,
+and `bash scripts/ci.sh` passes. No kernel, vendor connector, or dependency
+was added.

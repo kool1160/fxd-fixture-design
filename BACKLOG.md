@@ -52,7 +52,7 @@ Acceptance criteria:
 
 ## Milestone 4 — Generate baseplate, supports, stops, and locator primitives
 
-**Status:** Pending
+**Status:** Complete
 
 Generate deterministic fixture primitives around annotated product geometry, beginning with flat baseplates, laser-cut risers, hard stops, support pads, round pins, and relieved contact geometry.
 
