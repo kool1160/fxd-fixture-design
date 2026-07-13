@@ -83,3 +83,19 @@ Evidence: `python -m unittest discover -s tests -v` passes 11 tests, `python
 scripts/fixture_proof.py` generates 7 features with explicit millimetre units,
 and `bash scripts/ci.sh` passes. No kernel, vendor connector, or dependency
 was added.
+
+## 2026-07-13 — Milestone 5 complete
+
+Milestone 5 adds three deterministic complete-fixture alternatives optimized
+for minimum cost, fast loading, and high repeatability. Each alternative
+combines the primitive proof with traceable clamp mounts, documents locating
+and clamping strategies, reports underconstraint and proof-layer rotational
+validation warnings, and exposes bounded score components plus rationale.
+Engineer corrections are copy-on-write concept metadata and do not mutate the
+immutable source model. AI ranking or explanation is not part of the execution
+path; deterministic findings remain authoritative.
+
+Evidence: `python -m unittest discover -s tests -v` passes 16 tests, `python
+scripts/concept_proof.py` prints all ranked concepts, and `bash scripts/ci.sh`
+passes. No kernel, vendor connector, dependency, customer geometry, or
+production-safety claim was added.
