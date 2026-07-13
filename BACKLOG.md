@@ -37,7 +37,7 @@ Acceptance criteria:
 
 ## Milestone 3 — Build the engineering-annotation workflow
 
-**Status:** Pending
+**Status:** Complete
 
 Allow an engineer to define build orientation, critical characteristics, permitted locating surfaces, forbidden contact areas, weld joints, loading direction, process type, production quantity, and shop constraints without modifying source geometry.
 
