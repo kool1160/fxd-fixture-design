@@ -1,0 +1,40 @@
+# Runtime and agent state
+.fxd/
+.env
+.env.*
+!.env.example
+
+# Proprietary local rule packs and unreleased invention material
+proprietary/
+private-research/
+
+# Customer and CAD data
+*.step
+*.stp
+*.iges
+*.igs
+*.x_t
+*.x_b
+*.sldprt
+*.sldasm
+*.slddrw
+*.ipt
+*.iam
+*.dwg
+*.dxf
+
+# Build and editor output
+bin/
+obj/
+build/
+dist/
+.vs/
+.vscode/
+.idea/
+__pycache__/
+*.pyc
+node_modules/
+
+# Operating system
+.DS_Store
+Thumbs.db

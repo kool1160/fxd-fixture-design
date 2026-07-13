@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "status": {
+      "type": "string",
+      "enum": ["completed", "approval_required", "blocked"]
+    },
+    "milestone_number": { "type": "integer", "minimum": 1 },
+    "milestone_name": { "type": "string", "minLength": 1 },
+    "summary": { "type": "string", "minLength": 1 },
+    "runtime_impact": { "type": "string" },
+    "geometry_kernel_impact": { "type": "string" },
+    "cad_contract_impact": { "type": "string" },
+    "manufacturing_safety_impact": { "type": "string" },
+    "intellectual_property_impact": { "type": "string" },
+    "files_changed": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "tests": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "approval_required": { "type": ["string", "null"] },
+    "unresolved_items": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "recommended_next_milestone": { "type": ["string", "null"] },
+    "recommended_next_level": { "type": ["string", "null"] }
+  },
+  "required": [
+    "status",
+    "milestone_number",
+    "milestone_name",
+    "summary",
+    "runtime_impact",
+    "geometry_kernel_impact",
+    "cad_contract_impact",
+    "manufacturing_safety_impact",
+    "intellectual_property_impact",
+    "files_changed",
+    "tests",
+    "approval_required",
+    "unresolved_items",
+    "recommended_next_milestone",
+    "recommended_next_level"
+  ]
+}

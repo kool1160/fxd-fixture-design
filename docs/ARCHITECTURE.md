@@ -1,0 +1,72 @@
+# FXD Architecture
+
+## Architectural shape
+
+```text
+CAD files / CAD connector
+          |
+          v
+  Import and translation
+          |
+          v
+Normalized Product Model  <---- Engineering annotations
+          |
+          v
+Geometry + Constraint Engine
+          |
+          +---- Fixture rule packs
+          +---- Access and collision analysis
+          +---- Standard tooling libraries
+          |
+          v
+Fixture Concept Model
+          |
+          +---- AI planner / explainer / ranker
+          +---- Deterministic validators
+          |
+          v
+Editable UI + neutral exports + CAD connectors
+```
+
+## Major boundaries
+
+### Product model
+
+Represents source assemblies, components, instances, transforms, bodies, faces, edges, units, metadata, and stable geometric references. It never contains generated fixture geometry as though it were part of the customer product.
+
+### Engineering annotations
+
+Represent build orientation, critical characteristics, welds, forbidden regions, permissible contacts, load direction, process envelopes, quantity, tolerance intent, and shop constraints.
+
+### Fixture concept model
+
+Represents base structures, locators, supports, clamps, purchased components, generated parts, assembly sequence, assumptions, warnings, scores, and traceability.
+
+### Geometry and constraint engine
+
+Owns topology queries, spatial indexing, contact calculations, collision, clearance, Boolean operations, approach envelopes, degrees-of-freedom reasoning, and deterministic concept checks.
+
+### AI layer
+
+Consumes compact structured context. It proposes restricted commands, asks for missing engineering intent, compares valid concepts, and explains tradeoffs. It does not directly mutate kernel geometry or silently override failed checks.
+
+### Connectors
+
+Thin adapters import or export data through STEP and vendor APIs. The standalone application must work without a vendor connector.
+
+## Technology selection criteria
+
+The geometry stack must be evaluated for:
+
+- STEP assembly import and export
+- stable topology access and transforms
+- Boolean robustness
+- distance, interference, and section operations
+- 2D profile and DXF generation
+- Windows distribution
+- headless testing
+- commercial redistribution
+- performance on industrial assemblies
+- language bindings and long-term maintenance
+
+Milestone 1 must produce runnable evidence before the stack is considered selected.

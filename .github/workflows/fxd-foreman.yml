@@ -1,0 +1,311 @@
+name: FXD Foreman
+
+on:
+  workflow_dispatch:
+    inputs:
+      milestone:
+        description: 'Milestone number; leave blank for the first eligible milestone'
+        required: false
+        type: string
+      draft_pr:
+        description: 'Open the generated pull request as a draft'
+        required: true
+        default: true
+        type: boolean
+
+concurrency:
+  group: fxd-foreman
+  cancel-in-progress: false
+
+jobs:
+  codex:
+    name: Build the selected milestone with Codex
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    outputs:
+      milestone_number: ${{ steps.milestone.outputs.number }}
+      milestone_title: ${{ steps.milestone.outputs.title }}
+      branch_base: ${{ steps.milestone.outputs.branch }}
+      model_name: ${{ steps.model.outputs.name }}
+    steps:
+      - name: Check out authoritative main
+        uses: actions/checkout@v5
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Select milestone
+        id: milestone
+        shell: bash
+        env:
+          REQUESTED_MILESTONE: ${{ inputs.milestone }}
+        run: |
+          set -euo pipefail
+          mkdir -p .fxd
+          node scripts/fxd-backlog.mjs select \
+            --number "$REQUESTED_MILESTONE" \
+            --context .fxd/selected-milestone.md
+          printf '.fxd/\n' >> .git/info/exclude
+
+      - name: Read Foreman model default
+        id: model
+        shell: bash
+        run: |
+          set -euo pipefail
+          model="$(tr -d '[:space:]' < .github/codex/model-default.txt)"
+          test -n "$model"
+          echo "name=$model" >> "$GITHUB_OUTPUT"
+          echo "Using model: $model"
+
+      - name: Run Codex milestone Foreman
+        id: run_codex
+        continue-on-error: true
+        uses: openai/codex-action@v1
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          prompt-file: .github/codex/prompts/run-milestone.md
+          model: ${{ steps.model.outputs.name }}
+          effort: medium
+          codex-args: '["--ephemeral"]'
+          output-schema-file: .github/codex/schemas/planning-handoff.schema.json
+          sandbox: workspace-write
+          safety-strategy: drop-sudo
+          output-file: ${{ runner.temp }}/fxd-planning-handoff.json
+
+      - name: Remove runtime-only milestone context
+        if: always()
+        run: rm -rf .fxd
+
+      - name: Validate Codex workspace
+        id: validation
+        if: steps.run_codex.outcome == 'success'
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          bash scripts/ci.sh
+
+      - name: Export review artifact
+        if: always()
+        shell: bash
+        env:
+          CODEX_OUTCOME: ${{ steps.run_codex.outcome }}
+          VALIDATION_OUTCOME: ${{ steps.validation.outcome }}
+          MILESTONE_NUMBER: ${{ steps.milestone.outputs.number }}
+          MILESTONE_TITLE: ${{ steps.milestone.outputs.title }}
+        run: |
+          set -euo pipefail
+          artifact_dir="$RUNNER_TEMP/fxd-foreman"
+          mkdir -p "$artifact_dir"
+
+          handoff_source="$RUNNER_TEMP/fxd-planning-handoff.json"
+          if [[ -f "$handoff_source" ]] && jq -e . "$handoff_source" >/dev/null 2>&1; then
+            cp "$handoff_source" "$artifact_dir/planning-handoff.json"
+          else
+            jq -n \
+              --arg status "blocked" \
+              --argjson milestone_number "${MILESTONE_NUMBER:-0}" \
+              --arg milestone_name "${MILESTONE_TITLE:-Unknown milestone}" \
+              --arg summary "Codex did not return a valid structured Planning Handoff." \
+              '{status:$status,milestone_number:$milestone_number,milestone_name:$milestone_name,summary:$summary,runtime_impact:"Unknown",geometry_kernel_impact:"Unknown",cad_contract_impact:"Unknown",manufacturing_safety_impact:"Unknown",intellectual_property_impact:"Unknown",files_changed:[],tests:[],approval_required:null,unresolved_items:["Review the failed Codex run."],recommended_next_milestone:null,recommended_next_level:null}' \
+              > "$artifact_dir/planning-handoff.json"
+          fi
+
+          git add -A
+          git diff --cached --binary --full-index main -- . > "$artifact_dir/fxd.patch"
+          jq -n \
+            --arg codex_outcome "$CODEX_OUTCOME" \
+            --arg validation_outcome "${VALIDATION_OUTCOME:-skipped}" \
+            '{codex_outcome:$codex_outcome,validation_outcome:$validation_outcome}' \
+            > "$artifact_dir/metadata.json"
+
+      - name: Upload Foreman artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fxd-foreman-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/fxd-foreman
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Fail clearly when Codex could not run
+        if: steps.run_codex.outcome != 'success'
+        shell: bash
+        run: |
+          echo "Codex did not complete. Confirm OPENAI_API_KEY, API billing, and model access." >&2
+          exit 1
+
+  publish:
+    name: Publish the milestone handoff
+    needs: codex
+    if: needs.codex.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    steps:
+      - name: Check out clean main
+        uses: actions/checkout@v5
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Download Foreman artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: fxd-foreman-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/fxd-foreman
+
+      - name: Apply Codex patch
+        id: patch
+        shell: bash
+        env:
+          PATCH_FILE: ${{ runner.temp }}/fxd-foreman/fxd.patch
+        run: |
+          set -euo pipefail
+          if [[ -s "$PATCH_FILE" ]]; then
+            git apply --index --3way "$PATCH_FILE"
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up Node.js 22
+        if: steps.patch.outputs.has_changes == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Set up Python
+        if: steps.patch.outputs.has_changes == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Validate cleanly applied changes
+        id: validation
+        if: steps.patch.outputs.has_changes == 'true'
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --cached --check
+          bash scripts/ci.sh
+
+      - name: Create pull request or approval issue
+        id: publish
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MILESTONE_NUMBER: ${{ needs.codex.outputs.milestone_number }}
+          MILESTONE_TITLE: ${{ needs.codex.outputs.milestone_title }}
+          BRANCH_BASE: ${{ needs.codex.outputs.branch_base }}
+          MODEL_NAME: ${{ needs.codex.outputs.model_name }}
+          HAS_CHANGES: ${{ steps.patch.outputs.has_changes }}
+          VALIDATION_OUTCOME: ${{ steps.validation.outcome }}
+          DRAFT_PR: ${{ inputs.draft_pr }}
+          HANDOFF_FILE: ${{ runner.temp }}/fxd-foreman/planning-handoff.json
+        run: |
+          set -euo pipefail
+          status="$(jq -r '.status // "blocked"' "$HANDOFF_FILE")"
+          approval="$(jq -r '.approval_required // empty' "$HANDOFF_FILE")"
+          summary="$(jq -r '.summary // "FXD milestone run completed."' "$HANDOFF_FILE")"
+
+          git config --local core.hooksPath /dev/null
+          git remote set-url origin "https://github.com/${GITHUB_REPOSITORY}.git"
+
+          if [[ "$HAS_CHANGES" == "true" ]]; then
+            branch="${BRANCH_BASE}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+            git switch -c "$branch"
+            git config user.name "FXD Foreman"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit -m "feat: execute FXD milestone ${MILESTONE_NUMBER}"
+
+            helper="$RUNNER_TEMP/git-credential-fxd"
+            printf '%s\n' '#!/usr/bin/env sh' 'echo "username=x-access-token"' 'echo "password=$GH_TOKEN"' > "$helper"
+            chmod 700 "$helper"
+            git -c credential.helper= -c credential.helper="$helper" push --set-upstream origin "$branch"
+            rm -f "$helper"
+
+            body="$RUNNER_TEMP/fxd-pr-body.md"
+            {
+              echo "## FXD Foreman result"
+              echo
+              echo "**Milestone ${MILESTONE_NUMBER}: ${MILESTONE_TITLE}**"
+              echo
+              echo "$summary"
+              echo
+              echo "- Model: \`$MODEL_NAME\`"
+              echo "- Codex status: \`$status\`"
+              echo "- Clean-patch validation: \`$VALIDATION_OUTCOME\`"
+              [[ -z "$approval" ]] || echo "- Approval boundary: $approval"
+              echo
+              echo '<details><summary>Structured Planning Handoff</summary>'
+              echo
+              echo '```json'
+              jq . "$HANDOFF_FILE"
+              echo '```'
+              echo '</details>'
+              echo
+              echo "Generated by FXD Foreman. Manufacturing safety, proprietary rule publication, vendor licensing, paid services, destructive actions, and production release remain protected boundaries."
+            } > "$body"
+
+            draft_flag=()
+            if [[ "$DRAFT_PR" == "true" || "$VALIDATION_OUTCOME" != "success" || "$status" != "completed" ]]; then
+              draft_flag=(--draft)
+            fi
+
+            pr_url="$(gh pr create --repo "$GITHUB_REPOSITORY" --base main --head "$branch" --title "Milestone ${MILESTONE_NUMBER}: ${MILESTONE_TITLE}" --body-file "$body" "${draft_flag[@]}")"
+            echo "pr_url=$pr_url" >> "$GITHUB_OUTPUT"
+          else
+            body="$RUNNER_TEMP/fxd-issue-body.md"
+            {
+              echo "## FXD Foreman handoff"
+              echo
+              echo "**Milestone ${MILESTONE_NUMBER}: ${MILESTONE_TITLE}**"
+              echo
+              echo "$summary"
+              echo
+              [[ -z "$approval" ]] || { echo '### Approval required'; echo; echo "$approval"; echo; }
+              echo '```json'
+              jq . "$HANDOFF_FILE"
+              echo '```'
+            } > "$body"
+            issue_url="$(gh issue create --repo "$GITHUB_REPOSITORY" --title "Milestone ${MILESTONE_NUMBER} handoff: ${MILESTONE_TITLE}" --body-file "$body")"
+            echo "issue_url=$issue_url" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Record workflow summary
+        if: always()
+        shell: bash
+        env:
+          PR_URL: ${{ steps.publish.outputs.pr_url }}
+          ISSUE_URL: ${{ steps.publish.outputs.issue_url }}
+        run: |
+          {
+            echo "## FXD Foreman"
+            echo
+            if [[ -n "$PR_URL" ]]; then
+              echo "Created pull request: $PR_URL"
+            elif [[ -n "$ISSUE_URL" ]]; then
+              echo "Created approval/blocker issue: $ISSUE_URL"
+            else
+              echo "No pull request or issue was created. Review the failed step above."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
