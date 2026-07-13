@@ -100,6 +100,22 @@ scripts/concept_proof.py` prints all ranked concepts, and `bash scripts/ci.sh`
 passes. No kernel, vendor connector, dependency, customer geometry, or
 production-safety claim was added.
 
+## 2026-07-13 — Milestone 7 complete
+
+Milestone 7 adds vendor-neutral `ToolingItem`, `ToolingLibrary`, and
+`ToolingSelection` contracts for clamps, pins, rests, and future tooling. The
+contracts expose explicit millimetre envelopes, stroke, force, mounting,
+access, source, license, attribution, and custom-geometry metadata. Selection
+is deterministic and prefers adequate standard items before custom shop items.
+The public generic library contains synthetic metadata only; custom libraries
+remain runtime-supplied and separate. Selection does not claim force adequacy,
+contact stability, tolerance validation, or production approval.
+
+Evidence: `python -m unittest discover -s tests -v` passes 27 tests,
+`python scripts/tooling_proof.py` prints the selected generic clamp and its
+review warnings, and `bash scripts/ci.sh` passes. No vendor SDK, dependency,
+catalog content, customer geometry, or proprietary rule pack was added.
+
 ## 2026-07-13 — Milestone 6 complete
 
 Milestone 6 adds a CAD-neutral access proof for weld approaches and explicit
