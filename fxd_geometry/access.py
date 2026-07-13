@@ -1,8 +1,8 @@
 """Deterministic proof-layer access and unload analysis.
 
 Access envelopes are explicit neutral AABBs supplied by an engineer or a
-future process planner.  They are not a robot motion planner or a weld-quality
-solver.  A blocked envelope is evidence requiring review, never a production
+future process planner. They are not a robot motion planner or a weld-quality
+solver. A blocked envelope is evidence requiring review, never a production
 approval claim.
 """
 
@@ -39,8 +39,12 @@ class AccessEnvelope:
             raise AccessAnalysisError("access envelope mode must be manual, robot, operator, or unload")
         if self.units != "mm":
             raise AccessAnalysisError("access envelopes must use millimetres")
-        if self.direction is not None and self.direction == Vec3(0.0, 0.0, 0.0):
-            raise AccessAnalysisError("access envelope direction must not be zero")
+        if self.direction is not None:
+            values = (self.direction.x, self.direction.y, self.direction.z)
+            if not all(math.isfinite(value) for value in values):
+                raise AccessAnalysisError("access envelope direction must be finite")
+            if self.direction == Vec3(0.0, 0.0, 0.0):
+                raise AccessAnalysisError("access envelope direction must not be zero")
         if self.reach is not None and (not math.isfinite(self.reach) or self.reach < 0):
             raise AccessAnalysisError("access envelope reach must be finite and non-negative")
 
@@ -88,8 +92,16 @@ def _validate_reference(product: ProductModel, reference: GeometryReference) -> 
     component = components.get(reference.component_identity)
     if component is None:
         raise AccessAnalysisError(f"unknown access component {reference.component_identity!r}")
-    if reference.body_identity and reference.body_identity not in {body.identity for body in component.bodies}:
+    if reference.body_identity is None:
+        return
+    bodies = {body.identity: body for body in component.bodies}
+    body = bodies.get(reference.body_identity)
+    if body is None:
         raise AccessAnalysisError(f"unknown access body {reference.body_identity!r}")
+    if reference.face_identity and reference.face_identity not in {face.identity for face in body.faces}:
+        raise AccessAnalysisError(f"unknown access face {reference.face_identity!r}")
+    if reference.edge_identity and reference.edge_identity not in {edge.identity for edge in body.edges}:
+        raise AccessAnalysisError(f"unknown access edge {reference.edge_identity!r}")
 
 
 def evaluate_access(product: ProductModel, fixture: FixtureConcept,
@@ -98,8 +110,8 @@ def evaluate_access(product: ProductModel, fixture: FixtureConcept,
                     envelopes: tuple[AccessEnvelope, ...] = ()) -> AccessAnalysis:
     """Evaluate explicit weld, operator, robot, and unload envelopes.
 
-    Envelope geometry is checked against fixture features only.  The product
-    remains the target of the request and is never modified.  The caller must
+    Envelope geometry is checked against fixture features only. The product
+    remains the target of the request and is never modified. The caller must
     supply envelope coverage appropriate to the process; incomplete data is
     surfaced instead of inferred.
     """
@@ -115,6 +127,10 @@ def evaluate_access(product: ProductModel, fixture: FixtureConcept,
             raise AccessAnalysisError(f"unknown weld joint {request.weld_joint_identity!r}")
         if request.target_reference is not None:
             _validate_reference(product, request.target_reference)
+            if request.target_reference not in joint.references:
+                raise AccessAnalysisError(
+                    f"access target does not belong to weld joint {joint.identity!r}"
+                )
         if not request.envelope.process_data_complete:
             findings.append(AccessFinding("incomplete_process_data", "warning", request.identity, None,
                 f"{request.envelope.mode} access request lacks complete process data; clearance is provisional."))
