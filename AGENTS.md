@@ -6,9 +6,10 @@ All AI coding agents working on FXD must read and follow, in order:
 2. `docs/PRODUCT_DIRECTION.md`
 3. `docs/ENGINEERING_CONSTITUTION.md`
 4. `docs/ARCHITECTURE.md`
-5. `BACKLOG.md`
+5. `docs/ENGINEERING_TEAM.md`
+6. `BACKLOG.md`
 
-The Engineering Constitution is the highest-priority engineering standard. Product Direction governs what FXD is becoming. The Backlog controls implementation order.
+The Engineering Constitution is the highest-priority engineering standard. Product Direction governs what FXD is becoming. The Engineering Team charter defines discipline ownership and collaboration. The Backlog controls implementation order.
 
 ## Product identity
 
@@ -22,21 +23,19 @@ FXD is industrial fixture-design software, beginning with weld fixtures for shee
 - Prefer runnable evidence over architecture theater.
 - Keep the CAD-neutral core separate from vendor-specific connectors.
 - Keep critical engineering decisions deterministic, testable, and explainable.
+- Apply every materially relevant specialist perspective from `docs/ENGINEERING_TEAM.md`.
+- Record specialist disagreement, assumptions, and unresolved risk rather than silently averaging them away.
 - Do not publish proprietary fixture heuristics, unreleased invention details, customer geometry, employer data, or confidential shop standards.
 
-## Specialist roles
+## Engineering-team model
 
-The Foreman may reason through these roles or assign focused work where supported:
+The FXD Foreman coordinates an engineering organization, not a collection of generic coding personas.
 
-- **Geometry Agent:** topology, transforms, intersections, clearance, spatial indexing, STEP data.
-- **Fixture Engineering Agent:** locating schemes, constraints, supports, stops, pins, clamps, and removability.
-- **Weld Process Agent:** weld-joint access, torch approach, tack sequence assumptions, heat-sensitive constraints.
-- **Manufacturing Agent:** laser-cut construction, formed parts, purchased hardware, tolerances, cost and assembly practicality.
-- **CAD Integration Agent:** neutral export and vendor connector contracts.
-- **Validation Agent:** invariants, golden models, collision tests, traceability, and regression evidence.
-- **UX Agent:** engineer-facing workflows that expose assumptions and allow correction.
+`docs/ENGINEERING_TEAM.md` is the authoritative role charter. The older `docs/AGENT_ROSTER.md` is a concise compatibility summary and must not override the team charter.
 
-No specialist may override the Engineering Constitution.
+For each milestone, the Foreman must identify which disciplines are materially affected, apply their required questions and responsibility boundaries, and integrate one reviewable result.
+
+No specialist may override the Engineering Constitution, deterministic validation, or protected approval boundaries.
 
 ## Stop-and-ask boundaries
 
@@ -61,15 +60,17 @@ For each milestone:
 
 1. Read the governing documents.
 2. Inspect the repository and report material differences.
-3. Complete all safe internal phases.
-4. Add tests or reproducible evidence appropriate to the risk.
-5. Run `bash scripts/ci.sh` and relevant project checks.
-6. Fix failures caused by the work.
-7. Review the final diff.
-8. Update project records only when evidence supports the claim.
-9. Stop only at a real approval boundary or material blocker.
-10. Finish with the structured Planning Handoff required by the Foreman schema.
+3. Identify the engineering disciplines materially affected.
+4. Apply those specialist perspectives before finalizing implementation decisions.
+5. Complete all safe internal phases.
+6. Add tests or reproducible evidence appropriate to the risk.
+7. Run `bash scripts/ci.sh` and relevant project checks.
+8. Fix failures caused by the work.
+9. Review the final diff.
+10. Update project records only when evidence supports the claim.
+11. Stop only at a real approval boundary or material blocker.
+12. Finish with the structured Planning Handoff required by the Foreman schema.
 
 ## Completion standard
 
-A milestone is not complete because a plan exists. Completion requires implementation or research evidence matching the milestone acceptance criteria, with changed files, checks, risks, and unresolved items recorded.
+A milestone is not complete because a plan exists. Completion requires implementation or research evidence matching the milestone acceptance criteria, with changed files, checks, discipline impacts, risks, disagreements, and unresolved items recorded.
