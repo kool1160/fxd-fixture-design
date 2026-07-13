@@ -49,3 +49,18 @@ test fixture.
 Evidence: `python -m unittest discover -s tests -v`,
 `python scripts/step_import_proof.py`, `python scripts/geometry_proof.py`, and
 `bash scripts/ci.sh` are the required validation commands.
+
+## 2026-07-13 — Milestone 3 complete
+
+Milestone 3 adds a separate, CAD-neutral engineering-annotation document. It
+captures build orientation, loading direction, process, quantity, critical
+characteristics, permitted and forbidden contacts, weld joints, shop
+constraints, and editable assumptions. Stable component/body/face/edge
+references are validated against the imported model and the source SHA-256
+prevents annotations from being applied to another source. Local deterministic
+JSON save/load preserves the annotation document without copying or mutating
+source geometry.
+
+Evidence: `python -m unittest discover -s tests -v` passes 8 tests. The
+annotation contract deliberately does not perform fixture constraint, access,
+collision, or production-safety validation; those belong to later milestones.
