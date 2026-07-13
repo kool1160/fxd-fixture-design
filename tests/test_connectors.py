@@ -23,11 +23,25 @@ class ConnectorTests(unittest.TestCase):
             NeutralStepConnector().import_product("DATA;\n#1=NOT_SUPPORTED();")
         self.assertEqual(source.read_bytes(), original)
 
-    def test_solidworks_probe_is_conservative_and_read_only(self):
-        with patch.dict(os.environ, {}, clear=True):
-            probe = probe_solidworks()
-        self.assertEqual(probe.status, "unsupported")
-        self.assertIn("No vendor SDK", " ".join(probe.limitations))
+    def test_solidworks_probe_is_conservative_and_platform_independent(self):
+        with patch("fxd_geometry.connectors.platform.system", return_value="Linux"), \
+             patch.dict(os.environ, {}, clear=True):
+            unsupported = probe_solidworks()
+        self.assertEqual(unsupported.status, "unsupported")
+        self.assertIn("No vendor SDK", " ".join(unsupported.limitations))
+
+        with patch("fxd_geometry.connectors.platform.system", return_value="Windows"), \
+             patch.dict(os.environ, {}, clear=True):
+            not_detected = probe_solidworks()
+        self.assertEqual(not_detected.status, "not_detected")
+        self.assertIsNone(not_detected.version)
+
+        with patch("fxd_geometry.connectors.platform.system", return_value="Windows"), \
+             patch.dict(os.environ, {"FXD_SOLIDWORKS_VERSION": "2026 Connected"}, clear=True):
+            unknown = probe_solidworks()
+        self.assertEqual(unknown.status, "unknown")
+        self.assertEqual(unknown.version, "2026 Connected")
+        self.assertIn("no SDK call", " ".join(unknown.evidence))
 
     def test_destructive_operation_is_blocked_until_approved(self):
         with self.assertRaises(ApprovalRequired):
