@@ -24,9 +24,11 @@ class KnowledgeTests(unittest.TestCase):
         self.assertNotIn("bounds", json.dumps(payload))
         self.assertNotIn("references", json.dumps(payload))
         training = record.to_training_dict()
-        self.assertNotIn("source_digest", training)
-        self.assertNotIn("concept_identity", training)
-        self.assertEqual(training["privacy"], "source_geometry_excluded")
+        for private_key in ("record_id", "author", "recorded_at", "source_digest",
+                            "concept_identity", "evidence"):
+            self.assertNotIn(private_key, training)
+        self.assertTrue(all("identity" not in feature for feature in training["proposed_features"]))
+        self.assertEqual(training["privacy"], "audit_and_source_identity_excluded")
 
     def test_decision_state_and_scope_are_gated(self):
         with self.assertRaises(KnowledgeError):
@@ -37,7 +39,7 @@ class KnowledgeTests(unittest.TestCase):
         self.assertEqual(accepted.decision, "accepted")
 
     def test_store_has_duplicate_guard_and_separate_training_export(self):
-        store = KnowledgeStore().add(self._record())
+        store = KnowledgeStore().add(self._record(evidence=("customer-project-123",)))
         with self.assertRaises(KnowledgeError):
             store.add(self._record())
         with tempfile.TemporaryDirectory() as directory:
@@ -48,7 +50,12 @@ class KnowledgeTests(unittest.TestCase):
             store.save_training_view(path)
             saved = json.loads(path.read_text(encoding="utf-8"))
             self.assertEqual(saved["schema_version"], "fxd-training-knowledge-v1")
-            self.assertNotIn("source_digest", saved["records"][0])
+            training_record = saved["records"][0]
+            self.assertNotIn("source_digest", training_record)
+            self.assertNotIn("author", training_record)
+            self.assertNotIn("recorded_at", training_record)
+            self.assertNotIn("evidence", training_record)
+            self.assertNotIn("customer-project-123", json.dumps(training_record))
 
     def test_private_store_location_is_explicitly_ignored(self):
         self.assertEqual(private_knowledge_path(), Path(".fxd/knowledge/corrections.json"))
