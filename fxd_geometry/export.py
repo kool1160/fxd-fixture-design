@@ -1,6 +1,6 @@
 """Deterministic, vendor-neutral fabrication-package export.
 
-The current geometry proof contains AABBs rather than B-Rep solids.  Exports
+The current geometry proof contains AABBs rather than B-Rep solids. Exports
 therefore identify themselves as proof-layer artifacts and never imply CAD
 fidelity, certification, or production approval.
 """
@@ -8,14 +8,12 @@ fidelity, certification, or production approval.
 from __future__ import annotations
 
 from dataclasses import dataclass
-import hashlib
 import json
 from pathlib import Path
-from typing import Mapping
 
 from .access import AccessAnalysis
 from .concepts import CompleteFixtureConcept
-from .fixture import FixtureFeature, FixtureFinding
+from .fixture import FixtureFeature
 from .tooling import ToolingLibrary, generic_tooling_library
 
 
@@ -123,12 +121,15 @@ def build_fabrication_package(concept: CompleteFixtureConcept, revision: str = "
                               tooling: ToolingLibrary | None = None) -> FabricationPackage:
     """Build deterministic artifacts for an eligible concept.
 
-    Provisional concepts may be exported for review. Invalid concepts may not.
+    Provisional concepts may be exported for review. Invalid concepts and
+    concepts with known access errors may not be exported.
     """
     if not revision.strip() or any(char in revision for char in "\\/:\n"):
         raise ExportError("revision must be a non-empty path-safe identifier")
     if not concept.eligible_for_recommendation:
         raise ExportError("invalid fixture concepts cannot be exported")
+    if access is not None and access.blocked:
+        raise ExportError("fixture concepts with blocked weld, operator, robot, or unload access cannot be exported")
     tooling = tooling or generic_tooling_library()
     validation = _validation(concept, access)
     bom = _bom(concept, tooling)
