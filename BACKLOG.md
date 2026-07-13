@@ -4,7 +4,7 @@ The Foreman selects the first milestone whose status is not Complete, Blocked, W
 
 ## Milestone 1 — Establish the runnable technical baseline
 
-**Status:** Pending
+**Status:** Complete
 
 Create a minimal, reproducible project baseline and perform a geometry-stack spike. Compare viable approaches for STEP assembly import, topology access, transforms, Boolean operations, clearance checks, and neutral export. Produce a small runnable proof using synthetic geometry and record the decision with licensing implications.
 

@@ -46,6 +46,12 @@ Foreman setup is documented in `docs/FOREMAN_SETUP.md`.
 
 FXD is in early research and prototyping. It does not yet generate production-approved fixtures.
 
+## Baseline checks
+
+Run `bash scripts/ci.sh` for repository health. The Milestone 1 synthetic
+geometry proof is `python scripts/geometry_proof.py`; its limitations and
+candidate-kernel evaluation are recorded in `docs/GEOMETRY_STACK_SPIKE.md`.
+
 ## Rights
 
 No open-source license is granted. Copyright © 2026 Christopher Hilton. All rights reserved. See `NOTICE.md`.

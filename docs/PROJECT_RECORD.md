@@ -18,3 +18,16 @@ Key founding decisions:
 - Proprietary fixture rules and invention-sensitive material must remain outside public source control.
 
 The first technical milestone is a runnable geometry-stack evaluation, not a large UI or speculative full architecture.
+
+## 2026-07-13 — Milestone 1 complete
+
+Milestone 1 is complete. The repository now has a dependency-free synthetic
+geometry proof covering placement, intersection, clearance, explicit
+millimetre units, and deterministic neutral serialization. A stack spike
+records OCCT as the likely STEP/B-rep candidate for evaluation behind a
+CAD-neutral adapter, with CadQuery/build123d and trimesh assessed as
+non-core alternatives. No kernel dependency was added before representative
+STEP evidence and exact redistribution obligations can be reviewed.
+
+Evidence: `python -m unittest discover -s tests -v`,
+`python scripts/geometry_proof.py`, and `bash scripts/ci.sh` all pass.
