@@ -1,18 +1,18 @@
 """Deterministic complete-fixture concept generation and ranking.
 
-This module composes the proof-layer primitives into alternatives.  It does
-not call an AI model: ranking is an explainable heuristic and all findings are
-evidence or explicit review requirements.
+This module composes the proof-layer primitives into alternatives. It does
+not call an AI model: ranking is an explainable heuristic and deterministic
+engineering eligibility always outranks preference scores.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+
 from .aabb import Aabb, Vec3
 from .annotations import EngineeringAnnotations, GeometryReference
 from .fixture import (FixtureConcept, FixtureFeature, FixtureFinding,
-                      FixtureParameters,
-                      generate_fixture_primitives)
+                      FixtureParameters, generate_fixture_primitives)
 from .product_model import Body, ProductModel
 
 
@@ -56,6 +56,20 @@ class CompleteFixtureConcept:
     score: ConceptScore
     corrections: tuple[FixtureCorrection, ...] = ()
 
+    @property
+    def engineering_status(self) -> str:
+        """Return valid, provisional, or invalid from deterministic evidence."""
+        severities = {finding.severity for finding in self.fixture.findings}
+        if "error" in severities:
+            return "invalid"
+        if "warning" in severities or self.constraints.warnings:
+            return "provisional"
+        return "valid"
+
+    @property
+    def eligible_for_recommendation(self) -> bool:
+        return self.engineering_status != "invalid"
+
     def with_correction(self, correction: FixtureCorrection) -> "CompleteFixtureConcept":
         """Return an edited concept while preserving the immutable product input."""
         remaining = tuple(item for item in self.corrections if item.key != correction.key)
@@ -70,7 +84,17 @@ class RankedFixtureConcepts:
 
     @property
     def ranked(self) -> tuple[CompleteFixtureConcept, ...]:
-        return tuple(sorted(self.concepts, key=lambda item: (-item.score.total, item.identity)))
+        """Rank engineering eligibility first, then preference score."""
+        status_order = {"valid": 0, "provisional": 1, "invalid": 2}
+        return tuple(sorted(
+            self.concepts,
+            key=lambda item: (status_order[item.engineering_status], -item.score.total, item.identity),
+        ))
+
+    @property
+    def recommended(self) -> CompleteFixtureConcept | None:
+        """Return the highest-ranked eligible concept; never recommend invalid work."""
+        return next((item for item in self.ranked if item.eligible_for_recommendation), None)
 
 
 def _physical(product: ProductModel) -> tuple[tuple[str, Body], ...]:
@@ -114,18 +138,23 @@ def _clamp_feature(product: ProductModel, parameters: FixtureParameters, index: 
 
 
 def _score(objective: str, clamp_count: int, constraints: ConstraintAnalysis) -> ConceptScore:
-    # Scores are intentionally transparent and bounded. They are not a safety claim.
+    # Scores compare eligible alternatives only; they never override engineering status.
     base = {"minimum_cost": (92, 82, 62), "fast_loading": (72, 94, 68), "high_repeatability": (55, 70, 94)}[objective]
     penalties = len(constraints.warnings) * 4
     values = tuple(max(0.0, min(100.0, value - penalties)) for value in base)
     breakdown = (("cost", values[0]), ("loading_speed", values[1]), ("repeatability", values[2]))
     total = round(sum(values) / 3, 2)
-    return ConceptScore(total, breakdown, (f"objective={objective}", f"clamp_count={clamp_count}", f"constraint_warning_penalty={penalties}"))
+    return ConceptScore(total, breakdown, (
+        f"objective={objective}",
+        f"clamp_count={clamp_count}",
+        f"constraint_warning_penalty={penalties}",
+        "engineering_status_is_ranked_before_score",
+    ))
 
 
 def generate_fixture_concepts(product: ProductModel, annotations: EngineeringAnnotations,
                               parameters: FixtureParameters | None = None) -> RankedFixtureConcepts:
-    """Generate three deterministic alternatives and rank them by explainable score."""
+    """Generate three deterministic alternatives and rank them by gated evidence."""
     annotations.validate_references(product)
     primitive = generate_fixture_primitives(product, annotations, parameters)
     params = parameters or FixtureParameters()
@@ -133,7 +162,9 @@ def generate_fixture_concepts(product: ProductModel, annotations: EngineeringAnn
     concepts: list[CompleteFixtureConcept] = []
     for objective in objectives:
         clamp_count = 2 if objective == "high_repeatability" else 1
-        features = primitive.features + tuple(_clamp_feature(product, params, index) for index in range(1, clamp_count + 1))
+        features = primitive.features + tuple(
+            _clamp_feature(product, params, index) for index in range(1, clamp_count + 1)
+        )
         findings = list(primitive.findings)
         constraints = _constraint_analysis(annotations, primitive)
         for warning in constraints.warnings:
@@ -141,6 +172,8 @@ def generate_fixture_concepts(product: ProductModel, annotations: EngineeringAnn
             findings.append(FixtureFinding(code, "warning", None, warning))
         fixture = replace(primitive, features=features, findings=tuple(findings))
         concepts.append(CompleteFixtureConcept(
-            f"concept-{objective}", objective, fixture, "3-2-1 proof-layer locating", "standard toggle clamp reaction path",
-            constraints, _score(objective, clamp_count, constraints)))
+            f"concept-{objective}", objective, fixture,
+            "3-2-1 proof-layer locating", "standard toggle clamp reaction path",
+            constraints, _score(objective, clamp_count, constraints),
+        ))
     return RankedFixtureConcepts(product.source_sha256, "mm", tuple(concepts))
