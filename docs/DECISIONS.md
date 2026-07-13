@@ -86,3 +86,24 @@ separate licensing and attribution review.
 
 **Supporting evidence:** `docs/TOOLING_LIBRARY_CONTRACT.md`,
 `scripts/tooling_proof.py`, and `tests/test_tooling.py`.
+
+### 2026-07-13 — Export review packages without production claims
+
+**Decision:** Export deterministic STEP-shaped, DXF, BOM, setup, manifest, and
+validation artifacts from eligible concepts, while marking every package
+`engineering_review_required` and `production_approval: false`.
+
+**Context:** The current core has dependency-free AABB proof geometry and no
+licensed B-Rep kernel. It can prove deterministic envelopes and quantities,
+but not fabrication-ready topology, bend deductions, tolerance stacks, or
+physical tooling adequacy.
+
+**Reasoning:** A reviewable package provides runnable milestone evidence while
+keeping CAD-neutral boundaries and the human approval requirement explicit.
+
+**Risks and tradeoffs:** The STEP and DXF artifacts are proof-layer outputs,
+not suitable for direct fabrication. A reviewed kernel/export implementation
+is required before that limitation can be removed.
+
+**Supporting evidence:** `docs/FABRICATION_PACKAGE_CONTRACT.md`,
+`scripts/export_proof.py`, and `tests/test_export.py`.
