@@ -168,3 +168,19 @@ Evidence: `python -m unittest discover -s tests -v` passes 36 tests,
 `python scripts/knowledge_proof.py` demonstrates source-free training output,
 and `bash scripts/ci.sh` passes. No kernel, connector, dependency, customer
 geometry, or proprietary rule pack was added.
+
+## 2026-07-13 — Milestone 10 complete
+
+Milestone 10 adds an optional CAD connector boundary while preserving the
+standalone neutral workflow. `NeutralStepConnector` delegates to the immutable
+STEP `ProductModel`; connector failures cannot mutate source bytes. A
+read-only SOLIDWORKS Connected/Makers probe reports conservative
+`unsupported`, `not_detected`, or `unknown` states and never invokes COM or a
+vendor SDK. Future vendor-document mutation is explicitly approval-gated.
+
+No SOLIDWORKS SDK, binary, customer geometry, or vendor catalog was added.
+Actual SOLIDWORKS compatibility, API access, and redistribution rights remain
+unresolved until an approved Windows/vendor review is available.
+
+Evidence: `python -m unittest discover -s tests -v` passes 40 tests,
+`python scripts/connector_proof.py` passes, and `bash scripts/ci.sh` passes.
