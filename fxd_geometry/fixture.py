@@ -1,14 +1,13 @@
 """Deterministic, CAD-neutral fixture primitive generation.
 
-This is intentionally an editable concept model, not a CAD-kernel model.  The
+This is intentionally an editable concept model, not a CAD-kernel model. The
 primitive bounds are a safe AABB proof until a licensed kernel adapter is
-introduced.  Source product geometry is never modified or embedded in the
-generated features.
+introduced. Source product geometry is never modified or embedded.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 import math
 from typing import Iterable
 
@@ -47,8 +46,6 @@ class FixtureParameters:
 
 @dataclass(frozen=True)
 class FixtureFeature:
-    """One editable generated feature with complete generation traceability."""
-
     identity: str
     kind: str
     bounds: Aabb
@@ -94,22 +91,27 @@ def _bounds(boxes: Iterable[Aabb]) -> Aabb:
 def _volume(box: Aabb | None) -> float:
     if box is None:
         return 0.0
-    return math.prod(max(0.0, high - low) for low, high in zip(box.minimum.__dict__.values(), box.maximum.__dict__.values()))
+    return math.prod(max(0.0, high - low) for low, high in
+                     zip(box.minimum.__dict__.values(), box.maximum.__dict__.values()))
 
 
 def _ref(component: str, body: Body) -> GeometryReference:
     return GeometryReference(component, body.identity)
 
 
+def _dominant_axis(vector: Vec3) -> tuple[int, float]:
+    values = (vector.x, vector.y, vector.z)
+    axis = max(range(3), key=lambda index: abs(values[index]))
+    return axis, 1.0 if values[axis] >= 0 else -1.0
+
+
+def _aabb(low: list[float], high: list[float]) -> Aabb:
+    return Aabb(Vec3(*low), Vec3(*high))
+
+
 def generate_fixture_primitives(product: ProductModel, annotations: EngineeringAnnotations,
                                 parameters: FixtureParameters | None = None) -> FixtureConcept:
-    """Generate a deterministic starter fixture around the annotated product.
-
-    The current proof uses axis-aligned bounds and translation-only placements.
-    It creates one baseplate, one support per physical body, one loading stop,
-    and a round/relieved locator pair.  The output is a proposal requiring
-    engineering review; findings are evidence, not a release decision.
-    """
+    """Generate an orientation-aware deterministic starter fixture concept."""
     if product.units != "mm":
         raise FixtureGenerationError("fixture generation requires an explicit millimetre product")
     annotations.validate_references(product)
@@ -117,71 +119,131 @@ def generate_fixture_primitives(product: ProductModel, annotations: EngineeringA
     physical = tuple((component, body) for component in product.components for body in component.bodies)
     if not physical:
         raise FixtureGenerationError("product has no physical bodies to fixture")
+
     product_box = _bounds(body.bounds.transformed(component.transform) for component, body in physical)
-    p = product_box.minimum
-    q = product_box.maximum
-    base_top = p.z - params.contact_clearance
-    features: list[FixtureFeature] = []
-    base = Aabb(Vec3(p.x - params.base_margin, p.y - params.base_margin, base_top - params.base_thickness),
-                Vec3(q.x + params.base_margin, q.y + params.base_margin, base_top))
-    features.append(FixtureFeature("baseplate", "baseplate", base, (), "baseplate_envelope", {
-        "margin": params.base_margin, "thickness": params.base_thickness,
-    }, assumptions=("Product bounds define the baseplate envelope.",)))
+    mins = [product_box.minimum.x, product_box.minimum.y, product_box.minimum.z]
+    maxs = [product_box.maximum.x, product_box.maximum.y, product_box.maximum.z]
+    build_axis, build_sign = _dominant_axis(annotations.build_orientation)
+    transverse = [axis for axis in range(3) if axis != build_axis]
+
+    # The build vector points from the base toward the part. Positive therefore
+    # places the base below the product minimum; negative places it beyond maximum.
+    contact_plane = (mins[build_axis] - params.contact_clearance if build_sign > 0
+                     else maxs[build_axis] + params.contact_clearance)
+    base_low = [mins[i] - params.base_margin for i in range(3)]
+    base_high = [maxs[i] + params.base_margin for i in range(3)]
+    if build_sign > 0:
+        base_low[build_axis] = contact_plane - params.base_thickness
+        base_high[build_axis] = contact_plane
+    else:
+        base_low[build_axis] = contact_plane
+        base_high[build_axis] = contact_plane + params.base_thickness
+
+    features: list[FixtureFeature] = [FixtureFeature(
+        "baseplate", "baseplate", _aabb(base_low, base_high), (), "baseplate_from_build_orientation",
+        {"margin": params.base_margin, "thickness": params.base_thickness,
+         "build_axis": float(build_axis), "build_sign": build_sign},
+        assumptions=("Dominant build-orientation axis defines the proof-layer base normal.",),
+    )]
 
     for index, (component, body) in enumerate(physical, 1):
         world = body.bounds.transformed(component.transform)
-        center = Vec3((world.minimum.x + world.maximum.x) / 2, (world.minimum.y + world.maximum.y) / 2, 0)
-        support = Aabb(Vec3(center.x - params.support_width / 2, center.y - params.support_depth / 2, base_top),
-                       Vec3(center.x + params.support_width / 2, center.y + params.support_depth / 2, world.minimum.z))
-        features.append(FixtureFeature(f"support-{index}", "support_pad", support, (_ref(component.identity, body),),
-            "support_under_each_body", {"width": params.support_width, "depth": params.support_depth,
-                                         "contact_clearance": params.contact_clearance},
-            assumptions=("Support location is the body AABB centroid.",)))
+        world_min = [world.minimum.x, world.minimum.y, world.minimum.z]
+        world_max = [world.maximum.x, world.maximum.y, world.maximum.z]
+        center = [(world_min[i] + world_max[i]) / 2 for i in range(3)]
+        low = center.copy()
+        high = center.copy()
+        low[transverse[0]] -= params.support_width / 2
+        high[transverse[0]] += params.support_width / 2
+        low[transverse[1]] -= params.support_depth / 2
+        high[transverse[1]] += params.support_depth / 2
+        if build_sign > 0:
+            low[build_axis] = contact_plane
+            high[build_axis] = world_min[build_axis]
+        else:
+            low[build_axis] = world_max[build_axis]
+            high[build_axis] = contact_plane
+        features.append(FixtureFeature(
+            f"support-{index}", "support_pad", _aabb(low, high), (_ref(component.identity, body),),
+            "support_along_build_orientation",
+            {"width": params.support_width, "depth": params.support_depth,
+             "contact_clearance": params.contact_clearance, "build_axis": float(build_axis)},
+            assumptions=("Support location is the body AABB centroid on the transverse plane.",),
+        ))
 
-    axis = max(range(3), key=lambda i: abs((annotations.loading_direction.x, annotations.loading_direction.y, annotations.loading_direction.z)[i]))
-    direction = (annotations.loading_direction.x, annotations.loading_direction.y, annotations.loading_direction.z)[axis]
-    mins = (p.x, p.y, p.z)
-    maxs = (q.x, q.y, q.z)
-    low = list(mins); high = list(maxs)
-    if direction >= 0:
-        low[axis] = maxs[axis] + params.contact_clearance
-        high[axis] = low[axis] + params.locator_wall
+    load_axis, load_sign = _dominant_axis(annotations.loading_direction)
+    stop_low = mins.copy()
+    stop_high = maxs.copy()
+    if load_sign > 0:
+        stop_low[load_axis] = maxs[load_axis] + params.contact_clearance
+        stop_high[load_axis] = stop_low[load_axis] + params.locator_wall
     else:
-        high[axis] = mins[axis] - params.contact_clearance
-        low[axis] = high[axis] - params.locator_wall
-    # Stop spans the two non-loading axes and rises above the product contact.
-    for other in range(3):
-        if other != axis:
-            low[other] -= params.locator_wall
-            high[other] += params.locator_wall
-    low[2] = base_top
-    high[2] = max(high[2], q.z + params.locator_height)
-    stop = Aabb(Vec3(*low), Vec3(*high))
+        stop_high[load_axis] = mins[load_axis] - params.contact_clearance
+        stop_low[load_axis] = stop_high[load_axis] - params.locator_wall
+    for axis in range(3):
+        if axis != load_axis:
+            stop_low[axis] -= params.locator_wall
+            stop_high[axis] += params.locator_wall
+    # Extend the stop back to the base plane without overwriting its loading-axis placement.
+    if load_axis != build_axis:
+        if build_sign > 0:
+            stop_low[build_axis] = contact_plane
+            stop_high[build_axis] = max(stop_high[build_axis], maxs[build_axis] + params.locator_height)
+        else:
+            stop_high[build_axis] = contact_plane
+            stop_low[build_axis] = min(stop_low[build_axis], mins[build_axis] - params.locator_height)
+
     references = tuple(_ref(component.identity, body) for component, body in physical)
-    features.append(FixtureFeature("loading-stop", "hard_stop", stop, references, "stop_against_loading_direction",
-        {"wall": params.locator_wall, "height": params.locator_height, "contact_clearance": params.contact_clearance},
-        assumptions=("Loading direction is represented by its dominant axis.",)))
+    features.append(FixtureFeature(
+        "loading-stop", "hard_stop", _aabb(stop_low, stop_high), references,
+        "stop_against_loading_direction",
+        {"wall": params.locator_wall, "height": params.locator_height,
+         "contact_clearance": params.contact_clearance, "loading_axis": float(load_axis),
+         "loading_sign": load_sign},
+        assumptions=("Dominant loading-direction axis defines the proof-layer stop normal.",),
+    ))
 
     first_component, first_body = physical[0]
     world = first_body.bounds.transformed(first_component.transform)
-    pin_x = world.minimum.x - params.contact_clearance - params.locator_wall / 2
-    pin_y = (world.minimum.y + world.maximum.y) / 2
-    pin = Aabb(Vec3(pin_x - params.locator_wall / 2, pin_y - params.locator_wall / 2, base_top),
-               Vec3(pin_x + params.locator_wall / 2, pin_y + params.locator_wall / 2, base_top + params.locator_height))
-    features.append(FixtureFeature("round-pin-1", "round_pin", pin, (_ref(first_component.identity, first_body),),
+    wmin = [world.minimum.x, world.minimum.y, world.minimum.z]
+    wmax = [world.maximum.x, world.maximum.y, world.maximum.z]
+    pin_low = [(wmin[i] + wmax[i]) / 2 - params.locator_wall / 2 for i in range(3)]
+    pin_high = [(wmin[i] + wmax[i]) / 2 + params.locator_wall / 2 for i in range(3)]
+    offset_axis = transverse[0]
+    pin_center = wmin[offset_axis] - params.contact_clearance - params.locator_wall / 2
+    pin_low[offset_axis] = pin_center - params.locator_wall / 2
+    pin_high[offset_axis] = pin_center + params.locator_wall / 2
+    if build_sign > 0:
+        pin_low[build_axis] = contact_plane
+        pin_high[build_axis] = contact_plane + params.locator_height
+    else:
+        pin_high[build_axis] = contact_plane
+        pin_low[build_axis] = contact_plane - params.locator_height
+    pin = _aabb(pin_low, pin_high)
+    features.append(FixtureFeature(
+        "round-pin-1", "round_pin", pin, (_ref(first_component.identity, first_body),),
         "primary_round_locator", {"diameter": params.locator_wall, "height": params.locator_height,
-                                   "contact_clearance": params.contact_clearance},
-        assumptions=("AABB proof represents a round pin by its envelope.",)))
-    relief = Aabb(Vec3(pin_x + params.locator_wall / 2, pin_y - params.locator_wall / 2, base_top),
-                  Vec3(pin_x + params.locator_wall / 2 + params.locator_wall, pin_y + params.locator_wall / 2, base_top + params.locator_height))
-    features.append(FixtureFeature("relieved-locator-1", "relieved_locator", relief, (_ref(first_component.identity, first_body),),
-        "secondary_relieved_locator", {"relief": params.manufacturing_allowance, "height": params.locator_height},
-        assumptions=("Relief is an editable manufacturing allowance, not a tolerance guarantee.",)))
+                                  "contact_clearance": params.contact_clearance},
+        assumptions=("AABB proof represents a round pin by its envelope.",),
+    ))
+
+    relief_low = pin_low.copy()
+    relief_high = pin_high.copy()
+    relief_low[offset_axis] = pin_high[offset_axis]
+    relief_high[offset_axis] = pin_high[offset_axis] + params.locator_wall
+    features.append(FixtureFeature(
+        "relieved-locator-1", "relieved_locator", _aabb(relief_low, relief_high),
+        (_ref(first_component.identity, first_body),), "secondary_relieved_locator",
+        {"relief": params.manufacturing_allowance, "height": params.locator_height},
+        assumptions=("Relief is an editable manufacturing allowance, not a tolerance guarantee.",),
+    ))
 
     findings: list[FixtureFinding] = []
     for feature in features:
         overlap = _volume(feature.bounds.intersection(product_box))
-        if overlap > params.contact_clearance ** 3 and feature.kind not in {"support_pad", "round_pin", "relieved_locator", "hard_stop"}:
+        if overlap > params.contact_clearance ** 3 and feature.kind not in {
+            "support_pad", "round_pin", "relieved_locator", "hard_stop"
+        }:
             findings.append(FixtureFinding("obvious_collision", "error", feature.identity,
                 f"{feature.identity} overlaps product bounds by {overlap:g} mm^3"))
     if not annotations.permitted_locating_surfaces:
