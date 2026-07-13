@@ -150,3 +150,21 @@ Evidence: `python -m unittest discover -s tests -v` passes 31 tests,
 `python scripts/export_proof.py` writes six deterministic synthetic artifacts,
 and `bash scripts/ci.sh` passes. No kernel, vendor connector, dependency,
 customer geometry, or proprietary rule pack was added.
+
+## 2026-07-13 — Milestone 9 complete
+
+Milestone 9 adds attributable, copy-on-write correction records and a local
+knowledge store. Records capture proposed generated-feature metadata,
+corrections, rejection or acceptance decisions, outcomes, scope, confidence,
+and evidence without serializing coordinates, topology, source bytes, or source
+references. A sanitized training view removes source and concept identifiers.
+Private records are stored under ignored `.fxd/knowledge/`; public code does
+not contain customer corrections, shop rules, or proprietary geometry.
+Universal scope is gated to explicit `rule_candidate` entries, so preferences
+and isolated lessons cannot silently become rules. Records remain historical
+engineering evidence and do not validate or approve production fixtures.
+
+Evidence: `python -m unittest discover -s tests -v` passes 36 tests,
+`python scripts/knowledge_proof.py` demonstrates source-free training output,
+and `bash scripts/ci.sh` passes. No kernel, connector, dependency, customer
+geometry, or proprietary rule pack was added.
