@@ -131,3 +131,22 @@ Evidence: `python -m unittest discover -s tests -v` passes 21 tests,
 clear synthetic unload envelope, and `bash scripts/ci.sh` passes. No kernel,
 vendor connector, dependency, customer geometry, or proprietary rule pack was
 added.
+
+## 2026-07-13 — Milestone 8 complete
+
+Milestone 8 adds a deterministic fabrication review package for eligible
+fixture concepts. The package includes a source-bound manifest, explicit
+millimetre STEP-shaped AABB geometry, XY DXF envelope profiles, reconciled BOM
+quantities including generic purchased clamp metadata, setup instructions,
+and concept/access validation findings. Invalid concepts are rejected. Every
+artifact carries revision and review status, and the package explicitly does
+not claim certification, validation, or production approval.
+
+The current proof layer cannot author true B-Rep STEP, bend-aware profiles,
+tolerance stacks, or real tooling geometry; those remain unresolved before
+direct fabrication use.
+
+Evidence: `python -m unittest discover -s tests -v` passes 31 tests,
+`python scripts/export_proof.py` writes six deterministic synthetic artifacts,
+and `bash scripts/ci.sh` passes. No kernel, vendor connector, dependency,
+customer geometry, or proprietary rule pack was added.

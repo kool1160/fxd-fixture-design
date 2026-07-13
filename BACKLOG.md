@@ -112,7 +112,7 @@ Acceptance criteria:
 
 ## Milestone 8 — Export a fabrication-ready fixture package
 
-**Status:** Pending
+**Status:** Complete
 
 Export neutral 3D geometry, laser-ready 2D profiles, BOM data, setup instructions, assumptions, and validation findings from an approved fixture concept.
 
@@ -123,6 +123,10 @@ Acceptance criteria:
 - every exported artifact identifies units and revision
 - unverified assumptions appear in the release package
 - export does not imply production approval
+
+The proof-layer implementation is intentionally limited to deterministic AABB
+STEP/DXF artifacts until a reviewed geometry kernel can author true B-Rep and
+manufacturing-aware profiles.
 
 **Recommended level:** Terra
 
