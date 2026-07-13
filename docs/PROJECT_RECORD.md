@@ -41,6 +41,11 @@ millimetre units, body/face/edge summaries, source SHA-256 identity, and clear
 malformed/unsupported-input failures. No CAD kernel or vendor connector was
 added. Full ISO 10303 parsing and OCCT adapter evaluation remain future work.
 
+The initial Foreman publication omitted the synthetic `.step` fixture because
+CAD files are intentionally ignored. PR #3 corrects that packaging issue with a
+single-path `.gitignore` exception and commits only the synthetic, non-customer
+test fixture.
+
 Evidence: `python -m unittest discover -s tests -v`,
 `python scripts/step_import_proof.py`, `python scripts/geometry_proof.py`, and
-`bash scripts/ci.sh` all pass.
+`bash scripts/ci.sh` are the required validation commands.
