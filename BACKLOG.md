@@ -132,7 +132,7 @@ manufacturing-aware profiles.
 
 ## Milestone 9 — Capture engineer corrections and reusable knowledge
 
-**Status:** Pending
+**Status:** Complete
 
 Record proposed geometry, engineer corrections, rejection reasons, and accepted outcomes in a structured local knowledge format suitable for future learning without exposing confidential source CAD.
 

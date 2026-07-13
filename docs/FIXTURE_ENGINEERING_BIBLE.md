@@ -25,3 +25,8 @@ It should capture lessons such as:
 - supporting example or evidence
 
 Do not place customer-identifying information, employer CAD, confidential drawings, or proprietary geometry in this public repository.
+
+Milestone 9 stores attributable correction history through the local
+`CorrectionRecord` contract. A lesson or preference remains scoped to its
+record unless an engineer explicitly promotes it for review as a
+`rule_candidate`; accepted history is not automatically a universal rule.

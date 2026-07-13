@@ -1,5 +1,7 @@
 # Runtime and agent state
 .fxd/
+!.fxd/selected-milestone.md
+.fxd/knowledge/
 .env
 .env.*
 !.env.example
