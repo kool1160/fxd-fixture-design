@@ -1,3 +1,4 @@
+import math
 import unittest
 from pathlib import Path
 
@@ -46,6 +47,26 @@ class AccessAnalysisTests(unittest.TestCase):
             "manual", "manual", Aabb(Vec3(0, 0, 0), Vec3(1, 1, 1))))
         with self.assertRaisesRegex(AccessAnalysisError, "unknown weld joint"):
             evaluate_access(self.product, self.fixture, self.annotations, (request,))
+
+    def test_target_must_exist_and_belong_to_selected_weld_joint(self):
+        unknown_face = GeometryReference("BRACKET_A", "BRACKET_BODY", face_identity="MISSING_FACE")
+        request = WeldAccessRequest("bad-face", "weld-1", AccessEnvelope(
+            "manual-face", "manual", Aabb(Vec3(0, 0, 0), Vec3(1, 1, 1))),
+            target_reference=unknown_face)
+        with self.assertRaisesRegex(AccessAnalysisError, "unknown access face"):
+            evaluate_access(self.product, self.fixture, self.annotations, (request,))
+
+        unrelated = GeometryReference("BRACKET_B", "BRACKET_BODY")
+        request = WeldAccessRequest("wrong-target", "weld-1", AccessEnvelope(
+            "manual-target", "manual", Aabb(Vec3(0, 0, 0), Vec3(1, 1, 1))),
+            target_reference=unrelated)
+        with self.assertRaisesRegex(AccessAnalysisError, "does not belong to weld joint"):
+            evaluate_access(self.product, self.fixture, self.annotations, (request,))
+
+    def test_direction_must_be_finite(self):
+        with self.assertRaisesRegex(AccessAnalysisError, "direction must be finite"):
+            AccessEnvelope("bad-direction", "robot", Aabb(Vec3(0, 0, 0), Vec3(1, 1, 1)),
+                           direction=Vec3(math.nan, 0, 1))
 
 
 if __name__ == "__main__":
