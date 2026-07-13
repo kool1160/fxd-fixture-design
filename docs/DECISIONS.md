@@ -68,3 +68,21 @@ normals, rotational restraint, clamp force, weld access, or tolerance stacks.
 
 **Supporting evidence:** `docs/FIXTURE_CONCEPT_CONTRACT.md`,
 `scripts/concept_proof.py`, and the complete-concept tests.
+
+### 2026-07-13 — Keep tooling libraries vendor-neutral and separable
+
+**Decision:** Tooling libraries use neutral metadata contracts and deterministic
+selection. Generic public proof items are separate from caller-supplied private
+shop libraries; vendor catalog content is not bundled.
+
+**Reasoning:** FXD needs standard-component preference without coupling the
+core to a vendor catalog, SDK, or restricted geometry. Selection can expose
+mounting, access, stroke, and force requirements while leaving adequacy to
+deterministic validation and human approval.
+
+**Risks and tradeoffs:** Generic envelopes do not prove real clamp force,
+contact stability, tolerance stack, or access. Real catalog integration needs
+separate licensing and attribution review.
+
+**Supporting evidence:** `docs/TOOLING_LIBRARY_CONTRACT.md`,
+`scripts/tooling_proof.py`, and `tests/test_tooling.py`.

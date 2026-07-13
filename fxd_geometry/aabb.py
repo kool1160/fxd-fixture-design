@@ -34,6 +34,11 @@ class Aabb:
     minimum: Vec3
     maximum: Vec3
 
+    @classmethod
+    def from_values(cls, xmin: float, ymin: float, zmin: float,
+                    xmax: float, ymax: float, zmax: float) -> "Aabb":
+        return cls(Vec3(xmin, ymin, zmin), Vec3(xmax, ymax, zmax))
+
     def __post_init__(self) -> None:
         if any(a > b for a, b in zip(self.minimum.__dict__.values(), self.maximum.__dict__.values())):
             raise ValueError("AABB minimum must not exceed maximum")

@@ -97,7 +97,7 @@ Acceptance criteria:
 
 ## Milestone 7 — Add standard clamp and tooling libraries
 
-**Status:** Pending
+**Status:** Complete
 
 Define vendor-neutral clamp, pin, rest, and tooling contracts and support configurable libraries without embedding restricted vendor content.
 
