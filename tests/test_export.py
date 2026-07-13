@@ -4,7 +4,8 @@ import unittest
 from dataclasses import replace
 from pathlib import Path
 
-from fxd_geometry import (ExportError, EngineeringAnnotations, Vec3,
+from fxd_geometry import (AccessAnalysis, AccessFinding, ExportError,
+                          EngineeringAnnotations, Vec3,
                           build_fabrication_package, generate_fixture_concepts,
                           import_step, write_fabrication_package)
 from fxd_geometry.fixture import FixtureFinding
@@ -39,6 +40,15 @@ class FabricationExportTests(unittest.TestCase):
         ))
         with self.assertRaises(ExportError):
             build_fabrication_package(invalid)
+
+    def test_blocked_access_is_not_exportable(self):
+        concept = generate_fixture_concepts(self.product, self.annotations).recommended
+        access = AccessAnalysis("mm", (
+            AccessFinding("blocked_unload_path", "error", "unload", "loading-stop",
+                          "Unload envelope intersects the loading stop."),
+        ))
+        with self.assertRaisesRegex(ExportError, "blocked"):
+            build_fabrication_package(concept, access=access)
 
     def test_write_has_expected_review_package(self):
         concept = generate_fixture_concepts(self.product, self.annotations).recommended
