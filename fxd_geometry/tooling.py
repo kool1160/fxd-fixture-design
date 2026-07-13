@@ -1,8 +1,8 @@
 """Vendor-neutral standard tooling contracts and deterministic selection.
 
-The public library contains only generic metadata.  A catalog item describes
+The public library contains only generic metadata. A catalog item describes
 an envelope and engineering requirements; it is not a vendor part, a force
-certificate, or production approval.  Private shop libraries can be supplied
+certificate, or production approval. Private shop libraries can be supplied
 at runtime without being copied into the public project model.
 """
 
@@ -28,6 +28,7 @@ class ToolingItem:
     envelope: Aabb
     stroke: float = 0.0
     force: float = 0.0
+    force_units: str = "N"
     mounting: tuple[str, ...] = ()
     access: tuple[str, ...] = ()
     source: str = "public-generic"
@@ -42,6 +43,8 @@ class ToolingItem:
             raise ToolingLibraryError("tooling identity and kind are required")
         if self.units != "mm":
             raise ToolingLibraryError("tooling contracts require explicit millimetres")
+        if self.force_units != "N":
+            raise ToolingLibraryError("tooling force must use explicit newtons")
         values = (self.stroke, self.force)
         if any(not math.isfinite(value) or value < 0 for value in values):
             raise ToolingLibraryError("stroke and force must be finite and non-negative")
@@ -76,12 +79,15 @@ class ToolingLibrary:
         return tuple(item for item in self._items if item.kind == kind)
 
     def select(self, kind: str, *, minimum_stroke: float = 0.0,
-               minimum_force: float = 0.0) -> ToolingSelection | None:
+               minimum_force: float = 0.0, force_units: str = "N") -> ToolingSelection | None:
         """Choose a preferred standard item before a custom item.
 
-        Candidates are ordered by preferred status, custom status, then
-        smallest adequate force/stroke and identity for reproducibility.
+        Selection requirements and catalog force values are compared only in
+        newtons. Candidates are ordered by preferred status, custom status,
+        then smallest adequate force/stroke and identity for reproducibility.
         """
+        if force_units != "N":
+            raise ToolingLibraryError("selection force requirements must use newtons")
         if any(not math.isfinite(value) or value < 0 for value in
                (minimum_stroke, minimum_force)):
             raise ToolingLibraryError("selection requirements must be finite and non-negative")
@@ -98,18 +104,23 @@ class ToolingLibrary:
         )
         if selected.custom_geometry:
             warnings += ("custom shop geometry is supplied outside the public library",)
-        return ToolingSelection(selected, "preferred standard candidate selected deterministically", warnings)
+        return ToolingSelection(
+            selected,
+            f"preferred standard candidate selected deterministically using {force_units}",
+            warnings,
+        )
 
 
 def generic_tooling_library() -> ToolingLibrary:
     """Return safe, generic proof items without vendor catalog attribution."""
     return ToolingLibrary((
         ToolingItem("generic-toggle-clamp", "clamp", Aabb.from_values(0, 0, 0, 80, 40, 60),
-                    stroke=20, force=1000, mounting=("base_plate", "slot"),
+                    stroke=20, force=1000, force_units="N", mounting=("base_plate", "slot"),
                     access=("operator_side",), attribution=None),
         ToolingItem("generic-round-pin", "pin", Aabb.from_values(0, 0, 0, 20, 20, 50),
-                    stroke=50, force=0, mounting=("reamed_hole", "replaceable"),
+                    stroke=50, force=0, force_units="N", mounting=("reamed_hole", "replaceable"),
                     access=("top_load",), attribution=None),
         ToolingItem("generic-support-rest", "rest", Aabb.from_values(0, 0, 0, 30, 30, 40),
-                    mounting=("base_plate", "slot"), access=("top_load",), attribution=None),
+                    force_units="N", mounting=("base_plate", "slot"),
+                    access=("top_load",), attribution=None),
     ))
