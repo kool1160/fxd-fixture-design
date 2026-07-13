@@ -22,7 +22,7 @@ node scripts/fxd-backlog.mjs validate
 python -m json.tool .github/codex/schemas/planning-handoff.schema.json >/dev/null
 
 if grep -RInE '(sk-[A-Za-z0-9_-]{20,}|OPENAI_API_KEY=.+)' \
-  --exclude-dir=.git --exclude='*.md' .; then
+  --exclude-dir=.git --exclude='*.md' --exclude='ci.sh' .; then
   echo 'Potential committed secret detected.' >&2
   exit 1
 fi
