@@ -8,7 +8,7 @@ Before changing anything, read and obey:
 2. `docs/PRODUCT_DIRECTION.md`
 3. `docs/ENGINEERING_CONSTITUTION.md`
 4. `docs/ARCHITECTURE.md`
-5. `docs/AGENT_ROSTER.md`
+5. `docs/ENGINEERING_TEAM.md`
 6. `BACKLOG.md`
 7. `.fxd/selected-milestone.md`
 
@@ -16,7 +16,9 @@ Before changing anything, read and obey:
 
 - Treat the selected milestone as one complete engineering outcome.
 - Inspect the actual repository before changing it.
-- Apply the relevant specialist-agent perspectives from `docs/AGENT_ROSTER.md`.
+- Identify every engineering discipline materially affected by the milestone.
+- Apply the required questions, ownership boundaries, and conflict rules from `docs/ENGINEERING_TEAM.md`.
+- Record material specialist disagreement, assumptions, and unresolved risk in the final handoff.
 - Complete every safe internal phase automatically.
 - Make routine technical decisions without asking Chris.
 - Prefer runnable proofs, tests, and measured evidence over speculative architecture.
