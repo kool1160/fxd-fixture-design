@@ -21,7 +21,7 @@ Acceptance criteria:
 
 ## Milestone 2 — Import STEP assemblies into a normalized product model
 
-**Status:** Pending
+**Status:** Complete
 
 Import a representative synthetic STEP assembly, preserve component identity and transforms, and expose a normalized model containing components, bodies, faces, edges, bounding volumes, units, and source metadata.
 

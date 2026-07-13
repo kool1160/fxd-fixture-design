@@ -23,6 +23,9 @@ private-research/
 *.dwg
 *.dxf
 
+# Explicitly allow the synthetic, non-customer STEP fixture used by tests
+!tests/fixtures/synthetic_assembly.step
+
 # Build and editor output
 bin/
 obj/
