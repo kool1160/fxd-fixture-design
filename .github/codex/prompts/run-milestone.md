@@ -24,7 +24,11 @@ Before changing anything, read and obey:
 - Prefer runnable proofs, tests, and measured evidence over speculative architecture.
 - Keep the CAD-neutral core separate from vendor connectors.
 - Keep AI behind restricted, validated command contracts.
-- Run `bash scripts/ci.sh` plus risk-appropriate checks.
+- Run `bash scripts/ci-contract.sh` plus risk-appropriate checks while implementing.
+- Do not stop implementation solely because the sandbox cannot install the pinned OCP package or cannot reach PyPI.
+- When OCP is already available, also run `bash scripts/ci.sh` and record the real-kernel evidence.
+- When OCP is unavailable, continue building and testing against the neutral kernel contract, test doubles, deterministic fixtures, and fail-closed behavior. Clearly mark real-kernel acceptance as pending GitHub Actions evidence rather than claiming completion of that acceptance criterion.
+- GitHub Actions is the authoritative environment for installing `cadquery-ocp==7.9.3.1.1` and proving real-kernel acceptance.
 - Fix failures caused by your changes and review the final diff.
 - Update the backlog and project record only when evidence supports the update.
 - Never add customer/employer geometry, secrets, personal identifiers, proprietary rule packs, or patent-sensitive private material.
