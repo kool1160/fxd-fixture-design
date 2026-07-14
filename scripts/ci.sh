@@ -26,7 +26,7 @@ python -m unittest discover -s tests >/dev/null
 python -u scripts/kernel_proof.py
 
 if grep -RInE '(sk-[A-Za-z0-9_-]{20,}|OPENAI_API_KEY=.+)' \
-  --exclude-dir=.git --exclude='*.md' --exclude='ci.sh' .; then
+  --exclude-dir=.git --exclude='*.md' --exclude='ci.sh' --exclude='ci-contract.sh' .; then
   echo 'Potential committed secret detected.' >&2
   exit 1
 fi
