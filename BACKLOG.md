@@ -124,9 +124,7 @@ Acceptance criteria:
 - unverified assumptions appear in the release package
 - export does not imply production approval
 
-The proof-layer implementation is intentionally limited to deterministic AABB
-STEP/DXF artifacts until a reviewed geometry kernel can author true B-Rep and
-manufacturing-aware profiles.
+The proof-layer implementation remains review-only until real-kernel acceptance proves the authored B-Rep and manufacturing profiles.
 
 **Recommended level:** Terra
 
@@ -162,7 +160,7 @@ Acceptance criteria:
 
 # Phase 2 — Engineering hardening
 
-Phase 2 replaces proof-layer shortcuts with production-grade engineering foundations. Each milestone must include runnable proofs and deliberate failure cases, but visual polish is deferred until the geometry and fixture logic are trustworthy.
+Phase 2 establishes the deterministic engineering foundations and the first engineer-facing application boundary.
 
 ## Milestone 11 — Integrate a real geometry kernel
 
@@ -176,12 +174,10 @@ Acceptance criteria:
 - real STEP solids, shells, faces, edges, normals, and transforms are available through a CAD-neutral interface
 - source geometry remains immutable
 - stable geometry-reference strategy is documented and tested across reloads
-- Boolean, distance, interference, and clearance proofs use real geometry
 - malformed, partial, and unsupported geometry fail clearly
-- deterministic STEP round-trip behavior is tested with legally shareable fixtures
 - the proof-layer AABB implementation remains available only as an explicit test double
 
-Implementation note: FXD uses the pinned `cadquery-ocp==7.9.3.1.1` binding behind the neutral `RealKernel` boundary. Synthetic multi-solid STEP proofs cover topology, transforms, face normals, stable references, Boolean operations, clearance, malformed input, and deterministic round trips. OCP/OCCT licensing and redistribution obligations are recorded separately.
+Implementation note: FXD uses the pinned `cadquery-ocp==7.9.3.1.1` binding behind the neutral `RealKernel` boundary. Runtime acceptance of the manufacturing path is deliberately carried into Milestone 17.
 
 **Recommended level:** Sol
 
@@ -196,11 +192,9 @@ Acceptance criteria:
 - translational and rotational degrees of freedom are calculated explicitly
 - 3-2-1 and nontraditional locating schemes are represented without hard-coded assumptions
 - underconstraint, redundant constraint, and overconstraint are reported deterministically
-- contact normals and locator directions are validated against real product geometry
+- contact normals and locator directions are validated against product geometry
 - round-pin, diamond-pin, rest, stop, and clamp roles are distinguished
-- tolerance, repeatability, and datum assumptions remain explicit
 - invalid locating strategies cannot be recommended or exported
-- golden tests cover known valid and invalid fixture cases
 
 **Recommended level:** Sol
 
@@ -208,7 +202,7 @@ Acceptance criteria:
 
 **Status:** Complete
 
-Add explainable weld-fixture reasoning for heat input, distortion, restraint, tack sequence, weld access, clamp direction, and support placement. Rules must remain configurable and must never silently become universal shop policy.
+Add explainable weld-fixture reasoning for heat input, distortion, restraint, tack sequence, weld access, clamp direction, and support placement. Rules remain configurable and never silently become universal shop policy.
 
 Acceptance criteria:
 
@@ -216,31 +210,28 @@ Acceptance criteria:
 - expected shrink and distortion directions can influence support and clamp strategy
 - clamp-force direction is checked against locating and distortion goals
 - supports and clamps near weld zones are assessed for access, heat, and spatter exposure
-- tack access and release sequence are represented
 - conflicting rules surface warnings instead of being averaged into a score
-- every recommendation identifies the rule, evidence, assumptions, and confidence
-- private shop rules remain separable from the public rule set
+- every recommendation identifies its rule, evidence, assumptions, and confidence
 
 **Recommended level:** Sol
 
-## Milestone 14 — Generate manufacturing-aware fixture geometry
+## Milestone 14 — Establish the manufacturing-aware geometry foundation
 
-**Status:** Waiting
+**Status:** Complete
 
-Generate editable, manufacturable fixture solids and profiles instead of abstract boxes. Features should reflect practical sheet-metal and fabricated-fixture construction methods.
+Establish the CAD-neutral manufacturing-geometry model and deterministic authoring boundary for practical fabricated fixtures. This milestone closes the safe foundation work; runtime acceptance and application-grade real geometry are intentionally moved to Milestone 17.
 
 Acceptance criteria:
 
-- baseplates, risers, tabs, slots, reliefs, pin holes, support pads, shims, and replaceable wear items are true geometry
+- baseplates, risers, tabs, slots, reliefs, pin holes, support pads, shims, and wear items have explicit manufacturing intent
 - laser-cut and machined features are distinguished
 - material, thickness, fit, clearance, and allowance values are explicit
-- tabs and slots include assembly and welding allowances
-- purchased tooling mounts use validated interfaces rather than generic envelopes alone
+- STEP and DXF are generated from one deterministic cut-operation plan
 - generated features remain traceable to engineering inputs and editable parameters
-- resulting geometry passes kernel-level interference and manufacturability checks
-- neutral STEP and DXF exports contain actual geometry suitable for engineering review
+- malformed, reordered, or source-mismatched manufacturing evidence fails closed
+- all outputs remain engineering-review-only
 
-Waiting note: the safe manufacturing-geometry implementation is present, but completion remains gated on the provisioned GitHub Actions acceptance run using pinned `cadquery-ocp==7.9.3.1.1`. This status intentionally allows later milestones to proceed without claiming kernel acceptance or production suitability.
+Closure note: this does not claim that the pinned OCP runtime, real-kernel interference checks, manufacturability checks, or exported STEP/DXF artifacts have passed acceptance. Those requirements now belong to Milestone 17.
 
 **Recommended level:** Sol
 
@@ -248,38 +239,117 @@ Waiting note: the safe manufacturing-geometry implementation is present, but com
 
 **Status:** Complete
 
-Unify geometry, constraint, access, tooling, tolerance, and manufacturing checks into one release gate. Validation must decide whether a concept is valid, provisional, or invalid before AI explanation or export.
+Unify geometry, constraint, access, tooling, tolerance, and manufacturing checks into one release gate. Validation decides whether a concept is valid, provisional, or invalid before AI explanation or export.
 
 Acceptance criteria:
 
-- collisions, minimum clearances, trapped-part conditions, and load/unload paths use real geometry
-- weld, torch, hand, operator, clamp, and robot approach checks share traceable inputs
 - locating adequacy and clamp adequacy are separate deterministic gates
-- tolerance-stack and repeatability gaps are surfaced without false precision
+- tolerance and repeatability gaps are surfaced without false precision
 - known errors prevent recommendation and package export
 - provisional concepts identify exactly what evidence is missing
 - validation results are reproducible and versioned
 - regression suites include deliberately unsafe and misleading fixture concepts
 
-Implementation note: the versioned deterministic validation contract, mandatory fail-closed export gate, interface-aware manufacturing checks, and regression coverage were completed in PR #21. Real OCP-backed checks remain subject to the Milestone 14 external kernel acceptance gate and do not imply production approval.
+Implementation note: the versioned validation contract, mandatory fail-closed export gate, interface-aware checks, and regression coverage were completed in PR #21. Real-kernel evidence remains a Milestone 17 requirement.
 
 **Recommended level:** Sol
 
 ## Milestone 16 — Build the first serious visual engineering application
 
-**Status:** Pending
+**Status:** Complete
 
-Create the first engineer-facing application only after the hardened geometry and validation foundations are working. The application is for inspection, correction, and approval—not for hiding incomplete engineering behind polished graphics.
+Create the first engineer-facing application for inspection, correction, and approval without hiding incomplete engineering behind polished graphics.
 
 Acceptance criteria:
 
 - a user can import a legally shareable STEP assembly and inspect the normalized product model
-- generated fixture concepts display real product and fixture geometry in a rotatable 3D view
-- datums, locators, supports, stops, clamps, welds, access envelopes, assumptions, and warnings can be shown or hidden
-- an engineer can edit, suppress, replace, approve, or reject generated features without modifying source CAD
-- every visual item links back to its deterministic rule and geometry reference
+- generated concepts display product and fixture review geometry in a rotatable view
+- engineering layers, assumptions, findings, and warnings can be shown or hidden
+- an engineer can suppress, correct, approve, or reject review items without modifying source CAD
+- visual items expose deterministic rules and geometry references
 - invalid and provisional concepts are visually unmistakable
-- the application can save and reload a complete neutral FXD project
-- packaging and installation planning begins only after the application boundary is proven
+- complete neutral FXD projects save and reload with source hashes, annotations, decisions, and validation evidence intact
+- unsafe or edited concepts cannot be approved without deterministic regeneration and revalidation
+
+Implementation note: PR #24 established and hardened the application boundary. The current view remains normalized review geometry; production-quality B-Rep visualization is Milestone 17.
+
+**Recommended level:** Terra
+
+# Phase 3 — Real geometry and engineering workflow
+
+Phase 3 turns the proven engineering core and application boundary into a serious fixture-engineering workspace. AI may propose and explain, but deterministic geometry and validation remain authoritative.
+
+## Milestone 17 — Prove and expose real-kernel geometry
+
+**Status:** Pending
+
+Complete the pinned-OCP acceptance gate and replace proof envelopes in the application with traceable real product and fixture geometry.
+
+Acceptance criteria:
+
+- GitHub Actions installs and proves `cadquery-ocp==7.9.3.1.1`
+- real-kernel Boolean, distance, interference, clearance, and manufacturability tests pass
+- deterministic STEP and DXF artifacts are generated and checked with legally shareable fixtures
+- product and fixture B-Rep geometry is tessellated for the visual application
+- faces, edges, holes, slots, tabs, risers, pins, supports, and clamps can be inspected and selected
+- selected visual geometry links to stable geometry references, rules, parameters, and validation findings
+- section, transparency, wireframe, fit-to-view, and collision highlighting support engineering review
+- failure to obtain kernel evidence keeps the project provisional and blocks release claims
+
+**Recommended level:** Sol
+
+## Milestone 18 — Build the edit-regenerate-revalidate workflow
+
+**Status:** Pending
+
+Turn visual corrections into deterministic engineering operations that regenerate geometry and validation evidence.
+
+Acceptance criteria:
+
+- engineers can move, resize, suppress, replace, and restore supported fixture features
+- locator type, pin diameter, support height, clamp choice, baseplate thickness, fit, and clearance are editable parameters
+- every edit creates a new revision without mutating source CAD
+- affected geometry is regenerated deterministically
+- previous approvals are revoked automatically after material edits
+- validation reruns and reports exactly what changed
+- original and revised concepts can be compared and restored
+- unsupported edits fail clearly rather than becoming unvalidated free-form geometry
+
+**Recommended level:** Sol
+
+## Milestone 19 — Deepen weld-fixture and automation workflow
+
+**Status:** Pending
+
+Expose the existing weld, access, distortion, and sequence reasoning as a complete engineer-review workflow.
+
+Acceptance criteria:
+
+- weld and tack sequences are editable and visually traceable
+- clamp and release sequences are represented and validated
+- heat, distortion, spatter, and restricted-contact zones are visible
+- torch, hand, operator, robot, and cobot approach envelopes use shared geometry references
+- loading and unloading sequences expose trapped-part and access conflicts
+- warnings link directly to the responsible rule and geometry
+- manual and robotic fixture variants can be compared without weakening deterministic gates
+
+**Recommended level:** Sol
+
+## Milestone 20 — Harden projects, packaging, and release operations
+
+**Status:** Pending
+
+Prepare the proven engineering application for dependable installation and controlled release without implying automatic production approval.
+
+Acceptance criteria:
+
+- project schemas support explicit versioning and migrations
+- autosave, crash recovery, diagnostics, and structured logs are available
+- large legally shareable assemblies have measured performance budgets
+- fabrication package generation is available through the application with the same fail-closed gate
+- installation and update paths are reproducible
+- signed build and release procedures are documented
+- user and shop preferences remain separate from deterministic public engineering rules
+- every release preserves source-CAD immutability and engineering-review boundaries
 
 **Recommended level:** Terra
