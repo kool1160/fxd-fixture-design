@@ -82,6 +82,9 @@ class RealKernel(Protocol):
     def face_records(self, model: object) -> tuple[KernelFace, ...]: ...
     def make_box(self, minimum: tuple[float, float, float], maximum: tuple[float, float, float]) -> object: ...
     def make_cylinder(self, center: tuple[float, float, float], radius: float, height: float) -> object: ...
+    def cut(self, left: object, right: object) -> object: ...
+    def make_slot(self, minimum: tuple[float, float, float], maximum: tuple[float, float, float]) -> object: ...
+    def make_hole(self, center: tuple[float, float, float], radius: float, height: float) -> object: ...
     def compound(self, models: tuple[object, ...]) -> object: ...
 
 
@@ -291,6 +294,17 @@ class OcpKernel:
         if radius <= 0 or height <= 0:
             raise KernelOperationError("manufacturing cylinder dimensions must be positive")
         return BRepPrimAPI_MakeCylinder(gp_Ax2(gp_Pnt(*center), gp_Dir(0, 0, 1)), radius, height).Shape()
+
+    def cut(self, left: object, right: object) -> object:
+        return self.boolean("cut", left, right)
+
+    def make_slot(self, minimum: tuple[float, float, float], maximum: tuple[float, float, float]) -> object:
+        """Create a prismatic laser-cut slot tool in the neutral kernel."""
+        return self.make_box(minimum, maximum)
+
+    def make_hole(self, center: tuple[float, float, float], radius: float, height: float) -> object:
+        """Create a through-hole tool; callers extend it through the stock."""
+        return self.make_cylinder(center, radius, height)
 
     def compound(self, models: tuple[object, ...]) -> object:
         from OCP.BRep import BRep_Builder

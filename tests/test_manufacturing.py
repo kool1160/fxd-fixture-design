@@ -21,8 +21,20 @@ class FakeKernel:
     def make_cylinder(self, center, radius, height):
         return ("cylinder", center, radius, height)
 
+    def cut(self, left, right):
+        return ("cut", left, right)
+
+    def make_slot(self, minimum, maximum):
+        return ("slot", minimum, maximum)
+
+    def make_hole(self, center, radius, height):
+        return ("hole", center, radius, height)
+
     def compound(self, models):
         return ("compound", models)
+
+    def topology_counts(self, model):
+        return type("Counts", (), {"solids": 1})()
 
     def export_step(self, model):
         return b"ISO-10303-21;\nEND-ISO-10303-21;\n"
@@ -55,9 +67,13 @@ class ManufacturingGeometryTests(unittest.TestCase):
         self.assertEqual(geometry.feature_identities, expected)
         self.assertEqual(geometry.identities, expected)
         self.assertTrue(geometry.step_bytes.startswith(b"ISO-10303-21"))
+        self.assertTrue(geometry.dxf_bytes.startswith(b"0\nSECTION"))
+        self.assertIn(b"baseplate_slot", geometry.dxf_bytes)
+        self.assertIn(b"CIRCLE", geometry.dxf_bytes)
         package = build_fabrication_package(concept, manufacturing=geometry)
         self.assertIn('"geometry_source": "reviewed_real_kernel"', package.manifest)
-        self.assertIn("DXF remains proof-layer", package.manifest)
+        self.assertIn("supported prismatic/cylindrical DXF", package.manifest)
+        self.assertIn("baseplate_slot", package.dxf)
 
     def test_export_rejects_wrong_source_missing_or_reordered_features(self):
         concept = generate_fixture_concepts(self.product, self.annotations).recommended

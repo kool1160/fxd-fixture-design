@@ -241,21 +241,22 @@ runtime (`cadquery-ocp==7.9.3.1.1`) in kernel tests.
 
 Generated fixture features now carry explicit, public-safe manufacturing
 metadata for method, material, thickness, fit, clearance, allowance,
-interface, and operations. A new CAD-neutral manufacturing boundary can
-author opaque boxes and cylinders and export a compound through the reviewed
-real-kernel interface. Neutral fabrication-package export accepts those
-kernel-authored STEP bytes while retaining the existing proof export when no
-real geometry is supplied.
+interface, and operations. The CAD-neutral manufacturing boundary now authors
+kernel solids with explicit slot, relief, and pin-hole Boolean operations,
+checks that each result contains a solid, and exports deterministic STEP plus
+supported prismatic/cylindrical DXF profiles. Neutral fabrication-package
+export accepts those kernel-authored artifacts while retaining the proof path
+when no real geometry is supplied.
 
 Milestone 14 remains blocked. The pinned `cadquery-ocp==7.9.3.1.1` runtime is
 not installed and network access cannot install it, so true kernel geometry,
 interference/manufacturability checks, and STEP/DXF acceptance evidence could
-not run. Dedicated tab, slot, relief, and pin-hole operations plus true
-kernel-edge DXF profiles remain unresolved. No status change to Complete is
-supported.
+not run. Free-form kernel-edge DXF profiles, tolerance-aware fit validation,
+and validated purchased-tooling interfaces remain unresolved. No status
+change to Complete is supported.
 
 Evidence: focused fixture, concept, export, and manufacturing contract tests
-pass (16 tests); `python -m compileall -q fxd_geometry tests` passes;
+pass; `python -m compileall -q fxd_geometry tests` passes;
 `bash scripts/ci.sh` is blocked while installing the pinned OCP dependency;
 the repository-wide suite reaches 57 tests and has four pre-existing OCP
 runtime errors.
