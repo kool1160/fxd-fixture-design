@@ -1,5 +1,7 @@
 """Exercise the pinned real B-Rep adapter without customer geometry."""
 from pathlib import Path
+import difflib
+import hashlib
 import sys
 
 # Direct execution (``python scripts/kernel_proof.py``) puts ``scripts`` rather
@@ -44,9 +46,18 @@ reloaded = kernel.import_step_assembly(
 assert tuple(component.reference for component in assembly.components) == tuple(
     component.reference for component in reloaded.components
 )
-assert kernel.export_step(kernel.import_step(step_bytes)) == kernel.export_step(
-    kernel.import_step(step_bytes)
-)
+
+first = kernel.export_step(kernel.import_step(step_bytes))
+second = kernel.export_step(kernel.import_step(step_bytes))
+if first != second:
+    print("STEP export determinism mismatch")
+    print("first sha256:", hashlib.sha256(first).hexdigest(), "bytes:", len(first))
+    print("second sha256:", hashlib.sha256(second).hexdigest(), "bytes:", len(second))
+    first_lines = first.decode("utf-8", errors="replace").splitlines()
+    second_lines = second.decode("utf-8", errors="replace").splitlines()
+    for line in list(difflib.unified_diff(first_lines, second_lines, fromfile="first.step", tofile="second.step", lineterm=""))[:400]:
+        print(line)
+    raise AssertionError("normalized STEP exports are not deterministic")
 
 print(kernel.capabilities)
 print("real OCP assembly, topology, Boolean, clearance, and round-trip proof passed")
