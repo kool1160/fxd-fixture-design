@@ -10,7 +10,7 @@ from .access import AccessAnalysis
 from .concepts import CompleteFixtureConcept
 from .fixture import FixtureConcept
 from .kernel import KernelOperationError, RealKernel
-from .manufacturing import ManufacturingGeometry
+from .manufacturing import ManufacturingGeometry, ManufacturingSolid
 from .product_model import ProductModel
 from .tooling import ToolingLibrary, generic_tooling_library
 from .weld_rules import WeldRuleAnalysis
@@ -75,6 +75,26 @@ def _aabb_findings(product: ProductModel, fixture: FixtureConcept,
     return findings
 
 
+# These are explicit manufactured interfaces, not free-space relationships.
+# Their geometry is expected to touch, overlap within fit allowance, or be joined.
+_INTENTIONAL_INTERFACE_PAIRS = frozenset({
+    frozenset(("baseplate", "support_pad")),
+    frozenset(("baseplate", "hard_stop")),
+    frozenset(("baseplate", "relieved_locator")),
+    frozenset(("baseplate", "round_pin")),
+    frozenset(("baseplate", "clamp_mount")),
+})
+
+
+def _intentional_interface(left: ManufacturingSolid, right: ManufacturingSolid) -> bool:
+    pair = frozenset((left.kind, right.kind))
+    if pair not in _INTENTIONAL_INTERFACE_PAIRS:
+        return False
+    # Interface metadata is required on both sides so generic solids cannot
+    # silently opt out of collision checks merely by having familiar kinds.
+    return bool(left.interface and right.interface)
+
+
 def _kernel_findings(manufacturing: ManufacturingGeometry, kernel: RealKernel,
                      minimum_clearance_mm: float) -> list[ValidationFinding]:
     findings: list[ValidationFinding] = []
@@ -85,6 +105,17 @@ def _kernel_findings(manufacturing: ManufacturingGeometry, kernel: RealKernel,
             except (KernelOperationError, RuntimeError) as exc:
                 findings.append(_finding("kernel_clearance_failed", "error", "geometry",
                     f"real-kernel clearance failed for {left.identity} and {right.identity}: {exc}"))
+                continue
+            if _intentional_interface(left, right):
+                # Touching or fitted geometry is expected here. A positive gap
+                # larger than the declared fit allowance means the interface
+                # is not actually assembled and must be reviewed.
+                allowed_gap = max(left.clearance, right.clearance)
+                if clearance > allowed_gap:
+                    findings.append(_finding("manufacturing_interface_gap", "error", "manufacturing",
+                        f"intended interface {left.identity}/{right.identity} exceeds its declared fit gap",
+                        (f"clearance_mm={clearance:.9g}", f"allowed_gap_mm={allowed_gap:.9g}",
+                         f"left_interface={left.interface}", f"right_interface={right.interface}")))
                 continue
             if clearance < minimum_clearance_mm:
                 findings.append(_finding("manufacturing_interference", "error", "geometry",
@@ -107,6 +138,8 @@ def validate_fixture_concept(product: ProductModel, concept: CompleteFixtureConc
         raise ValueError("concept and product source identities do not match")
     if minimum_clearance_mm < 0:
         raise ValueError("minimum_clearance_mm must be non-negative")
+    if (manufacturing is None) != (kernel is None):
+        raise ValueError("manufacturing geometry and real kernel must be supplied together")
     findings: list[ValidationFinding] = []
     findings.extend(_finding(item.code, item.severity, "concept", item.message,
                              (item.feature_identity,) if item.feature_identity else ())
@@ -142,7 +175,11 @@ def validate_fixture_concept(product: ProductModel, concept: CompleteFixtureConc
         findings.append(_finding("clamp_force_review_required", "warning", "clamp",
             "clamp force and reaction adequacy remain engineering review items"))
     if manufacturing is not None and kernel is not None:
-        findings.extend(_kernel_findings(manufacturing, kernel, minimum_clearance_mm))
+        if manufacturing.concept_identity != concept.identity or manufacturing.source_sha256 != product.source_sha256:
+            findings.append(_finding("manufacturing_identity_mismatch", "error", "manufacturing",
+                "kernel-authored manufacturing geometry does not match the validated concept source"))
+        else:
+            findings.extend(_kernel_findings(manufacturing, kernel, minimum_clearance_mm))
     else:
         findings.append(_finding("manufacturing_geometry_missing", "warning", "manufacturing",
             "kernel-authored manufacturing solids were not supplied"))
