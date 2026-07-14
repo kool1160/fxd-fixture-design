@@ -1,5 +1,4 @@
 """CAD-neutral boundary and reviewed OCP implementation for real B-Rep geometry."""
-
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -12,11 +11,11 @@ from typing import Protocol
 
 
 class KernelUnavailable(RuntimeError):
-    """Raised when the reviewed B-Rep backend is unavailable or incomplete."""
+    """The reviewed B-Rep backend is unavailable or incomplete."""
 
 
 class KernelOperationError(RuntimeError):
-    """Raised when a real geometry operation fails explicitly."""
+    """A real geometry operation failed explicitly."""
 
 
 @dataclass(frozen=True)
@@ -32,9 +31,8 @@ class KernelCapabilities:
 
     @property
     def is_complete(self) -> bool:
-        return all((self.step_import, self.topology, self.transforms,
-                    self.booleans, self.distance_and_clearance,
-                    self.neutral_export))
+        return all((self.step_import, self.topology, self.transforms, self.booleans,
+                    self.distance_and_clearance, self.neutral_export))
 
 
 @dataclass(frozen=True)
@@ -47,8 +45,6 @@ class TopologyCounts:
 
 @dataclass(frozen=True)
 class KernelFace:
-    """Stable, neutral face metadata. No OCP object crosses this boundary."""
-
     reference: str
     area_mm2: float
     center_mm: tuple[float, float, float]
@@ -57,8 +53,6 @@ class KernelFace:
 
 @dataclass(frozen=True)
 class KernelComponent:
-    """A neutral component extracted from a STEP assembly/compound."""
-
     reference: str
     parent_reference: str
     transform: tuple[float, ...]
@@ -77,7 +71,6 @@ class KernelAssembly:
 class RealKernel(Protocol):
     @property
     def capabilities(self) -> KernelCapabilities: ...
-
     def import_step(self, source: str | bytes | Path) -> object: ...
     def import_step_assembly(self, source: str | bytes | Path) -> KernelAssembly: ...
     def export_step(self, model: object) -> bytes: ...
@@ -89,27 +82,22 @@ class RealKernel(Protocol):
 
 class OcpKernel:
     """Reviewed adapter for cadquery-ocp 7.9.3.1.1 / OCCT 7.9.3."""
-
     PINNED_DISTRIBUTION = "cadquery-ocp==7.9.3.1.1"
 
     def __init__(self) -> None:
         try:
             import OCP
         except ImportError as exc:
-            raise KernelUnavailable(
-                f"{self.PINNED_DISTRIBUTION} is required for real geometry"
-            ) from exc
-        version = getattr(OCP, "__version__", "unknown")
-        if not str(version).startswith("7.9.3.1"):
-            raise KernelUnavailable(
-                f"unsupported OCP runtime {version!r}; expected {self.PINNED_DISTRIBUTION}"
-            )
-        self._version = str(version)
+            raise KernelUnavailable(f"{self.PINNED_DISTRIBUTION} is required") from exc
+        version = str(getattr(OCP, "__version__", "unknown"))
+        if not version.startswith("7.9.3.1"):
+            raise KernelUnavailable(f"unsupported OCP runtime {version!r}")
+        self._version = version
 
     @property
     def capabilities(self) -> KernelCapabilities:
-        return KernelCapabilities("cadquery-ocp", self._version, True, True,
-                                  True, True, True, True)
+        return KernelCapabilities("cadquery-ocp", self._version, True, True, True,
+                                  True, True, True)
 
     @staticmethod
     def _source_bytes(source: str | bytes | Path) -> bytes:
@@ -123,17 +111,15 @@ class OcpKernel:
     def import_step(self, source: str | bytes | Path) -> object:
         from OCP.IFSelect import IFSelect_RetDone
         from OCP.STEPControl import STEPControl_Reader
-
-        source_bytes = self._source_bytes(source)
-        if b"ISO-10303-21" not in source_bytes or b"END-ISO-10303-21" not in source_bytes:
+        data = self._source_bytes(source)
+        if b"ISO-10303-21" not in data or b"END-ISO-10303-21" not in data:
             raise KernelOperationError("STEP source is malformed or partial")
-
-        temporary = tempfile.NamedTemporaryFile(suffix=".step", delete=False)
+        temp = tempfile.NamedTemporaryFile(suffix=".step", delete=False)
         try:
-            temporary.write(source_bytes)
-            temporary.close()
+            temp.write(data)
+            temp.close()
             reader = STEPControl_Reader()
-            if reader.ReadFile(temporary.name) != IFSelect_RetDone:
+            if reader.ReadFile(temp.name) != IFSelect_RetDone:
                 raise KernelOperationError("OCCT could not read STEP source")
             if reader.TransferRoots() <= 0:
                 raise KernelOperationError("STEP source contains no transferable roots")
@@ -142,35 +128,28 @@ class OcpKernel:
                 raise KernelOperationError("STEP import produced a null shape")
             return shape
         finally:
-            Path(temporary.name).unlink(missing_ok=True)
+            Path(temp.name).unlink(missing_ok=True)
 
     def import_step_assembly(self, source: str | bytes | Path) -> KernelAssembly:
-        source_bytes = self._source_bytes(source)
-        shape = self.import_step(source_bytes)
+        data = self._source_bytes(source)
+        shape = self.import_step(data)
         solids = self._subshapes(shape, "solid")
         if not solids:
             raise KernelOperationError("STEP source contains no solid components")
-
         components = []
         for solid in solids:
             faces = self.face_records(solid)
             transform = self._transform_record(solid)
-            payload = repr((transform, self.topology_counts(solid), faces)).encode("utf-8")
+            payload = repr((transform, self.topology_counts(solid), faces)).encode()
             reference = "component:" + hashlib.sha256(payload).hexdigest()[:24]
             components.append(KernelComponent(reference, "assembly:root", transform,
                                               self.topology_counts(solid), faces))
-        components.sort(key=lambda item: item.reference)
-        return KernelAssembly(
-            root_reference="assembly:root",
-            source_sha256=hashlib.sha256(source_bytes).hexdigest(),
-            units="mm",
-            components=tuple(components),
-        )
+        return KernelAssembly("assembly:root", hashlib.sha256(data).hexdigest(), "mm",
+                              tuple(sorted(components, key=lambda item: item.reference)))
 
     def export_step(self, model: object) -> bytes:
         from OCP.IFSelect import IFSelect_RetDone
         from OCP.STEPControl import STEPControl_AsIs, STEPControl_Writer
-
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "fixture.step"
             writer = STEPControl_Writer()
@@ -179,31 +158,23 @@ class OcpKernel:
             if writer.Write(str(path)) != IFSelect_RetDone:
                 raise KernelOperationError("OCCT could not write STEP output")
             data = path.read_bytes()
-        # OCCT writes the current timestamp into FILE_NAME. Normalize it so
-        # identical geometry produces deterministic bytes.
         return re.sub(rb"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}",
                       b"1970-01-01T00:00:00", data)
 
     def boolean(self, operation: str, left: object, right: object) -> object:
-        from OCP.BRepAlgoAPI import (BRepAlgoAPI_Common, BRepAlgoAPI_Cut,
-                                     BRepAlgoAPI_Fuse)
-
+        from OCP.BRepAlgoAPI import BRepAlgoAPI_Common, BRepAlgoAPI_Cut, BRepAlgoAPI_Fuse
         builders = {"fuse": BRepAlgoAPI_Fuse, "cut": BRepAlgoAPI_Cut,
                     "common": BRepAlgoAPI_Common}
         if operation not in builders:
             raise KernelOperationError(f"unsupported Boolean operation: {operation}")
         builder = builders[operation](left, right)
         builder.Build()
-        if not builder.IsDone():
+        if not builder.IsDone() or builder.Shape().IsNull():
             raise KernelOperationError(f"OCCT Boolean {operation} failed")
-        shape = builder.Shape()
-        if shape.IsNull():
-            raise KernelOperationError(f"OCCT Boolean {operation} produced a null shape")
-        return shape
+        return builder.Shape()
 
     def clearance(self, left: object, right: object) -> float:
         from OCP.BRepExtrema import BRepExtrema_DistShapeShape
-
         distance = BRepExtrema_DistShapeShape(left, right)
         distance.Perform()
         if not distance.IsDone():
@@ -211,17 +182,15 @@ class OcpKernel:
         return float(distance.Value())
 
     def topology_counts(self, model: object) -> TopologyCounts:
-        return TopologyCounts(len(self._subshapes(model, "solid")),
-                              len(self._subshapes(model, "shell")),
-                              len(self._subshapes(model, "face")),
-                              len(self._subshapes(model, "edge")))
+        return TopologyCounts(*(len(self._subshapes(model, kind))
+                                for kind in ("solid", "shell", "face", "edge")))
 
     def face_records(self, model: object) -> tuple[KernelFace, ...]:
         from OCP.BRepAdaptor import BRepAdaptor_Surface
         from OCP.BRepGProp import BRepGProp
         from OCP.GProp import GProp_GProps
+        from OCP.TopAbs import TopAbs_REVERSED
         from OCP.gp import gp_Pnt, gp_Vec
-
         records = []
         for face in self._subshapes(model, "face"):
             surface = BRepAdaptor_Surface(face)
@@ -233,38 +202,37 @@ class OcpKernel:
             if normal.Magnitude() <= 1e-12:
                 raise KernelOperationError("face normal is undefined at sample point")
             normal.Normalize()
-            if face.Orientation().name == "TopAbs_REVERSED":
+            if face.Orientation() == TopAbs_REVERSED:
                 normal.Reverse()
             props = GProp_GProps()
             BRepGProp.SurfaceProperties_s(face, props)
             area = round(float(props.Mass()), 9)
-            center = tuple(round(value, 9) for value in (point.X(), point.Y(), point.Z()))
-            direction = tuple(round(value, 9) for value in (normal.X(), normal.Y(), normal.Z()))
-            fingerprint = hashlib.sha256(repr((area, center, direction,
-                                                int(surface.GetType()))).encode("utf-8")).hexdigest()[:24]
-            records.append(KernelFace("face:" + fingerprint, area, center, direction))
+            center = tuple(round(x, 9) for x in (point.X(), point.Y(), point.Z()))
+            direction = tuple(round(x, 9) for x in (normal.X(), normal.Y(), normal.Z()))
+            token = hashlib.sha256(repr((area, center, direction,
+                                         int(surface.GetType()))).encode()).hexdigest()[:24]
+            records.append(KernelFace("face:" + token, area, center, direction))
         return tuple(sorted(records, key=lambda item: item.reference))
 
     @staticmethod
     def _transform_record(shape: object) -> tuple[float, ...]:
-        transform = shape.Location().Transformation()
-        values = []
-        for row in range(1, 4):
-            for column in range(1, 5):
-                values.append(round(float(transform.Value(row, column)), 12))
-        return tuple(values)
+        trsf = shape.Location().Transformation()
+        return tuple(round(float(trsf.Value(r, c)), 12)
+                     for r in range(1, 4) for c in range(1, 5))
 
     @staticmethod
     def _subshapes(model: object, kind: str) -> list[object]:
         from OCP.TopAbs import TopAbs_EDGE, TopAbs_FACE, TopAbs_SHELL, TopAbs_SOLID
         from OCP.TopExp import TopExp_Explorer
-
+        from OCP.TopoDS import TopoDS
         kinds = {"solid": TopAbs_SOLID, "shell": TopAbs_SHELL,
                  "face": TopAbs_FACE, "edge": TopAbs_EDGE}
+        casts = {"solid": TopoDS.Solid_s, "shell": TopoDS.Shell_s,
+                 "face": TopoDS.Face_s, "edge": TopoDS.Edge_s}
         explorer = TopExp_Explorer(model, kinds[kind])
         result = []
         while explorer.More():
-            result.append(explorer.Current())
+            result.append(casts[kind](explorer.Current()))
             explorer.Next()
         return result
 
@@ -275,11 +243,8 @@ def installed_backend_candidates() -> tuple[str, ...]:
 
 def require_real_kernel() -> RealKernel:
     if find_spec("OCP") is None:
-        raise KernelUnavailable(
-            "No approved B-Rep backend is installed. Install "
-            f"{OcpKernel.PINNED_DISTRIBUTION}; the AABB test double is not a fallback."
-        )
+        raise KernelUnavailable(f"Install {OcpKernel.PINNED_DISTRIBUTION}; AABB is not a fallback")
     kernel = OcpKernel()
     if not kernel.capabilities.is_complete:
-        raise KernelUnavailable("the reviewed OCP adapter does not expose every required capability")
+        raise KernelUnavailable("reviewed OCP adapter lacks required capabilities")
     return kernel
