@@ -56,9 +56,10 @@ def _box(feature: FixtureFeature) -> tuple[float, float, float, float, float, fl
 def _step(concept: CompleteFixtureConcept, revision: str,
           manufacturing: ManufacturingGeometry | None = None) -> str:
     if manufacturing is not None:
-        # The kernel owns STEP serialization. Decode only after it has emitted
-        # a neutral ISO-10303 file; no vendor object crosses this contract.
-        return manufacturing.step_bytes.decode("utf-8")
+        try:
+            return manufacturing.step_bytes.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise ExportError("manufacturing STEP output must be UTF-8 neutral text") from exc
     lines = [
         "ISO-10303-21;",
         "HEADER;",
@@ -122,6 +123,21 @@ def _validation(concept: CompleteFixtureConcept, access: AccessAnalysis | None) 
             "assumptions": ["AABB evidence is not B-Rep, tolerance-stack, weld-quality, or robot-motion validation."]}
 
 
+def _validate_manufacturing(concept: CompleteFixtureConcept,
+                            manufacturing: ManufacturingGeometry) -> None:
+    expected = tuple(feature.identity for feature in concept.fixture.features)
+    if manufacturing.concept_identity != concept.identity:
+        raise ExportError("manufacturing geometry concept identity does not match")
+    if manufacturing.source_sha256 != concept.fixture.source_sha256:
+        raise ExportError("manufacturing geometry source assembly does not match")
+    if manufacturing.units != concept.fixture.units or manufacturing.units != "mm":
+        raise ExportError("manufacturing geometry units do not match")
+    if manufacturing.feature_identities != expected or manufacturing.identities != expected:
+        raise ExportError("manufacturing geometry must represent every fixture feature exactly once and in order")
+    if not manufacturing.step_bytes.startswith(b"ISO-10303-21") or b"END-ISO-10303-21" not in manufacturing.step_bytes:
+        raise ExportError("manufacturing STEP output is malformed or partial")
+
+
 def build_fabrication_package(concept: CompleteFixtureConcept, revision: str = "A",
                               access: AccessAnalysis | None = None,
                               tooling: ToolingLibrary | None = None,
@@ -149,10 +165,13 @@ def build_fabrication_package(concept: CompleteFixtureConcept, revision: str = "
                   "This package is not certified, validated, or approved for production."],
     }
     if manufacturing is not None:
-        if manufacturing.concept_identity != concept.identity or manufacturing.units != "mm":
-            raise ExportError("manufacturing geometry does not match the concept contract")
+        _validate_manufacturing(concept, manufacturing)
         manifest_data["geometry_source"] = "reviewed_real_kernel"
         manifest_data["manufacturing_solids"] = list(manufacturing.identities)
+        manifest_data["notes"] = [
+            "STEP is kernel-authored; DXF remains proof-layer until true profile extraction is complete.",
+            "This package is not certified, validated, or approved for production.",
+        ]
     setup = "\n".join([f"# Fixture setup — {concept.identity} revision {revision}", "",
         "Status: ENGINEERING REVIEW REQUIRED (not production approval).", "", "## Strategy",
         f"- Locating: {concept.locating_strategy}", f"- Clamping: {concept.clamping_strategy}",
