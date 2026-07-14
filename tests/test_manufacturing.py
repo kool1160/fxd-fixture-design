@@ -1,10 +1,13 @@
 import unittest
+from dataclasses import replace
 from pathlib import Path
 
 from fxd_geometry import (EngineeringAnnotations, ManufacturingSpec, Vec3,
-                          generate_fixture_concepts, generate_fixture_primitives,
-                          generate_manufacturing_geometry, import_step)
-from fxd_geometry.kernel import KernelCapabilities
+                          build_fabrication_package, generate_fixture_concepts,
+                          generate_fixture_primitives, generate_manufacturing_geometry,
+                          import_step)
+from fxd_geometry.export import ExportError
+from fxd_geometry.kernel import KernelCapabilities, KernelOperationError
 
 
 class FakeKernel:
@@ -43,13 +46,35 @@ class ManufacturingGeometryTests(unittest.TestCase):
         self.assertEqual(next(f for f in concept.features if f.kind == "round_pin").manufacturing.method,
                          "machined")
 
-    def test_kernel_boundary_authors_opaque_solids_and_step(self):
+    def test_kernel_boundary_authors_bound_opaque_solids_and_step(self):
         concept = generate_fixture_concepts(self.product, self.annotations).recommended
         geometry = generate_manufacturing_geometry(concept, FakeKernel())
+        expected = tuple(feature.identity for feature in concept.fixture.features)
         self.assertEqual(geometry.units, "mm")
-        self.assertEqual(len(geometry.solids), len(concept.fixture.features))
-        self.assertIn("round-pin-1", geometry.identities)
+        self.assertEqual(geometry.source_sha256, concept.fixture.source_sha256)
+        self.assertEqual(geometry.feature_identities, expected)
+        self.assertEqual(geometry.identities, expected)
         self.assertTrue(geometry.step_bytes.startswith(b"ISO-10303-21"))
+        package = build_fabrication_package(concept, manufacturing=geometry)
+        self.assertIn('"geometry_source": "reviewed_real_kernel"', package.manifest)
+        self.assertIn("DXF remains proof-layer", package.manifest)
+
+    def test_export_rejects_wrong_source_missing_or_reordered_features(self):
+        concept = generate_fixture_concepts(self.product, self.annotations).recommended
+        geometry = generate_manufacturing_geometry(concept, FakeKernel())
+        with self.assertRaisesRegex(ExportError, "source assembly"):
+            build_fabrication_package(concept, manufacturing=replace(geometry, source_sha256="wrong"))
+        reversed_solids = tuple(reversed(geometry.solids))
+        with self.assertRaisesRegex(KernelOperationError, "declared feature order"):
+            replace(geometry, solids=reversed_solids)
+        with self.assertRaisesRegex(KernelOperationError, "declared feature order"):
+            replace(geometry, solids=geometry.solids[:-1])
+
+    def test_malformed_step_cannot_be_labeled_reviewed_geometry(self):
+        concept = generate_fixture_concepts(self.product, self.annotations).recommended
+        geometry = generate_manufacturing_geometry(concept, FakeKernel())
+        with self.assertRaisesRegex(KernelOperationError, "malformed or partial"):
+            replace(geometry, step_bytes=b"not step")
 
 
 if __name__ == "__main__":
