@@ -166,7 +166,7 @@ Phase 2 replaces proof-layer shortcuts with production-grade engineering foundat
 
 ## Milestone 11 — Integrate a real geometry kernel
 
-**Status:** Pending
+**Status:** Complete
 
 Replace AABB-only proof geometry with a reviewed B-Rep kernel boundary capable of importing real STEP assemblies, preserving hierarchy and transforms, exposing topology, and authoring deterministic neutral geometry without coupling FXD to a CAD vendor.
 
@@ -180,6 +180,8 @@ Acceptance criteria:
 - malformed, partial, and unsupported geometry fail clearly
 - deterministic STEP round-trip behavior is tested with legally shareable fixtures
 - the proof-layer AABB implementation remains available only as an explicit test double
+
+Implementation note: FXD uses the pinned `cadquery-ocp==7.9.3.1.1` binding behind the neutral `RealKernel` boundary. Synthetic multi-solid STEP proofs cover topology, transforms, face normals, stable references, Boolean operations, clearance, malformed input, and deterministic round trips. OCP/OCCT licensing and redistribution obligations are recorded separately.
 
 **Recommended level:** Sol
 

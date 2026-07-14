@@ -184,3 +184,18 @@ unresolved until an approved Windows/vendor review is available.
 
 Evidence: `python -m unittest discover -s tests -v` passes 40 tests,
 `python scripts/connector_proof.py` passes, and `bash scripts/ci.sh` passes.
+
+## 2026-07-14 — Milestone 11 kernel boundary assessed
+
+The safe internal phase adds a CAD-neutral `RealKernel` contract, explicit
+backend discovery, and a hard failure for missing or unreviewed B-Rep
+backends. The AABB implementation is documented and tested as a test double
+only. No kernel dependency was installed because this checkout has no OCCT
+runtime and no reviewed binding/version or redistribution record.
+
+Milestone 11 remains blocked. Real STEP topology, Boolean, distance,
+clearance, hierarchy, and deterministic round-trip evidence require approval
+of an exact kernel/binding and a runtime containing it.
+
+Evidence: `python -m unittest discover -s tests -v`,
+`tests/test_kernel_boundary.py`, and `docs/GEOMETRY_KERNEL_BOUNDARY.md`.
