@@ -1,0 +1,61 @@
+name: Kernel acceptance
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "fxd_geometry/**"
+      - "tests/**"
+      - "scripts/**"
+      - "requirements-kernel.txt"
+      - ".github/workflows/kernel-acceptance.yml"
+  push:
+    branches: [main]
+    paths:
+      - "fxd_geometry/**"
+      - "tests/**"
+      - "scripts/**"
+      - "requirements-kernel.txt"
+      - ".github/workflows/kernel-acceptance.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  ocp-acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up supported Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-kernel.txt
+
+      - name: Upgrade packaging tools
+        run: python -m pip install --upgrade pip setuptools wheel
+
+      - name: Install pinned OCP wheel
+        run: python -m pip install --only-binary=:all: -r requirements-kernel.txt
+
+      - name: Prove pinned runtime
+        run: |
+          python - <<'PY'
+          import OCP
+          expected = "7.9.3.1"
+          actual = str(getattr(OCP, "__version__", "unknown"))
+          print(f"OCP runtime: {actual}")
+          if not actual.startswith(expected):
+              raise SystemExit(f"Expected OCP {expected}.x, got {actual}")
+          PY
+
+      - name: Run repository validation
+        run: bash scripts/ci.sh
+
+      - name: Run real-kernel tests verbosely
+        run: python -m unittest tests.test_kernel_real tests.test_manufacturing -v
