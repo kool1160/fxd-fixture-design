@@ -187,7 +187,7 @@ Implementation note: FXD uses the pinned `cadquery-ocp==7.9.3.1.1` binding behin
 
 ## Milestone 12 — Build a deterministic locating and constraint solver
 
-**Status:** Pending
+**Status:** Complete
 
 Implement engineering-first locating analysis using contact geometry, normals, and degrees of freedom. The solver must establish whether a proposed datum and locator strategy actually constrains the product before any AI ranking occurs.
 

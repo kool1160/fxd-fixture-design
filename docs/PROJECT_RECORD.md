@@ -199,3 +199,21 @@ of an exact kernel/binding and a runtime containing it.
 
 Evidence: `python -m unittest discover -s tests -v`,
 `tests/test_kernel_boundary.py`, and `docs/GEOMETRY_KERNEL_BOUNDARY.md`.
+
+## 2026-07-14 — Milestone 12 deterministic locating solver
+
+FXD now exposes a CAD-neutral `LocatingStrategy` made from explicit contact
+points, normals, product references, and distinct locator roles. The solver
+forms rigid-body constraint rows and deterministically reports rank across six
+translational/rotational degrees of freedom, underconstraint, redundant
+locators, invalid references, and clamp exclusion. Tolerance, repeatability,
+and datum assumptions remain structured evidence. Concept generation accepts
+the strategy and gates invalid locating concepts out of recommendation.
+
+Evidence: `python scripts/constraint_proof.py`,
+`tests/test_constraints.py`, and the focused concept regression tests. The
+required `bash scripts/ci.sh` command was attempted but could not install the
+pre-existing pinned kernel dependency because this environment had no PyPI DNS
+or network access; no code failure was reached. Full-rank analysis is not a
+production approval or a substitute for kernel contact, force, tolerance,
+access, or manufacturing validation.
