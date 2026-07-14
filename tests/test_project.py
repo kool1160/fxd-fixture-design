@@ -21,7 +21,10 @@ class ProjectPersistenceTests(unittest.TestCase):
     def setUp(self):
         self.source = Path("tests/fixtures/synthetic_assembly.step")
         product = import_step(self.source)
-        component = product.components[0]
+        try:
+            component = next(item for item in product.components if item.bodies)
+        except StopIteration as exc:
+            self.fail("synthetic project fixture contains no geometric component")
         body = component.bodies[0]
         reference = GeometryReference(component.identity, body.identity)
         annotations = EngineeringAnnotations(
