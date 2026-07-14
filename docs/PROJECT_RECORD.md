@@ -288,3 +288,21 @@ These records are display and selection evidence only; they do not replace
 B-Rep validation or imply production approval. The pinned OCP runtime is not
 available locally, so real-kernel acceptance and release claims remain pending
 GitHub Actions evidence.
+
+## 2026-07-14 — Milestone 18 complete
+
+The project workflow now exposes a restricted edit contract for supported
+parameter changes (including locator type, pin diameter, support height, clamp
+choice, baseplate thickness, fit, and clearance) plus move, resize, replace,
+suppress, restore, and compare operations. Edits are copy-on-write revisions;
+they regenerate the deterministic concept model, recompute validation evidence,
+and revoke the revision-bound engineering-review approval. Project persistence
+stores the edit log and revision evidence, while unsupported free-form edits
+fail explicitly. Source STEP bytes, source hashes, annotations, and vendor
+connectors remain untouched.
+
+Evidence: `python -m unittest discover -s tests` passes 88 tests with four
+environment-skipped real-kernel tests; `bash scripts/ci-contract.sh` passes.
+OCP is unavailable in this environment, so no new real-kernel acceptance claim
+is made. The workflow remains engineering-review-only and does not certify or
+approve production fixtures.

@@ -303,7 +303,7 @@ Implementation note: pinned-OCP acceptance passed on PR #28 code head `72269104d
 
 ## Milestone 18 — Build the edit-regenerate-revalidate workflow
 
-**Status:** Pending
+**Status:** Complete
 
 Turn visual corrections into deterministic engineering operations that regenerate geometry and validation evidence.
 
