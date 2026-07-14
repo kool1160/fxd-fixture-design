@@ -281,20 +281,23 @@ Phase 3 turns the proven engineering core and application boundary into a seriou
 
 ## Milestone 17 — Prove and expose real-kernel geometry
 
-**Status:** Pending
+**Status:** Complete
 
 Complete the pinned-OCP acceptance gate and replace proof envelopes in the application with traceable real product and fixture geometry.
 
 Acceptance criteria:
 
 - GitHub Actions installs and proves `cadquery-ocp==7.9.3.1.1`
-- real-kernel Boolean, distance, interference, clearance, and manufacturability tests pass
+- real-kernel Boolean, distance, interference, clearance, sectioning, tessellation, and manufacturability tests pass
 - deterministic STEP and DXF artifacts are generated and checked with legally shareable fixtures
 - product and fixture B-Rep geometry is tessellated for the visual application
-- faces, edges, holes, slots, tabs, risers, pins, supports, and clamps can be inspected and selected
-- selected visual geometry links to stable geometry references, rules, parameters, and validation findings
-- section, transparency, wireframe, fit-to-view, and collision highlighting support engineering review
-- failure to obtain kernel evidence keeps the project provisional and blocks release claims
+- faces, edges, section edges, holes, slots, tabs, risers, pins, supports, and clamps can be inspected and selected
+- selected visual geometry links to stable geometry references, rules, parameters, and exact feature findings
+- section, transparency, wireframe, fit-to-view, collision highlighting, and feature-layer controls support engineering review
+- concept changes, suppressions, corrections, and project reloads rebuild visual evidence from the immutable embedded STEP source
+- failure to obtain kernel evidence keeps the project visibly provisional and blocks release claims
+
+Implementation note: pinned-OCP acceptance passed on PR #28 code head `72269104d8c297ed07766375ffcc4e7ebd9eb2f8` with 85 tests and real product/fixture visual geometry coverage. Later commits only record closure evidence.
 
 **Recommended level:** Sol
 
