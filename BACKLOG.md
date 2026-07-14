@@ -206,7 +206,7 @@ Acceptance criteria:
 
 ## Milestone 13 — Add weld-fixture engineering rules
 
-**Status:** Pending
+**Status:** Complete
 
 Add explainable weld-fixture reasoning for heat input, distortion, restraint, tack sequence, weld access, clamp direction, and support placement. Rules must remain configurable and must never silently become universal shop policy.
 
