@@ -17,7 +17,15 @@ from OCP.BRepPrimAPI import BRepPrimAPI_MakeBox
 from OCP.TopoDS import TopoDS_Compound
 from OCP.gp import gp_Trsf, gp_Vec
 
-from fxd_geometry import require_real_kernel
+from fxd_geometry import (
+    EngineeringAnnotations,
+    Vec3,
+    generate_fixture_concepts,
+    generate_manufacturing_geometry,
+    import_step,
+    require_real_kernel,
+    validate_fixture_concept,
+)
 
 
 def translated(shape: object, x_mm: float) -> object:
@@ -93,8 +101,43 @@ if first != second:
         print(line)
     raise AssertionError("normalized STEP exports are not deterministic")
 
+# Prove the real manufacturing path using only the legally shareable synthetic
+# fixture. STEP and DXF must originate from the same deterministic cut plan and
+# repeat exactly across separate OCP authoring passes.
+product = import_step(ROOT / "tests/fixtures/synthetic_assembly.step")
+annotations = EngineeringAnnotations.for_product(
+    product,
+    build_orientation=Vec3(0, 0, 1),
+    loading_direction=Vec3(1, 0, 0),
+    process_type="MIG",
+    production_quantity=1,
+)
+concept = generate_fixture_concepts(product, annotations).recommended
+manufacturing_first = generate_manufacturing_geometry(concept, kernel)
+manufacturing_second = generate_manufacturing_geometry(concept, kernel)
+expected_features = tuple(feature.identity for feature in concept.fixture.features)
+assert manufacturing_first.feature_identities == expected_features
+assert manufacturing_first.identities == expected_features
+assert manufacturing_first.step_bytes == manufacturing_second.step_bytes
+assert manufacturing_first.dxf_bytes == manufacturing_second.dxf_bytes
+assert manufacturing_first.step_bytes.startswith(b"ISO-10303-21")
+assert manufacturing_first.dxf_bytes.startswith(b"0\nSECTION")
+
+validation_first = validate_fixture_concept(
+    product, concept, manufacturing=manufacturing_first, kernel=kernel
+)
+validation_second = validate_fixture_concept(
+    product, concept, manufacturing=manufacturing_second, kernel=kernel
+)
+assert validation_first.evidence_digest == validation_second.evidence_digest
+assert not any(
+    finding.code in {"kernel_clearance_failed", "manufacturing_identity_mismatch"}
+    for finding in validation_first.findings
+)
+
 print(kernel.capabilities)
 print(
     "real OCP assembly, topology, Boolean, clearance, contact semantics, "
-    "tessellation, transformed edges, sectioning, and deterministic round-trip proof passed"
+    "tessellation, transformed edges, sectioning, deterministic STEP/DXF, "
+    "and manufacturability proof passed"
 )
