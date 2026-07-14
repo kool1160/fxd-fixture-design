@@ -1,7 +1,7 @@
 name: Kernel acceptance
 
-on:
-  workflow_dispatch:
+"on":
+  workflow_dispatch: {}
   pull_request:
     paths:
       - "fxd_geometry/**"
@@ -10,7 +10,8 @@ on:
       - "requirements-kernel.txt"
       - ".github/workflows/kernel-acceptance.yml"
   push:
-    branches: [main]
+    branches:
+      - main
     paths:
       - "fxd_geometry/**"
       - "tests/**"
@@ -23,6 +24,7 @@ permissions:
 
 jobs:
   ocp-acceptance:
+    name: Pinned OCP acceptance
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
@@ -44,9 +46,11 @@ jobs:
         run: python -m pip install --only-binary=:all: -r requirements-kernel.txt
 
       - name: Prove pinned runtime
+        shell: bash
         run: |
           python - <<'PY'
           import OCP
+
           expected = "7.9.3.1"
           actual = str(getattr(OCP, "__version__", "unknown"))
           print(f"OCP runtime: {actual}")
