@@ -26,6 +26,11 @@ def transformed_point(point: object, location: object) -> tuple[float, float, fl
     return tuple(round(float(value), 9) for value in (placed.X(), placed.Y(), placed.Z()))
 
 
+def point_coordinates(point: object) -> tuple[float, float, float]:
+    """Return a kernel point as deterministic millimetre coordinates."""
+    return tuple(round(float(value), 9) for value in (point.X(), point.Y(), point.Z()))
+
+
 def has_volumetric_overlap(volume_mm3: float, tolerance_mm: float) -> bool:
     """Distinguish true penetration from intentional touching contact."""
     if tolerance_mm < 0:
@@ -113,16 +118,15 @@ class OcpKernel(_BaseOcpKernel):
         return tuple(sorted(result, key=lambda mesh: mesh.face_reference))
 
     def edge_records(self, model: object) -> tuple[KernelEdgeRecord, ...]:
-        from OCP.BRep import BRep_Tool
+        from OCP.BRepAdaptor import BRepAdaptor_Curve
 
         records: list[KernelEdgeRecord] = []
         for edge in self._subshapes(model, "edge"):
-            curve, first, last = BRep_Tool.Curve_s(edge)
-            if curve is None:
-                raise KernelOperationError("edge has no geometric curve")
-            location = edge.Location()
-            start = transformed_point(curve.Value(first), location)
-            end = transformed_point(curve.Value(last), location)
+            curve = BRepAdaptor_Curve(edge)
+            first = float(curve.FirstParameter())
+            last = float(curve.LastParameter())
+            start = point_coordinates(curve.Value(first))
+            end = point_coordinates(curve.Value(last))
             canonical = tuple(sorted((start, end)))
             token = hashlib.sha256(repr(canonical).encode()).hexdigest()[:24]
             records.append(KernelEdgeRecord("edge:" + token, start, end))
