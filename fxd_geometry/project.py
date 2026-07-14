@@ -251,10 +251,16 @@ class FxdProject:
                     features[features.index(feature)] = changed
                     geometry_edits.append(edit)
 
-            # Parameter changes must alter the actual feature and manufacturing contracts.
+            explicitly_replaced = {
+                edit.target for edit in edits if edit.operation == "replace"
+            }
             normalized: list[FixtureFeature] = []
             for feature in features:
-                kind = params.locator_type if feature.identity == "round-pin-1" else feature.kind
+                kind = (
+                    params.locator_type
+                    if feature.identity == "round-pin-1" and feature.identity not in explicitly_replaced
+                    else feature.kind
+                )
                 parameters = dict(feature.parameters)
                 if feature.identity == "round-pin-1":
                     parameters["diameter"] = params.locator_wall
