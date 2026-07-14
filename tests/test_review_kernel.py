@@ -3,7 +3,36 @@ from __future__ import annotations
 import unittest
 
 from fxd_geometry import KernelOperationError, KernelTriangleMesh, OcpKernel
-from fxd_geometry.review_kernel import has_volumetric_overlap, zero_based_triangle
+from fxd_geometry.review_kernel import (
+    has_volumetric_overlap,
+    transformed_point,
+    zero_based_triangle,
+)
+
+
+class _PlacedPoint:
+    def __init__(self, coordinates: tuple[float, float, float]) -> None:
+        self.coordinates = coordinates
+
+    def Transformed(self, transform: tuple[float, float, float]) -> "_PlacedPoint":
+        return _PlacedPoint(tuple(value + offset for value, offset in zip(self.coordinates, transform)))
+
+    def X(self) -> float:
+        return self.coordinates[0]
+
+    def Y(self) -> float:
+        return self.coordinates[1]
+
+    def Z(self) -> float:
+        return self.coordinates[2]
+
+
+class _Location:
+    def __init__(self, translation: tuple[float, float, float]) -> None:
+        self.translation = translation
+
+    def Transformation(self) -> tuple[float, float, float]:
+        return self.translation
 
 
 class ReviewKernelContractTests(unittest.TestCase):
@@ -24,6 +53,11 @@ class ReviewKernelContractTests(unittest.TestCase):
     def test_negative_interference_tolerance_is_rejected(self) -> None:
         with self.assertRaises(KernelOperationError):
             has_volumetric_overlap(0.0, -0.1)
+
+    def test_edge_points_are_reported_in_world_coordinates(self) -> None:
+        point = _PlacedPoint((1.0, 2.0, 3.0))
+        location = _Location((10.0, -2.0, 0.5))
+        self.assertEqual(transformed_point(point, location), (11.0, 0.0, 3.5))
 
     def test_public_ocp_adapter_is_the_hardened_review_adapter(self) -> None:
         self.assertEqual(OcpKernel.__module__, "fxd_geometry.review_kernel")
