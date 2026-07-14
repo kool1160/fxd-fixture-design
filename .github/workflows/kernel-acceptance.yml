@@ -62,13 +62,13 @@
           "run": "set +e\nbash scripts/ci.sh 2>&1 | tee kernel-ci.log\nstatus=${PIPESTATUS[0]}\necho \"exit_code=$status\" >> \"$GITHUB_OUTPUT\"\nexit 0"
         },
         {
-          "name": "Report diagnostic result",
+          "name": "Publish latest diagnostic result",
           "if": "always()",
           "shell": "bash",
           "env": {
             "GH_TOKEN": "${{ github.token }}"
           },
-          "run": "{\n  echo \"## Kernel acceptance run $GITHUB_RUN_NUMBER\"\n  echo\n  echo \"Commit: $GITHUB_SHA\"\n  echo \"Exit code: ${{ steps.validation.outputs.exit_code }}\"\n  echo\n  echo '```text'\n  tail -c 60000 kernel-ci.log 2>/dev/null || echo 'Validation log was not created.'\n  echo\n  echo '```'\n} > kernel-report.md\ngh issue comment 27 --repo \"$GITHUB_REPOSITORY\" --body-file kernel-report.md"
+          "run": "{\n  echo \"## Kernel acceptance run $GITHUB_RUN_NUMBER\"\n  echo\n  echo \"Commit: $GITHUB_SHA\"\n  echo \"Exit code: ${{ steps.validation.outputs.exit_code }}\"\n  echo\n  echo '```text'\n  tail -c 60000 kernel-ci.log 2>/dev/null || echo 'Validation log was not created.'\n  echo\n  echo '```'\n} > kernel-report.md\ngh issue edit 27 --repo \"$GITHUB_REPOSITORY\" --body-file kernel-report.md"
         },
         {
           "name": "Enforce validation result",
