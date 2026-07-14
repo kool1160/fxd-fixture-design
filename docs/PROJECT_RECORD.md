@@ -217,3 +217,22 @@ pre-existing pinned kernel dependency because this environment had no PyPI DNS
 or network access; no code failure was reached. Full-rank analysis is not a
 production approval or a substitute for kernel contact, force, tolerance,
 access, or manufacturing validation.
+
+## 2026-07-14 — Milestone 13 weld-fixture engineering rules
+
+FXD now stores explicit weld process, direction, sequence, heat-input,
+distortion, tack, release, and assumption metadata. A deterministic,
+configurable evaluator reports missing process evidence, heat-input threshold
+conflicts, missing tack/release intent, fixture features associated with weld
+zones, and clamp-force directions that reinforce expected distortion. Findings
+and recommendations retain rule identity, evidence, assumptions, and
+confidence. Conflicts remain warnings rather than being averaged into a score;
+caller-supplied thresholds and directions are not universal shop policy.
+
+The implementation remains CAD-neutral and uses synthetic reference evidence.
+It does not simulate thermal distortion, force adequacy, spatter, weld quality,
+robot motion, or production safety, and it does not include private shop rules.
+
+Evidence: `python -m unittest tests.test_weld_rules` passes. The repository's
+full suite remains environment-blocked by the pre-existing missing pinned OCP
+runtime (`cadquery-ocp==7.9.3.1.1`) in kernel tests.

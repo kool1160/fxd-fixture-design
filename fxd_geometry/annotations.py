@@ -72,11 +72,32 @@ class WeldJoint:
     references: tuple[GeometryReference, ...] = ()
     process: str | None = None
     notes: str = ""
+    sequence: int | None = None
+    direction: Vec3 | None = None
+    heat_input: float | None = None
+    heat_input_units: str | None = None
+    distortion_direction: Vec3 | None = None
+    tack_required: bool = True
+    release_sequence: int | None = None
+    assumptions: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         _text(self.identity, "weld joint identity")
         if self.process:
             _text(self.process, "weld joint process")
+        if self.sequence is not None and (not isinstance(self.sequence, int) or self.sequence < 1):
+            raise AnnotationError("weld sequence must be a positive integer")
+        if self.release_sequence is not None and (not isinstance(self.release_sequence, int) or self.release_sequence < 1):
+            raise AnnotationError("weld release_sequence must be a positive integer")
+        for value, label in ((self.direction, "weld direction"), (self.distortion_direction, "distortion direction")):
+            if value is not None:
+                _vector(value, label)
+        if self.heat_input is not None:
+            if not math.isfinite(self.heat_input) or self.heat_input < 0:
+                raise AnnotationError("heat_input must be finite and non-negative")
+            _text(self.heat_input_units or "", "heat_input_units")
+        if not isinstance(self.tack_required, bool):
+            raise AnnotationError("tack_required must be boolean")
 
 
 @dataclass(frozen=True)
@@ -182,7 +203,13 @@ class EngineeringAnnotations:
             critical_characteristics=tuple(CriticalCharacteristic(item["name"], tuple(ref(x) for x in item["references"]), item["nominal_value"], item["units"], item["tolerance"], item["notes"]) for item in data["critical_characteristics"]),
             permitted_locating_surfaces=tuple(ref(x) for x in data["permitted_locating_surfaces"]),
             forbidden_contact_areas=tuple(ref(x) for x in data["forbidden_contact_areas"]),
-            weld_joints=tuple(WeldJoint(item["identity"], tuple(ref(x) for x in item["references"]), item["process"], item["notes"]) for item in data["weld_joints"]),
+            weld_joints=tuple(WeldJoint(
+                item["identity"], tuple(ref(x) for x in item["references"]), item.get("process"), item.get("notes", ""),
+                item.get("sequence"), Vec3(**item["direction"]) if item.get("direction") else None,
+                item.get("heat_input"), item.get("heat_input_units"),
+                Vec3(**item["distortion_direction"]) if item.get("distortion_direction") else None,
+                item.get("tack_required", True), item.get("release_sequence"), tuple(item.get("assumptions", ())))
+                for item in data["weld_joints"]),
             shop_constraints=tuple(data["shop_constraints"]),
             assumptions=tuple(Assumption(**item) for item in data["assumptions"]),
             schema_version=data.get("schema_version", "fxd-annotations-v1"),
