@@ -225,7 +225,7 @@ Acceptance criteria:
 
 ## Milestone 14 — Generate manufacturing-aware fixture geometry
 
-**Status:** Pending
+**Status:** Waiting
 
 Generate editable, manufacturable fixture solids and profiles instead of abstract boxes. Features should reflect practical sheet-metal and fabricated-fixture construction methods.
 
@@ -240,11 +240,13 @@ Acceptance criteria:
 - resulting geometry passes kernel-level interference and manufacturability checks
 - neutral STEP and DXF exports contain actual geometry suitable for engineering review
 
+Waiting note: the safe manufacturing-geometry implementation is present, but completion remains gated on the provisioned GitHub Actions acceptance run using pinned `cadquery-ocp==7.9.3.1.1`. This status intentionally allows later milestones to proceed without claiming kernel acceptance or production suitability.
+
 **Recommended level:** Sol
 
 ## Milestone 15 — Build the full deterministic validation pipeline
 
-**Status:** Pending
+**Status:** Complete
 
 Unify geometry, constraint, access, tooling, tolerance, and manufacturing checks into one release gate. Validation must decide whether a concept is valid, provisional, or invalid before AI explanation or export.
 
@@ -258,6 +260,8 @@ Acceptance criteria:
 - provisional concepts identify exactly what evidence is missing
 - validation results are reproducible and versioned
 - regression suites include deliberately unsafe and misleading fixture concepts
+
+Implementation note: the versioned deterministic validation contract, mandatory fail-closed export gate, interface-aware manufacturing checks, and regression coverage were completed in PR #21. Real OCP-backed checks remain subject to the Milestone 14 external kernel acceptance gate and do not imply production approval.
 
 **Recommended level:** Sol
 
