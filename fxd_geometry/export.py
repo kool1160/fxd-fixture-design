@@ -16,6 +16,7 @@ from .concepts import CompleteFixtureConcept
 from .fixture import FixtureFeature
 from .manufacturing import ManufacturingGeometry
 from .tooling import ToolingLibrary, generic_tooling_library
+from .validation import VALIDATION_VERSION, ValidationResult
 
 
 class ExportError(ValueError):
@@ -113,16 +114,6 @@ def _bom(concept: CompleteFixtureConcept, tooling: ToolingLibrary) -> dict[str, 
             "warnings": ["BOM quantities are proof-layer reconciliation and require engineering review."]}
 
 
-def _validation(concept: CompleteFixtureConcept, access: AccessAnalysis | None) -> dict[str, object]:
-    findings = [{"code": item.code, "severity": item.severity, "feature": item.feature_identity, "message": item.message}
-                for item in concept.fixture.findings]
-    if access is not None:
-        findings.extend({"code": item.code, "severity": item.severity, "feature": item.feature_identity,
-                         "request": item.request_identity, "message": item.message} for item in access.findings)
-    return {"status": "engineering_review_required", "units": "mm", "findings": findings,
-            "assumptions": ["AABB evidence is not B-Rep, tolerance-stack, weld-quality, or robot-motion validation."]}
-
-
 def _validate_manufacturing(concept: CompleteFixtureConcept,
                             manufacturing: ManufacturingGeometry) -> None:
     expected = tuple(feature.identity for feature in concept.fixture.features)
@@ -138,14 +129,32 @@ def _validate_manufacturing(concept: CompleteFixtureConcept,
         raise ExportError("manufacturing STEP output is malformed or partial")
 
 
+def _validate_release_gate(concept: CompleteFixtureConcept,
+                           validation: ValidationResult | None) -> ValidationResult:
+    if validation is None:
+        raise ExportError("deterministic validation result is required before export")
+    if validation.version != VALIDATION_VERSION:
+        raise ExportError("validation result version is not supported")
+    if validation.units != "mm":
+        raise ExportError("validation result must use millimetres")
+    if validation.concept_identity != concept.identity or validation.source_sha256 != concept.fixture.source_sha256:
+        raise ExportError("validation result does not match concept source")
+    if validation.blocked:
+        raise ExportError("invalid deterministic validation result cannot be exported")
+    if not validation.evidence_digest:
+        raise ExportError("validation result has no evidence digest")
+    return validation
+
+
 def build_fabrication_package(concept: CompleteFixtureConcept, revision: str = "A",
                               access: AccessAnalysis | None = None,
                               tooling: ToolingLibrary | None = None,
-                              manufacturing: ManufacturingGeometry | None = None) -> FabricationPackage:
-    """Build deterministic artifacts for an eligible concept.
+                              manufacturing: ManufacturingGeometry | None = None,
+                              validation: ValidationResult | None = None) -> FabricationPackage:
+    """Build deterministic review artifacts after the mandatory release gate.
 
-    Provisional concepts may be exported for review. Invalid concepts and
-    concepts with known access errors may not be exported.
+    Provisional concepts may be exported for engineering review. Invalid concepts,
+    missing validation, and concepts with known access errors may not be exported.
     """
     if not revision.strip() or any(char in revision for char in "\\/:\n"):
         raise ExportError("revision must be a non-empty path-safe identifier")
@@ -153,13 +162,21 @@ def build_fabrication_package(concept: CompleteFixtureConcept, revision: str = "
         raise ExportError("invalid fixture concepts cannot be exported")
     if access is not None and access.blocked:
         raise ExportError("fixture concepts with blocked weld, operator, robot, or unload access cannot be exported")
+    validation = _validate_release_gate(concept, validation)
     tooling = tooling or generic_tooling_library()
-    validation = _validation(concept, access)
+    validation_payload = {
+        "status": validation.status, "version": validation.version,
+        "evidence_digest": validation.evidence_digest, "units": validation.units,
+        "findings": [item.__dict__ for item in validation.findings],
+    }
     bom = _bom(concept, tooling)
     manifest_data = {
         "format": "fxd-fabrication-package-proof-v1", "concept": concept.identity,
         "revision": revision, "units": "mm", "release_status": "engineering_review_required",
         "production_approval": False, "source_sha256": concept.fixture.source_sha256,
+        "validation_version": validation.version,
+        "validation_evidence_digest": validation.evidence_digest,
+        "validation_status": validation.status,
         "artifacts": ["fixture.step", "profiles.dxf", "bom.json", "setup.md", "validation.json"],
         "notes": ["STEP and DXF are proof-layer AABB exports unless kernel-authored geometry is supplied.",
                   "This package is not certified, validated, or approved for production."],
@@ -182,7 +199,7 @@ def build_fabrication_package(concept: CompleteFixtureConcept, revision: str = "
         json.dumps(manifest_data, indent=2, sort_keys=True) + "\n", _step(concept, revision, manufacturing),
         manufacturing.dxf_bytes.decode("ascii") if manufacturing is not None else _dxf(concept),
         json.dumps(bom, indent=2, sort_keys=True) + "\n", setup,
-        json.dumps(validation, indent=2, sort_keys=True) + "\n")
+        json.dumps(validation_payload, indent=2, sort_keys=True) + "\n")
 
 
 def write_fabrication_package(package: FabricationPackage, output_dir: str | Path) -> tuple[Path, ...]:
