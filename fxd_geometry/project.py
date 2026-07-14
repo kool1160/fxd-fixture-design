@@ -120,9 +120,13 @@ class FxdProject:
         if action not in {"approve_for_review", "reject"}:
             raise ProjectFormatError("review action must be approve_for_review or reject")
         validation = self.active_validation
-        if action == "approve_for_review" and validation.blocked:
-            raise ProjectFormatError(
-                "invalid deterministic validation result cannot be approved for engineering review")
+        if action == "approve_for_review":
+            if validation.blocked:
+                raise ProjectFormatError(
+                    "invalid deterministic validation result cannot be approved for engineering review")
+            if self.suppressed_features or self.active.corrections:
+                raise ProjectFormatError(
+                    "edited concepts must be regenerated and deterministically revalidated before approval")
         decision = ReviewDecision(
             action, self.active_concept, note, validation.status, validation.evidence_digest)
         return self.__class__(self.product, self.annotations, self.concepts, self.active_concept,
