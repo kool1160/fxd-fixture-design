@@ -236,3 +236,26 @@ robot motion, or production safety, and it does not include private shop rules.
 Evidence: `python -m unittest tests.test_weld_rules` passes. The repository's
 full suite remains environment-blocked by the pre-existing missing pinned OCP
 runtime (`cadquery-ocp==7.9.3.1.1`) in kernel tests.
+
+## 2026-07-14 — Milestone 14 safe internal phase
+
+Generated fixture features now carry explicit, public-safe manufacturing
+metadata for method, material, thickness, fit, clearance, allowance,
+interface, and operations. A new CAD-neutral manufacturing boundary can
+author opaque boxes and cylinders and export a compound through the reviewed
+real-kernel interface. Neutral fabrication-package export accepts those
+kernel-authored STEP bytes while retaining the existing proof export when no
+real geometry is supplied.
+
+Milestone 14 remains blocked. The pinned `cadquery-ocp==7.9.3.1.1` runtime is
+not installed and network access cannot install it, so true kernel geometry,
+interference/manufacturability checks, and STEP/DXF acceptance evidence could
+not run. Dedicated tab, slot, relief, and pin-hole operations plus true
+kernel-edge DXF profiles remain unresolved. No status change to Complete is
+supported.
+
+Evidence: focused fixture, concept, export, and manufacturing contract tests
+pass (16 tests); `python -m compileall -q fxd_geometry tests` passes;
+`bash scripts/ci.sh` is blocked while installing the pinned OCP dependency;
+the repository-wide suite reaches 57 tests and has four pre-existing OCP
+runtime errors.

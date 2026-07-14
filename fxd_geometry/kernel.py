@@ -80,6 +80,9 @@ class RealKernel(Protocol):
     def clearance(self, left: object, right: object) -> float: ...
     def topology_counts(self, model: object) -> TopologyCounts: ...
     def face_records(self, model: object) -> tuple[KernelFace, ...]: ...
+    def make_box(self, minimum: tuple[float, float, float], maximum: tuple[float, float, float]) -> object: ...
+    def make_cylinder(self, center: tuple[float, float, float], radius: float, height: float) -> object: ...
+    def compound(self, models: tuple[object, ...]) -> object: ...
 
 
 class OcpKernel:
@@ -273,6 +276,35 @@ class OcpKernel:
         if not distance.IsDone():
             raise KernelOperationError("OCCT distance calculation failed")
         return float(distance.Value())
+
+    def make_box(self, minimum: tuple[float, float, float], maximum: tuple[float, float, float]) -> object:
+        from OCP.BRepPrimAPI import BRepPrimAPI_MakeBox
+        from OCP.gp import gp_Pnt
+        dimensions = tuple(high - low for low, high in zip(minimum, maximum))
+        if any(value <= 0 for value in dimensions):
+            raise KernelOperationError("manufacturing box dimensions must be positive")
+        return BRepPrimAPI_MakeBox(gp_Pnt(*minimum), *dimensions).Shape()
+
+    def make_cylinder(self, center: tuple[float, float, float], radius: float, height: float) -> object:
+        from OCP.BRepPrimAPI import BRepPrimAPI_MakeCylinder
+        from OCP.gp import gp_Ax2, gp_Dir, gp_Pnt
+        if radius <= 0 or height <= 0:
+            raise KernelOperationError("manufacturing cylinder dimensions must be positive")
+        return BRepPrimAPI_MakeCylinder(gp_Ax2(gp_Pnt(*center), gp_Dir(0, 0, 1)), radius, height).Shape()
+
+    def compound(self, models: tuple[object, ...]) -> object:
+        from OCP.BRep import BRep_Builder
+        from OCP.TopoDS import TopoDS_Compound
+        if not models:
+            raise KernelOperationError("cannot compound empty manufacturing geometry")
+        result = TopoDS_Compound()
+        builder = BRep_Builder()
+        builder.MakeCompound(result)
+        for model in models:
+            if model is None or model.IsNull():
+                raise KernelOperationError("cannot compound null manufacturing geometry")
+            builder.Add(result, model)
+        return result
 
     def topology_counts(self, model: object) -> TopologyCounts:
         return TopologyCounts(*(len(self._subshapes(model, kind))

@@ -12,7 +12,7 @@ from dataclasses import dataclass, replace
 from .aabb import Aabb, Vec3
 from .annotations import EngineeringAnnotations, GeometryReference
 from .fixture import (FixtureConcept, FixtureFeature, FixtureFinding,
-                      FixtureParameters, generate_fixture_primitives)
+                      FixtureParameters, ManufacturingSpec, generate_fixture_primitives)
 from .constraints import LocatingAnalysis, LocatingStrategy, analyze_locating_strategy
 from .product_model import Body, ProductModel
 
@@ -145,6 +145,10 @@ def _clamp_feature(product: ProductModel, parameters: FixtureParameters, index: 
         (GeometryReference(component, body.identity),), "standard_clamp_mount_at_reaction_path",
         {"reach": parameters.locator_wall, "contact_clearance": parameters.contact_clearance},
         assumptions=("Clamp force and purchased hardware selection require engineering review.",),
+        manufacturing=ManufacturingSpec(
+            "laser_cut", "mild_steel", parameters.locator_wall, "slotted_adjustment",
+            parameters.contact_clearance, parameters.manufacturing_allowance,
+            "standard_clamp", ("profile_cut", "deburr", "weld")),
     )
 
 

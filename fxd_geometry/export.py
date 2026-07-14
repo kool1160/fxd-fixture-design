@@ -14,6 +14,7 @@ from pathlib import Path
 from .access import AccessAnalysis
 from .concepts import CompleteFixtureConcept
 from .fixture import FixtureFeature
+from .manufacturing import ManufacturingGeometry
 from .tooling import ToolingLibrary, generic_tooling_library
 
 
@@ -52,7 +53,12 @@ def _box(feature: FixtureFeature) -> tuple[float, float, float, float, float, fl
     return low.x, low.y, low.z, high.x, high.y, high.z
 
 
-def _step(concept: CompleteFixtureConcept, revision: str) -> str:
+def _step(concept: CompleteFixtureConcept, revision: str,
+          manufacturing: ManufacturingGeometry | None = None) -> str:
+    if manufacturing is not None:
+        # The kernel owns STEP serialization. Decode only after it has emitted
+        # a neutral ISO-10303 file; no vendor object crosses this contract.
+        return manufacturing.step_bytes.decode("utf-8")
     lines = [
         "ISO-10303-21;",
         "HEADER;",
@@ -118,7 +124,8 @@ def _validation(concept: CompleteFixtureConcept, access: AccessAnalysis | None) 
 
 def build_fabrication_package(concept: CompleteFixtureConcept, revision: str = "A",
                               access: AccessAnalysis | None = None,
-                              tooling: ToolingLibrary | None = None) -> FabricationPackage:
+                              tooling: ToolingLibrary | None = None,
+                              manufacturing: ManufacturingGeometry | None = None) -> FabricationPackage:
     """Build deterministic artifacts for an eligible concept.
 
     Provisional concepts may be exported for review. Invalid concepts and
@@ -138,9 +145,14 @@ def build_fabrication_package(concept: CompleteFixtureConcept, revision: str = "
         "revision": revision, "units": "mm", "release_status": "engineering_review_required",
         "production_approval": False, "source_sha256": concept.fixture.source_sha256,
         "artifacts": ["fixture.step", "profiles.dxf", "bom.json", "setup.md", "validation.json"],
-        "notes": ["STEP and DXF are proof-layer AABB exports; kernel-authored fabrication geometry is not present.",
+        "notes": ["STEP and DXF are proof-layer AABB exports unless kernel-authored geometry is supplied.",
                   "This package is not certified, validated, or approved for production."],
     }
+    if manufacturing is not None:
+        if manufacturing.concept_identity != concept.identity or manufacturing.units != "mm":
+            raise ExportError("manufacturing geometry does not match the concept contract")
+        manifest_data["geometry_source"] = "reviewed_real_kernel"
+        manifest_data["manufacturing_solids"] = list(manufacturing.identities)
     setup = "\n".join([f"# Fixture setup — {concept.identity} revision {revision}", "",
         "Status: ENGINEERING REVIEW REQUIRED (not production approval).", "", "## Strategy",
         f"- Locating: {concept.locating_strategy}", f"- Clamping: {concept.clamping_strategy}",
@@ -148,7 +160,7 @@ def build_fabrication_package(concept: CompleteFixtureConcept, revision: str = "
         "- Confirm datum/contact surfaces, clamp forces, tolerances, weld sequence, access, and unload path.",
         "- Review validation.json before any fabrication decision.", ""])
     return FabricationPackage(
-        json.dumps(manifest_data, indent=2, sort_keys=True) + "\n", _step(concept, revision), _dxf(concept),
+        json.dumps(manifest_data, indent=2, sort_keys=True) + "\n", _step(concept, revision, manufacturing), _dxf(concept),
         json.dumps(bom, indent=2, sort_keys=True) + "\n", setup,
         json.dumps(validation, indent=2, sort_keys=True) + "\n")
 
