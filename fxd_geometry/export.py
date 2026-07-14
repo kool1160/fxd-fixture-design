@@ -162,6 +162,11 @@ def build_fabrication_package(concept: CompleteFixtureConcept, revision: str = "
         raise ExportError("invalid fixture concepts cannot be exported")
     if access is not None and access.blocked:
         raise ExportError("fixture concepts with blocked weld, operator, robot, or unload access cannot be exported")
+    # Check provenance before the release gate so a mismatched artifact reports
+    # the actionable source/identity failure instead of masking it as a
+    # missing validation snapshot.
+    if manufacturing is not None:
+        _validate_manufacturing(concept, manufacturing)
     validation = _validate_release_gate(concept, validation)
     tooling = tooling or generic_tooling_library()
     validation_payload = {
@@ -182,7 +187,6 @@ def build_fabrication_package(concept: CompleteFixtureConcept, revision: str = "
                   "This package is not certified, validated, or approved for production."],
     }
     if manufacturing is not None:
-        _validate_manufacturing(concept, manufacturing)
         manifest_data["geometry_source"] = "reviewed_real_kernel"
         manifest_data["manufacturing_solids"] = list(manufacturing.identities)
         manifest_data["notes"] = [

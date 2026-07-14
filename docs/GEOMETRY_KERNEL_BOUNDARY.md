@@ -16,8 +16,11 @@ Exact dependency and packaging obligations are recorded in
 
 `OcpKernel` provides real STEP import/export, XCAF assembly hierarchy,
 composed component placements, topology counts, oriented face normals,
-Boolean operations, and shape-to-shape clearance. `require_real_kernel()`
-never falls back to AABB geometry. The AABB module remains a test double only.
+Boolean operations, shape-to-shape clearance/interference, sectioning,
+topological edge records, and display tessellation. Tessellation records keep
+each triangle mesh linked to a stable face reference; they are display data,
+not a replacement for B-Rep validation. `require_real_kernel()` never falls
+back to AABB geometry. The AABB module remains a test double only.
 
 ## Acceptance evidence
 
