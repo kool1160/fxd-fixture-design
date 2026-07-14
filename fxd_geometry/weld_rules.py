@@ -23,6 +23,7 @@ class WeldRuleConfig:
     heat_input_units: str | None = None
     clamp_force_directions: tuple[tuple[str, Vec3], ...] = ()
     near_weld_kinds: tuple[str, ...] = ("support_pad", "clamp_mount")
+    direction_alignment_tolerance: float = 1.0e-6
 
     def __post_init__(self) -> None:
         if self.max_heat_input is not None and (not math.isfinite(self.max_heat_input) or self.max_heat_input < 0):
@@ -31,6 +32,16 @@ class WeldRuleConfig:
             raise WeldRuleError("heat_input_units is required with max_heat_input")
         if len({identity for identity, _ in self.clamp_force_directions}) != len(self.clamp_force_directions):
             raise WeldRuleError("clamp force feature identities must be unique")
+        if not math.isfinite(self.direction_alignment_tolerance) or not 0 <= self.direction_alignment_tolerance < 1:
+            raise WeldRuleError("direction_alignment_tolerance must be finite and in [0, 1)")
+        for identity, direction in self.clamp_force_directions:
+            if not identity.strip():
+                raise WeldRuleError("clamp force feature identity must be non-empty")
+            values = (direction.x, direction.y, direction.z)
+            if not all(math.isfinite(value) for value in values):
+                raise WeldRuleError("clamp force directions must be finite")
+            if _magnitude(direction) <= 0:
+                raise WeldRuleError("clamp force directions must be non-zero")
 
 
 @dataclass(frozen=True)
@@ -76,6 +87,14 @@ def _same_reference(left: GeometryReference, right: GeometryReference) -> bool:
 
 def _dot(left: Vec3, right: Vec3) -> float:
     return left.x * right.x + left.y * right.y + left.z * right.z
+
+
+def _magnitude(vector: Vec3) -> float:
+    return math.sqrt(_dot(vector, vector))
+
+
+def _cosine(left: Vec3, right: Vec3) -> float:
+    return _dot(left, right) / (_magnitude(left) * _magnitude(right))
 
 
 def evaluate_weld_rules(product: ProductModel, fixture: FixtureConcept,
@@ -134,15 +153,21 @@ def evaluate_weld_rules(product: ProductModel, fixture: FixtureConcept,
                     "clamp_force_direction_required", "Distortion direction is known but no configured nearby clamp force direction is available.",
                     (f"distortion_direction={joint.distortion_direction}",), confidence=.98))
             for identity, direction in matched_forces:
-                relation = _dot(direction, joint.distortion_direction)
-                if relation > 0:
+                relation = _cosine(direction, joint.distortion_direction)
+                tolerance = config.direction_alignment_tolerance
+                if relation > tolerance:
                     findings.append(WeldRuleFinding("clamp_reinforces_distortion", "warning", joint.identity, identity,
                         "clamp_force_vs_distortion_direction", "Configured clamp force points with the expected distortion direction; review restraint strategy.",
-                        (f"dot_product={relation:.6g}",),
+                        (f"cosine={relation:.6g}",),
                         ("Direction comparison is geometric only; force magnitude and thermal response are unknown.",), .9))
-                else:
+                elif relation < -tolerance:
                     recommendations.append(WeldRecommendation(
                         f"clamp-{joint.identity}-{identity}", joint.identity, "Review clamp reaction path against the locating scheme.",
-                        "clamp_force_vs_distortion_direction", (f"dot_product={relation:.6g}",),
+                        "clamp_force_vs_distortion_direction", (f"cosine={relation:.6g}",),
                         ("Opposing direction is not proof of adequate force or locator stability.",), .8))
+                else:
+                    findings.append(WeldRuleFinding("clamp_perpendicular_to_distortion", "warning", joint.identity, identity,
+                        "clamp_force_vs_distortion_direction", "Configured clamp force is approximately perpendicular to the expected distortion direction; it cannot be treated as opposing restraint.",
+                        (f"cosine={relation:.6g}",),
+                        ("Force magnitude, reaction path, and thermal response are unknown.",), .95))
     return WeldRuleAnalysis("mm", tuple(findings), tuple(recommendations), assumptions)
