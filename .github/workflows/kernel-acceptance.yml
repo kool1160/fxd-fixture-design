@@ -1,23 +1,66 @@
 {
-  "name": "Kernel acceptance parser proof",
+  "name": "Kernel acceptance",
   "on": {
     "workflow_dispatch": {},
     "push": {
       "branches": ["main"],
-      "paths": [".github/workflows/kernel-acceptance.yml"]
+      "paths": [
+        "fxd_geometry/**",
+        "tests/**",
+        "scripts/**",
+        "requirements-kernel.txt",
+        ".github/workflows/kernel-acceptance.yml"
+      ]
+    },
+    "pull_request": {
+      "paths": [
+        "fxd_geometry/**",
+        "tests/**",
+        "scripts/**",
+        "requirements-kernel.txt",
+        ".github/workflows/kernel-acceptance.yml"
+      ]
     }
   },
   "permissions": {
     "contents": "read"
   },
   "jobs": {
-    "parser-proof": {
-      "name": "Workflow parser proof",
+    "ocp-acceptance": {
+      "name": "Pinned OCP acceptance",
       "runs-on": "ubuntu-latest",
+      "timeout-minutes": 20,
       "steps": [
         {
-          "name": "Confirm runner starts",
-          "run": "echo workflow-parser-ok"
+          "name": "Check out repository",
+          "uses": "actions/checkout@v4"
+        },
+        {
+          "name": "Set up Python 3.12",
+          "uses": "actions/setup-python@v5",
+          "with": {
+            "python-version": "3.12"
+          }
+        },
+        {
+          "name": "Upgrade packaging tools",
+          "run": "python -m pip install --upgrade pip setuptools wheel"
+        },
+        {
+          "name": "Install pinned OCP wheel",
+          "run": "python -m pip install --only-binary=:all: -r requirements-kernel.txt"
+        },
+        {
+          "name": "Prove pinned runtime",
+          "run": "python -c \"import OCP; actual=str(getattr(OCP, '__version__', 'unknown')); print('OCP runtime:', actual); assert actual.startswith('7.9.3.1'), actual\""
+        },
+        {
+          "name": "Run repository validation",
+          "run": "bash scripts/ci.sh"
+        },
+        {
+          "name": "Run full test suite",
+          "run": "python -m unittest discover -s tests -v"
         }
       ]
     }
