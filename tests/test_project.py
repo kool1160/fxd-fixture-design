@@ -1,14 +1,15 @@
 import json
 import tempfile
 import unittest
-from dataclasses import replace
 from pathlib import Path
+from unittest.mock import patch
 
 from fxd_geometry import (
     Assumption,
     CriticalCharacteristic,
     EngineeringAnnotations,
     GeometryReference,
+    ValidationResult,
     Vec3,
     WeldJoint,
     import_step,
@@ -60,6 +61,18 @@ class ProjectPersistenceTests(unittest.TestCase):
         self.assertTrue(self.project.active_validation.blocked)
         with self.assertRaisesRegex(ProjectFormatError, "cannot be approved"):
             self.project.decide("approve_for_review", "should fail")
+
+    def test_unvalidated_edits_revoke_approval_even_when_base_validation_is_valid(self):
+        valid = ValidationResult(
+            "fxd-validation-v1", self.project.active.identity,
+            self.project.product.source_sha256, "mm", "valid", (), "valid-evidence")
+        with patch("fxd_geometry.project.validate_fixture_concept", return_value=valid):
+            suppressed = self.project.suppress("support-1")
+            with self.assertRaisesRegex(ProjectFormatError, "regenerated"):
+                suppressed.decide("approve_for_review", "edited")
+            corrected = self.project.correct("datum", "replacement", "engineer edit")
+            with self.assertRaisesRegex(ProjectFormatError, "regenerated"):
+                corrected.decide("approve_for_review", "edited")
 
     def test_unknown_layers_and_features_fail_closed(self):
         with self.assertRaisesRegex(ProjectFormatError, "unknown visual layer"):
