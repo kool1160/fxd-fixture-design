@@ -7,7 +7,14 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, simpledialog, ttk
 from pathlib import Path
 
-from fxd_geometry import EngineeringAnnotations, Vec3, import_step
+from fxd_geometry import (
+    EngineeringAnnotations,
+    KernelTriangleMesh,
+    KernelUnavailable,
+    OcpKernel,
+    Vec3,
+    import_step,
+)
 from fxd_geometry.project import FxdProject, ProjectFormatError, SUPPORTED_LAYERS
 
 
@@ -15,6 +22,8 @@ class FxdApp:
     def __init__(self, root: tk.Tk, project: FxdProject | None = None) -> None:
         self.root, self.project = root, project
         self.yaw, self.pitch, self.drag = 35.0, 22.0, None
+        self.kernel_meshes: tuple[KernelTriangleMesh, ...] = ()
+        self.selected_face: str | None = None
         root.title("FXD — Engineering Review (not production approval)")
         root.geometry("1180x760")
         self.status = tk.StringVar(value="Open a legally shareable STEP assembly to begin.")
@@ -44,6 +53,7 @@ class FxdApp:
         ttk.Label(side, textvariable=self.status, wraplength=300).pack(anchor="w", pady=8)
         self.canvas.bind("<ButtonPress-1>", self.start_drag)
         self.canvas.bind("<B1-Motion>", self.rotate)
+        self.canvas.bind("<ButtonRelease-1>", self.pick_face)
         self.canvas.bind("<Configure>", lambda _event: self.render())
         self.refresh()
 
@@ -52,12 +62,20 @@ class FxdApp:
         if not name:
             return
         try:
-            product = import_step(Path(name))
+            source = Path(name)
+            product = import_step(source)
             annotations = EngineeringAnnotations.for_product(
                 product, build_orientation=Vec3(0, 0, 1), loading_direction=Vec3(1, 0, 0),
                 process_type="manual MIG", production_quantity=1)
             self.project = FxdProject.from_product(product, annotations)
-            self.refresh("Imported immutable source geometry; deterministic review is required.")
+            self.kernel_meshes = ()
+            try:
+                kernel = OcpKernel()
+                self.kernel_meshes = kernel.tessellate(kernel.import_step(source))
+                message = f"Imported immutable STEP and {len(self.kernel_meshes)} selectable B-Rep face meshes."
+            except KernelUnavailable:
+                message = "Imported immutable source geometry; real-kernel display is unavailable and review remains provisional."
+            self.refresh(message)
         except Exception as exc:
             messagebox.showerror("STEP import failed", str(exc))
 
@@ -67,7 +85,9 @@ class FxdApp:
             return
         try:
             self.project = FxdProject.load(name)
-            self.refresh("Loaded neutral project with validation evidence verified.")
+            self.kernel_meshes = ()
+            self.selected_face = None
+            self.refresh("Loaded neutral project; reimport STEP to restore real-kernel display meshes.")
         except Exception as exc:
             messagebox.showerror("Project load failed", str(exc))
 
@@ -164,12 +184,56 @@ class FxdApp:
             self.pitch = max(-80, min(80, pitch + (event.y - y) * 0.7))
             self.render()
 
+    def pick_face(self, event) -> None:
+        current = self.canvas.find_withtag("current")
+        if current:
+            tags = self.canvas.gettags(current[0])
+            selected = next((tag[5:] for tag in tags if tag.startswith("face:")), None)
+            if selected:
+                self.selected_face = selected
+                self.status.set(f"Selected {selected}; linked to a stable kernel face reference.")
+                self.render()
+        self.drag = None
+
     def render(self) -> None:
         self.canvas.delete("all")
         if not self.project:
             self.canvas.create_text(30, 30, anchor="nw", fill="white",
                                     text="FXD visual engineering review\n\nDrag to rotate the 3D projection.")
             return
+        if self.kernel_meshes and "product" not in self.project.hidden_layers:
+            self._render_meshes(self.kernel_meshes)
+        else:
+            self._render_bounds()
+        validation = self.project.active_validation
+        banner_color = "#ff6666" if validation.blocked else "#ffd166"
+        self.canvas.create_text(
+            12, 12, anchor="nw", fill=banner_color,
+            text=(f"{self.project.active.identity}: {validation.status.upper()} · "
+                  f"evidence {validation.evidence_digest[:12]} — not production approval"))
+
+    def _render_meshes(self, meshes: tuple[KernelTriangleMesh, ...]) -> None:
+        vertices = [point for mesh in meshes for point in mesh.vertices_mm]
+        if not vertices:
+            return
+        center = tuple((min(point[i] for point in vertices) + max(point[i] for point in vertices)) / 2
+                       for i in range(3))
+        span = max(max(point[i] for point in vertices) - min(point[i] for point in vertices)
+                   for i in range(3)) or 1
+        polygons = []
+        for mesh in meshes:
+            for triangle in mesh.triangles:
+                points = [mesh.vertices_mm[index] for index in triangle]
+                projected = [self.project_point(point, center, span) for point in points]
+                depth = sum(point[2] for point in points) / 3
+                polygons.append((depth, mesh.face_reference, projected))
+        for _depth, reference, projected in sorted(polygons):
+            color = "#ffffff" if reference == self.selected_face else "#66c2ff"
+            flat = [coordinate for point in projected for coordinate in point]
+            self.canvas.create_polygon(*flat, fill="#24445c", outline=color,
+                                       tags=(f"face:{reference}", "kernel-mesh"))
+
+    def _render_bounds(self) -> None:
         items = []
         if "product" not in self.project.hidden_layers:
             for component in self.project.product.components:
@@ -201,12 +265,6 @@ class FxdApp:
             x1, y1 = max(x for x, _ in xy), max(y for _, y in xy)
             self.canvas.create_rectangle(x0, y0, x1, y1, outline=color, width=2)
             self.canvas.create_text(x0 + 3, y0 + 3, anchor="nw", fill=color, text=name)
-        validation = self.project.active_validation
-        banner_color = "#ff6666" if validation.blocked else "#ffd166"
-        self.canvas.create_text(
-            12, 12, anchor="nw", fill=banner_color,
-            text=(f"{concept.identity}: {validation.status.upper()} · "
-                  f"evidence {validation.evidence_digest[:12]} — not production approval"))
 
     def project_point(self, point, center, span):
         x, y, z = (point[i] - center[i] for i in range(3))
