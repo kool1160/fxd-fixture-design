@@ -6,6 +6,7 @@ required_files=(
   NOTICE.md
   AGENTS.md
   BACKLOG.md
+  requirements-kernel.txt
   docs/PRODUCT_DIRECTION.md
   docs/ENGINEERING_CONSTITUTION.md
   docs/ARCHITECTURE.md
@@ -18,6 +19,7 @@ for file in "${required_files[@]}"; do
   [[ -f "$file" ]] || { echo "Missing required file: $file" >&2; exit 1; }
 done
 
+python -m pip install --disable-pip-version-check -r requirements-kernel.txt
 node scripts/fxd-backlog.mjs validate
 python -m json.tool .github/codex/schemas/planning-handoff.schema.json >/dev/null
 python -m unittest discover -s tests >/dev/null
