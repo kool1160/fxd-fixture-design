@@ -1,10 +1,10 @@
 """Deterministic locating and six-degree-of-freedom analysis.
 
-The solver consumes explicit contact evidence.  It never infers a contact
-normal from an AABB, and it never treats a clamp as a locator.  A contact
+The solver consumes explicit contact evidence. It never infers a contact
+normal from an AABB, and it never treats a clamp as a locator. A contact
 contributes rigid-body constraint rows ``[direction, point x direction]``;
-rank and incremental rank are then used to report controlled, redundant, and
-missing degrees of freedom.
+rank and row-space membership are then used to report controlled, redundant,
+and missing degrees of freedom.
 """
 
 from __future__ import annotations
@@ -18,6 +18,7 @@ from .product_model import ProductModel
 
 _ROLES = {"rest", "support", "stop", "round_pin", "diamond_pin", "clamp"}
 _EPS = 1.0e-9
+_DOF_NAMES = ("tx", "ty", "tz", "rx", "ry", "rz")
 
 
 class ConstraintAnalysisError(ValueError):
@@ -38,11 +39,13 @@ class LocatorContact:
             raise ConstraintAnalysisError("locator identity must be non-empty")
         if self.role not in _ROLES:
             raise ConstraintAnalysisError(f"unsupported locator role: {self.role!r}")
-        values = (*self.point_mm.__dict__.values(), *self.normal.__dict__.values())
-        if not all(math.isfinite(value) for value in values):
-            raise ConstraintAnalysisError("locator point and normal must be finite")
+        vectors = (self.point_mm, self.normal, *self.constrained_directions)
+        if not all(math.isfinite(value) for vector in vectors for value in vector.__dict__.values()):
+            raise ConstraintAnalysisError("locator point, normal, and directions must be finite")
         if self.normal == Vec3(0.0, 0.0, 0.0):
             raise ConstraintAnalysisError("locator normal must not be zero")
+        if any(direction == Vec3(0.0, 0.0, 0.0) for direction in self.constrained_directions):
+            raise ConstraintAnalysisError("constrained directions must not be zero")
         if self.role == "clamp" and self.constrained_directions:
             raise ConstraintAnalysisError("clamps cannot provide locating constraints")
 
@@ -86,6 +89,8 @@ class LocatingAnalysis:
 
 def _norm(vector: Vec3) -> tuple[float, float, float]:
     length = math.sqrt(sum(value * value for value in vector.__dict__.values()))
+    if length <= _EPS:
+        raise ConstraintAnalysisError("constraint direction must not be zero")
     return tuple(value / length for value in vector.__dict__.values())
 
 
@@ -120,12 +125,30 @@ def _rank(rows: list[tuple[float, ...]]) -> int:
     return rank
 
 
+def _classified_dofs(rows: list[tuple[float, ...]]) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """Classify physical axes using row-space membership, not rank ordering.
+
+    A coordinate DOF is independently restrained only when its unit covector is
+    contained in the constraint row space. Coupled restraint can increase rank
+    without fully controlling any single named axis, so rank alone must never be
+    mapped to the first N axis labels.
+    """
+    base_rank = _rank(rows)
+    controlled: list[str] = []
+    uncontrolled: list[str] = []
+    for index, name in enumerate(_DOF_NAMES):
+        unit = tuple(1.0 if column == index else 0.0 for column in range(6))
+        target = controlled if _rank(rows + [unit]) == base_rank else uncontrolled
+        target.append(name)
+    return tuple(controlled), tuple(uncontrolled)
+
+
 def _directions(contact: LocatorContact) -> tuple[Vec3, ...]:
     if contact.constrained_directions:
         return contact.constrained_directions
-    if contact.role in {"clamp"}:
+    if contact.role == "clamp":
         return ()
-    if contact.role in {"round_pin"}:
+    if contact.role == "round_pin":
         axis = _norm(contact.normal)
         seed = (1.0, 0.0, 0.0) if abs(axis[0]) < 0.9 else (0.0, 1.0, 0.0)
         first = _cross(axis, seed)
@@ -160,26 +183,32 @@ def analyze_locating_strategy(product: ProductModel, strategy: LocatingStrategy)
             findings.append(ConstraintFinding("clamp_excluded", "info", contact.identity,
                                               "clamps apply force but do not establish locating DOF"))
             continue
-        previous = len(rows)
+
+        contact_start_rank = _rank(rows)
+        independent_rows = 0
         for direction in _directions(contact):
-            if direction == Vec3(0.0, 0.0, 0.0):
-                findings.append(ConstraintFinding("invalid_contact_normal", "error", contact.identity,
-                                                  "constrained direction must not be zero"))
-                continue
-            rows.append(_row(contact, direction))
-        if _rank(rows) == _rank(rows[:previous]) and previous != len(rows):
+            candidate = _row(contact, direction)
+            if _rank(rows + [candidate]) == _rank(rows):
+                findings.append(ConstraintFinding(
+                    "redundant_direction", "error", contact.identity,
+                    "locator contributes a redundant constraint direction",
+                ))
+            else:
+                rows.append(candidate)
+                independent_rows += 1
+        if independent_rows == 0 and _rank(rows) == contact_start_rank:
             redundant.append(contact.identity)
             findings.append(ConstraintFinding("redundant_constraint", "error", contact.identity,
                                               "locator adds no independent rigid-body constraint"))
+
     rank = _rank(rows)
-    names = ("tx", "ty", "tz", "rx", "ry", "rz")
-    # Rank identifies independent constraints; the exact individual DOF basis
-    # is not unique, so report the conservative count plus stable labels.
-    controlled = names[:rank]
-    uncontrolled = names[rank:]
+    controlled, uncontrolled = _classified_dofs(rows)
     if rank < 6:
-        findings.append(ConstraintFinding("underconstrained", "error", None,
-                                          f"locating strategy controls {rank} of 6 rigid-body DOF"))
+        findings.append(ConstraintFinding(
+            "underconstrained", "error", None,
+            f"locating strategy provides {rank} independent constraints; "
+            f"individually uncontrolled axes: {', '.join(uncontrolled) or 'coupled motion only'}",
+        ))
     if rank == 6 and not strategy.datum_assumptions:
         findings.append(ConstraintFinding("missing_datum_assumptions", "warning", None,
                                           "full rank is shown, but datum assumptions are not recorded"))
