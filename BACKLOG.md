@@ -159,3 +159,121 @@ Acceptance criteria:
 - destructive CAD operations require explicit approval
 
 **Recommended level:** Terra
+
+# Phase 2 — Engineering hardening
+
+Phase 2 replaces proof-layer shortcuts with production-grade engineering foundations. Each milestone must include runnable proofs and deliberate failure cases, but visual polish is deferred until the geometry and fixture logic are trustworthy.
+
+## Milestone 11 — Integrate a real geometry kernel
+
+**Status:** Pending
+
+Replace AABB-only proof geometry with a reviewed B-Rep kernel boundary capable of importing real STEP assemblies, preserving hierarchy and transforms, exposing topology, and authoring deterministic neutral geometry without coupling FXD to a CAD vendor.
+
+Acceptance criteria:
+
+- the selected kernel and wrapper licenses permit intended distribution
+- real STEP solids, shells, faces, edges, normals, and transforms are available through a CAD-neutral interface
+- source geometry remains immutable
+- stable geometry-reference strategy is documented and tested across reloads
+- Boolean, distance, interference, and clearance proofs use real geometry
+- malformed, partial, and unsupported geometry fail clearly
+- deterministic STEP round-trip behavior is tested with legally shareable fixtures
+- the proof-layer AABB implementation remains available only as an explicit test double
+
+**Recommended level:** Sol
+
+## Milestone 12 — Build a deterministic locating and constraint solver
+
+**Status:** Pending
+
+Implement engineering-first locating analysis using contact geometry, normals, and degrees of freedom. The solver must establish whether a proposed datum and locator strategy actually constrains the product before any AI ranking occurs.
+
+Acceptance criteria:
+
+- translational and rotational degrees of freedom are calculated explicitly
+- 3-2-1 and nontraditional locating schemes are represented without hard-coded assumptions
+- underconstraint, redundant constraint, and overconstraint are reported deterministically
+- contact normals and locator directions are validated against real product geometry
+- round-pin, diamond-pin, rest, stop, and clamp roles are distinguished
+- tolerance, repeatability, and datum assumptions remain explicit
+- invalid locating strategies cannot be recommended or exported
+- golden tests cover known valid and invalid fixture cases
+
+**Recommended level:** Sol
+
+## Milestone 13 — Add weld-fixture engineering rules
+
+**Status:** Pending
+
+Add explainable weld-fixture reasoning for heat input, distortion, restraint, tack sequence, weld access, clamp direction, and support placement. Rules must remain configurable and must never silently become universal shop policy.
+
+Acceptance criteria:
+
+- weld joints carry process, sequence, direction, and heat-input assumptions where known
+- expected shrink and distortion directions can influence support and clamp strategy
+- clamp-force direction is checked against locating and distortion goals
+- supports and clamps near weld zones are assessed for access, heat, and spatter exposure
+- tack access and release sequence are represented
+- conflicting rules surface warnings instead of being averaged into a score
+- every recommendation identifies the rule, evidence, assumptions, and confidence
+- private shop rules remain separable from the public rule set
+
+**Recommended level:** Sol
+
+## Milestone 14 — Generate manufacturing-aware fixture geometry
+
+**Status:** Pending
+
+Generate editable, manufacturable fixture solids and profiles instead of abstract boxes. Features should reflect practical sheet-metal and fabricated-fixture construction methods.
+
+Acceptance criteria:
+
+- baseplates, risers, tabs, slots, reliefs, pin holes, support pads, shims, and replaceable wear items are true geometry
+- laser-cut and machined features are distinguished
+- material, thickness, fit, clearance, and allowance values are explicit
+- tabs and slots include assembly and welding allowances
+- purchased tooling mounts use validated interfaces rather than generic envelopes alone
+- generated features remain traceable to engineering inputs and editable parameters
+- resulting geometry passes kernel-level interference and manufacturability checks
+- neutral STEP and DXF exports contain actual geometry suitable for engineering review
+
+**Recommended level:** Sol
+
+## Milestone 15 — Build the full deterministic validation pipeline
+
+**Status:** Pending
+
+Unify geometry, constraint, access, tooling, tolerance, and manufacturing checks into one release gate. Validation must decide whether a concept is valid, provisional, or invalid before AI explanation or export.
+
+Acceptance criteria:
+
+- collisions, minimum clearances, trapped-part conditions, and load/unload paths use real geometry
+- weld, torch, hand, operator, clamp, and robot approach checks share traceable inputs
+- locating adequacy and clamp adequacy are separate deterministic gates
+- tolerance-stack and repeatability gaps are surfaced without false precision
+- known errors prevent recommendation and package export
+- provisional concepts identify exactly what evidence is missing
+- validation results are reproducible and versioned
+- regression suites include deliberately unsafe and misleading fixture concepts
+
+**Recommended level:** Sol
+
+## Milestone 16 — Build the first serious visual engineering application
+
+**Status:** Pending
+
+Create the first engineer-facing application only after the hardened geometry and validation foundations are working. The application is for inspection, correction, and approval—not for hiding incomplete engineering behind polished graphics.
+
+Acceptance criteria:
+
+- a user can import a legally shareable STEP assembly and inspect the normalized product model
+- generated fixture concepts display real product and fixture geometry in a rotatable 3D view
+- datums, locators, supports, stops, clamps, welds, access envelopes, assumptions, and warnings can be shown or hidden
+- an engineer can edit, suppress, replace, approve, or reject generated features without modifying source CAD
+- every visual item links back to its deterministic rule and geometry reference
+- invalid and provisional concepts are visually unmistakable
+- the application can save and reload a complete neutral FXD project
+- packaging and installation planning begins only after the application boundary is proven
+
+**Recommended level:** Terra
