@@ -260,3 +260,21 @@ pass; `python -m compileall -q fxd_geometry tests` passes;
 `bash scripts/ci.sh` is blocked while installing the pinned OCP dependency;
 the repository-wide suite reaches 57 tests and has four pre-existing OCP
 runtime errors.
+
+## 2026-07-14 — Milestone 15 implementation evidence
+
+Milestone 15 adds a versioned `validate_fixture_concept` release gate that
+integrates concept findings, geometry collision/clearance evidence, locating
+adequacy, access and unload findings, weld-rule findings, clamp/tooling review,
+tolerance/repeatability gaps, and optional real-kernel manufacturing-solid
+clearance checks. Results are `valid`, `provisional`, or `invalid`; invalid
+results are rejected by fabrication-package export. Findings retain subsystem,
+evidence, assumptions, and a deterministic evidence digest. The synthetic
+regression deliberately reports a clamp/product collision and remains invalid,
+which demonstrates that known unsafe geometry blocks release.
+
+Focused validation/export tests and the synthetic proof pass. Full CI is not
+currently reproducible in this environment because network/DNS access prevents
+installation of the already-pinned `cadquery-ocp==7.9.3.1.1` runtime; the
+existing real-kernel tests therefore remain unverified here. Milestone status
+remains Pending until that environment verification is completed.

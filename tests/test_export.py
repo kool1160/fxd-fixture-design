@@ -7,7 +7,7 @@ from pathlib import Path
 from fxd_geometry import (AccessAnalysis, AccessFinding, ExportError,
                           EngineeringAnnotations, Vec3,
                           build_fabrication_package, generate_fixture_concepts,
-                          import_step, write_fabrication_package)
+                          import_step, validate_fixture_concept, write_fabrication_package)
 from fxd_geometry.fixture import FixtureFinding
 
 
@@ -49,6 +49,13 @@ class FabricationExportTests(unittest.TestCase):
         ))
         with self.assertRaisesRegex(ExportError, "blocked"):
             build_fabrication_package(concept, access=access)
+
+    def test_invalid_validation_result_is_not_exportable(self):
+        concept = generate_fixture_concepts(self.product, self.annotations).recommended
+        validation = validate_fixture_concept(self.product, concept)
+        self.assertTrue(validation.blocked)
+        with self.assertRaisesRegex(ExportError, "validation"):
+            build_fabrication_package(concept, validation=validation)
 
     def test_write_has_expected_review_package(self):
         concept = generate_fixture_concepts(self.product, self.annotations).recommended

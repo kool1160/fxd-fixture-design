@@ -16,6 +16,7 @@ from .concepts import CompleteFixtureConcept
 from .fixture import FixtureFeature
 from .manufacturing import ManufacturingGeometry
 from .tooling import ToolingLibrary, generic_tooling_library
+from .validation import ValidationResult
 
 
 class ExportError(ValueError):
@@ -141,7 +142,8 @@ def _validate_manufacturing(concept: CompleteFixtureConcept,
 def build_fabrication_package(concept: CompleteFixtureConcept, revision: str = "A",
                               access: AccessAnalysis | None = None,
                               tooling: ToolingLibrary | None = None,
-                              manufacturing: ManufacturingGeometry | None = None) -> FabricationPackage:
+                              manufacturing: ManufacturingGeometry | None = None,
+                              validation: ValidationResult | None = None) -> FabricationPackage:
     """Build deterministic artifacts for an eligible concept.
 
     Provisional concepts may be exported for review. Invalid concepts and
@@ -153,8 +155,19 @@ def build_fabrication_package(concept: CompleteFixtureConcept, revision: str = "
         raise ExportError("invalid fixture concepts cannot be exported")
     if access is not None and access.blocked:
         raise ExportError("fixture concepts with blocked weld, operator, robot, or unload access cannot be exported")
+    if validation is not None:
+        if validation.concept_identity != concept.identity or validation.source_sha256 != concept.fixture.source_sha256:
+            raise ExportError("validation result does not match concept source")
+        if validation.blocked:
+            raise ExportError("invalid deterministic validation result cannot be exported")
     tooling = tooling or generic_tooling_library()
-    validation = _validation(concept, access)
+    validation_payload = _validation(concept, access)
+    if validation is not None:
+        validation_payload = {
+            "status": validation.status, "version": validation.version,
+            "evidence_digest": validation.evidence_digest, "units": validation.units,
+            "findings": [item.__dict__ for item in validation.findings],
+        }
     bom = _bom(concept, tooling)
     manifest_data = {
         "format": "fxd-fabrication-package-proof-v1", "concept": concept.identity,
@@ -182,7 +195,7 @@ def build_fabrication_package(concept: CompleteFixtureConcept, revision: str = "
         json.dumps(manifest_data, indent=2, sort_keys=True) + "\n", _step(concept, revision, manufacturing),
         manufacturing.dxf_bytes.decode("ascii") if manufacturing is not None else _dxf(concept),
         json.dumps(bom, indent=2, sort_keys=True) + "\n", setup,
-        json.dumps(validation, indent=2, sort_keys=True) + "\n")
+        json.dumps(validation_payload, indent=2, sort_keys=True) + "\n")
 
 
 def write_fabrication_package(package: FabricationPackage, output_dir: str | Path) -> tuple[Path, ...]:
