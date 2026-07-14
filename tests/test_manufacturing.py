@@ -5,7 +5,7 @@ from pathlib import Path
 from fxd_geometry import (EngineeringAnnotations, ManufacturingSpec, Vec3,
                           build_fabrication_package, generate_fixture_concepts,
                           generate_fixture_primitives, generate_manufacturing_geometry,
-                          import_step)
+                          import_step, ValidationResult)
 from fxd_geometry.export import ExportError
 from fxd_geometry.kernel import KernelCapabilities, KernelOperationError
 
@@ -57,6 +57,13 @@ class ManufacturingGeometryTests(unittest.TestCase):
             self.product, build_orientation=Vec3(0, 0, 1), loading_direction=Vec3(1, 0, 0),
             process_type="MIG", production_quantity=1)
 
+    @staticmethod
+    def _validation(concept):
+        return ValidationResult(
+            "fxd-validation-v1", concept.identity, concept.fixture.source_sha256,
+            "mm", "provisional", (), "synthetic-manufacturing-evidence",
+        )
+
     def test_features_have_explicit_public_fabrication_intent(self):
         concept = generate_fixture_primitives(self.product, self.annotations)
         self.assertTrue(all(feature.manufacturing for feature in concept.features))
@@ -89,7 +96,8 @@ class ManufacturingGeometryTests(unittest.TestCase):
         self.assertIn(b"support_pad_relief", geometry.dxf_bytes)
         self.assertIn(b"CIRCLE", geometry.dxf_bytes)
 
-        package = build_fabrication_package(concept, manufacturing=geometry)
+        package = build_fabrication_package(
+            concept, manufacturing=geometry, validation=self._validation(concept))
         self.assertIn('"geometry_source": "reviewed_real_kernel"', package.manifest)
         self.assertIn("supported prismatic/cylindrical DXF", package.manifest)
         self.assertIn("baseplate_slot", package.dxf)
@@ -99,7 +107,9 @@ class ManufacturingGeometryTests(unittest.TestCase):
         concept = generate_fixture_concepts(self.product, self.annotations).recommended
         geometry = generate_manufacturing_geometry(concept, FakeKernel())
         with self.assertRaisesRegex(ExportError, "source assembly"):
-            build_fabrication_package(concept, manufacturing=replace(geometry, source_sha256="wrong"))
+            build_fabrication_package(
+                concept, manufacturing=replace(geometry, source_sha256="wrong"),
+                validation=self._validation(concept))
         reversed_solids = tuple(reversed(geometry.solids))
         with self.assertRaisesRegex(KernelOperationError, "declared feature order"):
             replace(geometry, solids=reversed_solids)
