@@ -13,6 +13,7 @@ from .aabb import Aabb, Vec3
 from .annotations import EngineeringAnnotations, GeometryReference
 from .fixture import (FixtureConcept, FixtureFeature, FixtureFinding,
                       FixtureParameters, generate_fixture_primitives)
+from .constraints import LocatingAnalysis, LocatingStrategy, analyze_locating_strategy
 from .product_model import Body, ProductModel
 
 
@@ -23,6 +24,7 @@ class ConstraintAnalysis:
     controlled_translations: tuple[str, ...]
     rotational_status: str
     warnings: tuple[str, ...] = ()
+    locating_analysis: LocatingAnalysis | None = None
 
     @property
     def underconstrained(self) -> bool:
@@ -101,7 +103,16 @@ def _physical(product: ProductModel) -> tuple[tuple[str, Body], ...]:
     return tuple((component.identity, body) for component in product.components for body in component.bodies)
 
 
-def _constraint_analysis(annotations: EngineeringAnnotations, primitive: FixtureConcept) -> ConstraintAnalysis:
+def _constraint_analysis(annotations: EngineeringAnnotations, primitive: FixtureConcept,
+                         product: ProductModel,
+                         locating_strategy: LocatingStrategy | None = None) -> ConstraintAnalysis:
+    if locating_strategy is not None:
+        analysis = analyze_locating_strategy(product, locating_strategy)
+        warnings = tuple(item.message for item in analysis.findings
+                         if item.severity in {"warning", "error"})
+        return ConstraintAnalysis(
+            analysis.controlled_dofs, "validated" if analysis.rank == 6 else "underconstrained",
+            warnings, analysis)
     kinds = {feature.kind for feature in primitive.features}
     translations = ("build-normal", "loading-direction", "transverse-locator")
     warnings: list[str] = []
@@ -112,7 +123,7 @@ def _constraint_analysis(annotations: EngineeringAnnotations, primitive: Fixture
     # AABB proof geometry cannot verify contact normals or rotational restraint.
     rotational = "requires_geometry_kernel_contact_validation"
     warnings.append("rotation_validation_unavailable: AABB evidence cannot prove rotational restraint")
-    return ConstraintAnalysis(translations, rotational, tuple(warnings))
+    return ConstraintAnalysis(translations, rotational, tuple(warnings), None)
 
 
 def _clamp_feature(product: ProductModel, parameters: FixtureParameters, index: int) -> FixtureFeature:
@@ -153,7 +164,8 @@ def _score(objective: str, clamp_count: int, constraints: ConstraintAnalysis) ->
 
 
 def generate_fixture_concepts(product: ProductModel, annotations: EngineeringAnnotations,
-                              parameters: FixtureParameters | None = None) -> RankedFixtureConcepts:
+                              parameters: FixtureParameters | None = None,
+                              locating_strategy: LocatingStrategy | None = None) -> RankedFixtureConcepts:
     """Generate three deterministic alternatives and rank them by gated evidence."""
     annotations.validate_references(product)
     primitive = generate_fixture_primitives(product, annotations, parameters)
@@ -166,10 +178,11 @@ def generate_fixture_concepts(product: ProductModel, annotations: EngineeringAnn
             _clamp_feature(product, params, index) for index in range(1, clamp_count + 1)
         )
         findings = list(primitive.findings)
-        constraints = _constraint_analysis(annotations, primitive)
+        constraints = _constraint_analysis(annotations, primitive, product, locating_strategy)
         for warning in constraints.warnings:
             code = warning.split(":", 1)[0]
-            findings.append(FixtureFinding(code, "warning", None, warning))
+            severity = "error" if constraints.locating_analysis and not constraints.locating_analysis.strategy_valid else "warning"
+            findings.append(FixtureFinding(code, severity, None, warning))
         fixture = replace(primitive, features=features, findings=tuple(findings))
         concepts.append(CompleteFixtureConcept(
             f"concept-{objective}", objective, fixture,

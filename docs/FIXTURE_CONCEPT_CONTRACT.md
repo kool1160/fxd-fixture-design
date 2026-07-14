@@ -18,3 +18,9 @@ an underconstraint warning; AABB limitations are surfaced explicitly.
 the imported `ProductModel` or its source bytes. AI may eventually suggest
 these corrections through a restricted command contract, but this milestone
 contains no AI execution path.
+
+Milestone 12 adds an optional explicit `LocatingStrategy` to concept
+generation. Its contacts carry stable product references, millimetre points,
+normals, roles, and tolerance/repeatability/datum assumptions. The deterministic
+solver reports six-DOF rank, underconstraint, and redundant contacts. An
+explicit invalid strategy creates an error finding and cannot be recommended.
