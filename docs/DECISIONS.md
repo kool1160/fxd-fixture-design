@@ -107,3 +107,31 @@ is required before that limitation can be removed.
 
 **Supporting evidence:** `docs/FABRICATION_PACKAGE_CONTRACT.md`,
 `scripts/export_proof.py`, and `tests/test_export.py`.
+
+### 2026-07-13 — Keep CAD connectors optional and approval-gated
+
+**Decision:** CAD connectors translate through the immutable neutral product
+model. The repository ships only a dependency-free STEP connector and a
+read-only SOLIDWORKS host probe; vendor-document mutation is unavailable until
+explicit human approval.
+
+**Context:** Milestone 10 requires a CAD-specific connector path without
+coupling the core to SOLIDWORKS or distributing vendor-owned software.
+
+**Alternatives considered:** Importing a SOLIDWORKS SDK or COM wrapper into the
+core; probing or automating a vendor installation from public CI; keeping no
+connector boundary until a vendor integration is funded.
+
+**Reasoning:** The neutral connector preserves standalone operation and gives
+future adapters a testable boundary. The conservative probe avoids treating a
+host, edition, or environment variable as proof of API rights or compatibility.
+
+**Risks and tradeoffs:** SOLIDWORKS Connected/Makers compatibility is not
+proven on this Linux runner. A Windows test and license review are required
+before any SDK or COM implementation.
+
+**Supporting evidence:** `docs/CAD_CONNECTOR_CONTRACT.md`,
+`scripts/connector_proof.py`, and `tests/test_connectors.py`.
+
+**Revisit trigger:** Approved Windows access and documented vendor API and
+redistribution terms.

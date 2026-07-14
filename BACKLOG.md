@@ -147,7 +147,7 @@ Acceptance criteria:
 
 ## Milestone 10 — Add CAD-specific connectors
 
-**Status:** Pending
+**Status:** Complete
 
 Add thin connectors for selected CAD systems after the neutral workflow is proven. Start with a compatibility probe for SOLIDWORKS Connected/Makers and define a commercial SOLIDWORKS add-in path without coupling the core to either.
 
