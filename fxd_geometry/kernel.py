@@ -55,6 +55,7 @@ class KernelFace:
 class KernelComponent:
     reference: str
     parent_reference: str
+    name: str
     transform: tuple[float, ...]
     topology: TopologyCounts
     faces: tuple[KernelFace, ...]
@@ -65,6 +66,7 @@ class KernelAssembly:
     root_reference: str
     source_sha256: str
     units: str
+    assembly_references: tuple[str, ...]
     components: tuple[KernelComponent, ...]
 
 
@@ -108,12 +110,16 @@ class OcpKernel:
             raise KernelOperationError(f"STEP source does not exist: {path}")
         return path.read_bytes()
 
+    @staticmethod
+    def _validate_step_bytes(data: bytes) -> None:
+        if b"ISO-10303-21" not in data or b"END-ISO-10303-21" not in data:
+            raise KernelOperationError("STEP source is malformed or partial")
+
     def import_step(self, source: str | bytes | Path) -> object:
         from OCP.IFSelect import IFSelect_RetDone
         from OCP.STEPControl import STEPControl_Reader
         data = self._source_bytes(source)
-        if b"ISO-10303-21" not in data or b"END-ISO-10303-21" not in data:
-            raise KernelOperationError("STEP source is malformed or partial")
+        self._validate_step_bytes(data)
         temp = tempfile.NamedTemporaryFile(suffix=".step", delete=False)
         try:
             temp.write(data)
@@ -131,21 +137,102 @@ class OcpKernel:
             Path(temp.name).unlink(missing_ok=True)
 
     def import_step_assembly(self, source: str | bytes | Path) -> KernelAssembly:
+        from OCP.BRepBuilderAPI import BRepBuilderAPI_Transform
+        from OCP.IFSelect import IFSelect_RetDone
+        from OCP.STEPCAFControl import STEPCAFControl_Reader
+        from OCP.TCollection import TCollection_ExtendedString
+        from OCP.TDF import TDF_Label, TDF_LabelSequence
+        from OCP.TDocStd import TDocStd_Document
+        from OCP.TopLoc import TopLoc_Location
+        from OCP.XCAFApp import XCAFApp_Application
+        from OCP.XCAFDoc import XCAFDoc_DocumentTool, XCAFDoc_ShapeTool
+
         data = self._source_bytes(source)
-        shape = self.import_step(data)
-        solids = self._subshapes(shape, "solid")
-        if not solids:
-            raise KernelOperationError("STEP source contains no solid components")
-        components = []
-        for solid in solids:
-            faces = self.face_records(solid)
-            transform = self._transform_record(solid)
-            payload = repr((transform, self.topology_counts(solid), faces)).encode()
-            reference = "component:" + hashlib.sha256(payload).hexdigest()[:24]
-            components.append(KernelComponent(reference, "assembly:root", transform,
-                                              self.topology_counts(solid), faces))
-        return KernelAssembly("assembly:root", hashlib.sha256(data).hexdigest(), "mm",
-                              tuple(sorted(components, key=lambda item: item.reference)))
+        self._validate_step_bytes(data)
+        temporary = tempfile.NamedTemporaryFile(suffix=".step", delete=False)
+        try:
+            temporary.write(data)
+            temporary.close()
+            app = XCAFApp_Application.GetApplication_s()
+            document = TDocStd_Document(TCollection_ExtendedString("MDTV-XCAF"))
+            app.NewDocument(TCollection_ExtendedString("MDTV-XCAF"), document)
+            reader = STEPCAFControl_Reader()
+            reader.SetNameMode(True)
+            if reader.ReadFile(temporary.name) != IFSelect_RetDone:
+                raise KernelOperationError("OCCT could not read STEP assembly")
+            if not reader.Transfer(document):
+                raise KernelOperationError("OCCT could not transfer STEP assembly")
+            shape_tool = XCAFDoc_DocumentTool.ShapeTool_s(document.Main())
+            roots = TDF_LabelSequence()
+            shape_tool.GetFreeShapes(roots)
+            if roots.Length() == 0:
+                raise KernelOperationError("STEP assembly contains no free shapes")
+
+            components: list[KernelComponent] = []
+            assemblies: list[str] = ["assembly:root"]
+
+            def add_component(label: object, parent_reference: str,
+                              location: object, path: tuple[int, ...]) -> None:
+                base_shape = XCAFDoc_ShapeTool.GetShape_s(label)
+                if base_shape.IsNull():
+                    raise KernelOperationError("assembly component produced a null shape")
+                transformed = BRepBuilderAPI_Transform(
+                    base_shape, location.Transformation(), True
+                ).Shape()
+                if not self._subshapes(transformed, "solid"):
+                    raise KernelOperationError("STEP source contains no solid components")
+                name = self._label_name(label) or "component-" + ".".join(map(str, path))
+                transform = self._location_record(location)
+                topology = self.topology_counts(transformed)
+                faces = self.face_records(transformed)
+                payload = repr((path, name, transform, topology, faces)).encode()
+                reference = "component:" + hashlib.sha256(payload).hexdigest()[:24]
+                components.append(KernelComponent(reference, parent_reference, name,
+                                                  transform, topology, faces))
+
+            def visit(label: object, parent_reference: str,
+                      parent_location: object, path: tuple[int, ...]) -> None:
+                if XCAFDoc_ShapeTool.IsAssembly_s(label):
+                    assembly_reference = (
+                        "assembly:" + ".".join(map(str, path))
+                        if path else "assembly:root"
+                    )
+                    if assembly_reference not in assemblies:
+                        assemblies.append(assembly_reference)
+                    children = TDF_LabelSequence()
+                    XCAFDoc_ShapeTool.GetComponents_s(label, children, False)
+                    for index in range(1, children.Length() + 1):
+                        component_label = children.Value(index)
+                        referred = TDF_Label()
+                        if not XCAFDoc_ShapeTool.GetReferredShape_s(component_label, referred):
+                            raise KernelOperationError("assembly component has no referred shape")
+                        local_location = XCAFDoc_ShapeTool.GetLocation_s(component_label)
+                        combined = parent_location.Multiplied(local_location)
+                        child_path = path + (index,)
+                        if XCAFDoc_ShapeTool.IsAssembly_s(referred):
+                            visit(referred, assembly_reference, combined, child_path)
+                        else:
+                            add_component(referred, assembly_reference, combined, child_path)
+                    return
+                add_component(label, parent_reference, parent_location, path)
+
+            identity = TopLoc_Location()
+            for index in range(1, roots.Length() + 1):
+                root = roots.Value(index)
+                root_location = XCAFDoc_ShapeTool.GetLocation_s(root)
+                visit(root, "assembly:root", identity.Multiplied(root_location), (index,))
+
+            if not components:
+                raise KernelOperationError("STEP source contains no solid components")
+            return KernelAssembly(
+                "assembly:root",
+                hashlib.sha256(data).hexdigest(),
+                "mm",
+                tuple(sorted(assemblies)),
+                tuple(sorted(components, key=lambda item: item.reference)),
+            )
+        finally:
+            Path(temporary.name).unlink(missing_ok=True)
 
     def export_step(self, model: object) -> bytes:
         from OCP.IFSelect import IFSelect_RetDone
@@ -158,8 +245,14 @@ class OcpKernel:
             if writer.Write(str(path)) != IFSelect_RetDone:
                 raise KernelOperationError("OCCT could not write STEP output")
             data = path.read_bytes()
-        return re.sub(rb"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}",
+        return self._normalize_step(data)
+
+    @staticmethod
+    def _normalize_step(data: bytes) -> bytes:
+        data = re.sub(rb"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}",
                       b"1970-01-01T00:00:00", data)
+        return re.sub(rb"Open CASCADE STEP translator 7\.9 \d+",
+                      b"Open CASCADE STEP translator 7.9 0", data)
 
     def boolean(self, operation: str, left: object, right: object) -> object:
         from OCP.BRepAlgoAPI import BRepAlgoAPI_Common, BRepAlgoAPI_Cut, BRepAlgoAPI_Fuse
@@ -215,10 +308,18 @@ class OcpKernel:
         return tuple(sorted(records, key=lambda item: item.reference))
 
     @staticmethod
-    def _transform_record(shape: object) -> tuple[float, ...]:
-        trsf = shape.Location().Transformation()
-        return tuple(round(float(trsf.Value(r, c)), 12)
-                     for r in range(1, 4) for c in range(1, 5))
+    def _label_name(label: object) -> str | None:
+        from OCP.TDataStd import TDataStd_Name
+        attribute = TDataStd_Name()
+        if label.FindAttribute(TDataStd_Name.GetID_s(), attribute):
+            return attribute.Get().ToExtString()
+        return None
+
+    @staticmethod
+    def _location_record(location: object) -> tuple[float, ...]:
+        transform = location.Transformation()
+        return tuple(round(float(transform.Value(row, column)), 12)
+                     for row in range(1, 4) for column in range(1, 5))
 
     @staticmethod
     def _subshapes(model: object, kind: str) -> list[object]:
