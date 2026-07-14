@@ -297,7 +297,7 @@ Acceptance criteria:
 - concept changes, suppressions, corrections, and project reloads rebuild visual evidence from the immutable embedded STEP source
 - failure to obtain kernel evidence keeps the project visibly provisional and blocks release claims
 
-Implementation note: pinned-OCP acceptance passed on PR #28 head `72269104d8c297ed07766375ffcc4e7ebd9eb2f8` with 85 tests and real product/fixture visual geometry coverage.
+Implementation note: pinned-OCP acceptance passed on PR #28 code head `72269104d8c297ed07766375ffcc4e7ebd9eb2f8` with 85 tests and real product/fixture visual geometry coverage. Later commits only record closure evidence.
 
 **Recommended level:** Sol
 
