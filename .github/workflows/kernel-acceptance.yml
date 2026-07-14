@@ -57,5 +57,5 @@ jobs:
       - name: Run repository validation
         run: bash scripts/ci.sh
 
-      - name: Run real-kernel tests verbosely
-        run: python -m unittest tests.test_kernel_real tests.test_manufacturing -v
+      - name: Run full test suite verbosely
+        run: python -m unittest discover -s tests -v
