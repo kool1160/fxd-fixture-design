@@ -135,3 +135,27 @@ before any SDK or COM implementation.
 
 **Revisit trigger:** Approved Windows access and documented vendor API and
 redistribution terms.
+
+### 2026-07-14 — Keep the kernel boundary fail-closed pending review
+
+**Decision:** Introduce a dependency-free, CAD-neutral geometry-kernel
+contract and retain AABB only as an explicit test double. Do not add a B-Rep
+runtime until its exact wrapper, transitive dependencies, and redistribution
+terms are reviewed.
+
+**Context:** Milestone 11 requires real B-Rep STEP and topology evidence, but
+this runner has no OCCT binding and the repository has no approved kernel
+dependency.
+
+**Reasoning:** A named capability contract prevents proof-layer AABBs from
+being mistaken for B-Rep geometry and preserves reproducible CI. Failing
+closed is required when real geometry evidence is unavailable.
+
+**Risks and tradeoffs:** The milestone remains incomplete; real STEP
+round-trip, topology, Boolean, and clearance evidence cannot yet be produced.
+
+**Supporting evidence:** `docs/GEOMETRY_KERNEL_CONTRACT.md`,
+`fxd_geometry/kernel.py`, and `tests/test_kernel_boundary.py`.
+
+**Revisit trigger:** Approval of a concrete kernel/wrapper and access to
+legally shareable representative fixtures.

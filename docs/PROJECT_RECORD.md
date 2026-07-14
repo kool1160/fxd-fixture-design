@@ -184,3 +184,17 @@ unresolved until an approved Windows/vendor review is available.
 
 Evidence: `python -m unittest discover -s tests -v` passes 40 tests,
 `python scripts/connector_proof.py` passes, and `bash scripts/ci.sh` passes.
+
+## 2026-07-14 — Milestone 11 boundary preparation
+
+Milestone 11 is not complete. The repository now defines a dependency-free,
+CAD-neutral kernel contract with explicit capabilities and a fail-closed
+`reviewed_kernel()` entry point. The existing AABB implementation is marked
+as an explicit test double and rejects real STEP operations.
+
+No B-Rep kernel or wrapper was added because none is installed on this runner
+and exact dependency/redistribution terms require review before adoption.
+Real STEP import/export, topology, Boolean, clearance, and round-trip
+evidence remain unresolved.
+
+Evidence: `python -m unittest discover -s tests -v` and `bash scripts/ci.sh`.
