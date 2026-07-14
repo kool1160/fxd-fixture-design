@@ -135,3 +135,24 @@ before any SDK or COM implementation.
 
 **Revisit trigger:** Approved Windows access and documented vendor API and
 redistribution terms.
+
+### 2026-07-14 — Gate real-kernel use behind an explicit neutral adapter
+
+**Decision:** Real B-Rep operations must enter FXD through the `RealKernel`
+contract. Backend discovery is diagnostic only, and missing or unreviewed
+backends fail explicitly; the AABB implementation remains a named test
+double.
+
+**Context:** Milestone 11 requires a real kernel, but this checkout has no
+installed OCCT runtime or approved dependency record.
+
+**Reasoning:** Silent fallback would allow AABB evidence to be mistaken for
+topology, Boolean, clearance, or STEP-round-trip evidence. The boundary lets
+the neutral core and tests proceed without coupling them to vendor objects.
+
+**Risks and tradeoffs:** The milestone remains blocked until an exact kernel
+and binding can be reviewed for licensing, redistribution, platform support,
+and representative STEP behavior.
+
+**Supporting evidence:** `fxd_geometry/kernel.py`,
+`docs/GEOMETRY_KERNEL_BOUNDARY.md`, and `tests/test_kernel_boundary.py`.
