@@ -1,4 +1,14 @@
 """Exercise the pinned real B-Rep adapter without customer geometry."""
+from pathlib import Path
+import sys
+
+# Direct execution (``python scripts/kernel_proof.py``) puts ``scripts`` rather
+# than the repository root on sys.path. Add the root explicitly so the proof
+# exercises the checked-out FXD package instead of depending on installation.
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
 from OCP.BRep import BRep_Builder
 from OCP.BRepBuilderAPI import BRepBuilderAPI_Transform
 from OCP.BRepPrimAPI import BRepPrimAPI_MakeBox
