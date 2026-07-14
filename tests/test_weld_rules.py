@@ -1,3 +1,4 @@
+import math
 import unittest
 from pathlib import Path
 
@@ -24,11 +25,34 @@ class WeldRuleTests(unittest.TestCase):
         result = evaluate_weld_rules(
             self.product, self.fixture, self.annotations,
             WeldRuleConfig(max_heat_input=10, heat_input_units="J/mm",
-                           clamp_force_directions=(("support-1", Vec3(0, 0, 1)),)))
+                           clamp_force_directions=(("support-1", Vec3(0, 0, 10)),)))
         codes = {item.code for item in result.warnings}
         self.assertIn("heat_input_exceeds_config", codes)
         self.assertIn("clamp_reinforces_distortion", codes)
         self.assertTrue(all(item.rule and item.confidence > 0 for item in result.findings))
+
+    def test_opposing_force_is_distinct_from_perpendicular_force(self):
+        opposing = evaluate_weld_rules(
+            self.product, self.fixture, self.annotations,
+            WeldRuleConfig(clamp_force_directions=(("support-1", Vec3(0, 0, -2)),)))
+        self.assertTrue(any(item.identity.startswith("clamp-weld-1")
+                            for item in opposing.recommendations))
+        self.assertNotIn("clamp_perpendicular_to_distortion",
+                         {item.code for item in opposing.findings})
+
+        perpendicular = evaluate_weld_rules(
+            self.product, self.fixture, self.annotations,
+            WeldRuleConfig(clamp_force_directions=(("support-1", Vec3(1, 0, 0)),)))
+        self.assertIn("clamp_perpendicular_to_distortion",
+                      {item.code for item in perpendicular.warnings})
+        self.assertFalse(any(item.identity.startswith("clamp-weld-1")
+                             for item in perpendicular.recommendations))
+
+    def test_invalid_force_directions_fail_before_analysis(self):
+        for direction in (Vec3(0, 0, 0), Vec3(math.inf, 0, 0)):
+            with self.subTest(direction=direction):
+                with self.assertRaisesRegex(ValueError, "clamp force directions"):
+                    WeldRuleConfig(clamp_force_directions=(("support-1", direction),))
 
     def test_missing_sequence_and_process_data_remain_explicit(self):
         ref = GeometryReference("BRACKET_A", "BRACKET_BODY")
