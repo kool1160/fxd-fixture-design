@@ -21,6 +21,27 @@ class FixtureGenerationError(ValueError):
 
 
 @dataclass(frozen=True)
+class ManufacturingSpec:
+    """Public, explicit fabrication intent for one generated feature."""
+
+    method: str
+    material: str
+    thickness: float | None = None
+    fit: str = "nominal"
+    clearance: float = 0.0
+    allowance: float = 0.0
+    interface: str | None = None
+    operations: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not self.method or not self.material or not self.fit:
+            raise FixtureGenerationError("manufacturing method, material, and fit are required")
+        values = (self.thickness, self.clearance, self.allowance)
+        if any(value is not None and (not math.isfinite(value) or value < 0) for value in values):
+            raise FixtureGenerationError("manufacturing dimensions must be finite and non-negative")
+
+
+@dataclass(frozen=True)
 class FixtureParameters:
     """Explicit nominal dimensions and allowances, all in millimetres."""
 
@@ -55,6 +76,7 @@ class FixtureFeature:
     units: str = "mm"
     assumptions: tuple[str, ...] = ()
     warnings: tuple[str, ...] = ()
+    manufacturing: ManufacturingSpec | None = None
 
 
 @dataclass(frozen=True)
@@ -109,6 +131,33 @@ def _aabb(low: list[float], high: list[float]) -> Aabb:
     return Aabb(Vec3(*low), Vec3(*high))
 
 
+def _manufacturing(kind: str, params: FixtureParameters) -> ManufacturingSpec:
+    """Map proof primitives to generic, non-proprietary fabrication intent."""
+    if kind == "baseplate":
+        return ManufacturingSpec("laser_cut", "mild_steel", params.base_thickness,
+                                 "machined_datum", params.contact_clearance,
+                                 params.manufacturing_allowance, "baseplate_slot",
+                                 ("profile_cut", "deburr"))
+    if kind in {"support_pad", "hard_stop", "relieved_locator"}:
+        return ManufacturingSpec("laser_cut", "mild_steel", params.locator_wall,
+                                 "adjustable_fit", params.contact_clearance,
+                                 params.manufacturing_allowance, "tab_and_slot",
+                                 ("profile_cut", "deburr", "weld"))
+    if kind == "round_pin":
+        return ManufacturingSpec("machined", "tool_steel", params.locator_wall,
+                                 "replaceable_fit", params.contact_clearance,
+                                 params.manufacturing_allowance, "reamed_hole",
+                                 ("turn", "harden", "replaceable"))
+    if kind == "clamp_mount":
+        return ManufacturingSpec("laser_cut", "mild_steel", params.locator_wall,
+                                 "slotted_adjustment", params.contact_clearance,
+                                 params.manufacturing_allowance, "standard_clamp",
+                                 ("profile_cut", "deburr", "weld"))
+    return ManufacturingSpec("machined", "mild_steel", params.locator_wall,
+                             "nominal", params.contact_clearance,
+                             params.manufacturing_allowance, None, ("deburr",))
+
+
 def generate_fixture_primitives(product: ProductModel, annotations: EngineeringAnnotations,
                                 parameters: FixtureParameters | None = None) -> FixtureConcept:
     """Generate an orientation-aware deterministic starter fixture concept."""
@@ -144,6 +193,7 @@ def generate_fixture_primitives(product: ProductModel, annotations: EngineeringA
         {"margin": params.base_margin, "thickness": params.base_thickness,
          "build_axis": float(build_axis), "build_sign": build_sign},
         assumptions=("Dominant build-orientation axis defines the proof-layer base normal.",),
+        manufacturing=_manufacturing("baseplate", params),
     )]
 
     for index, (component, body) in enumerate(physical, 1):
@@ -169,6 +219,7 @@ def generate_fixture_primitives(product: ProductModel, annotations: EngineeringA
             {"width": params.support_width, "depth": params.support_depth,
              "contact_clearance": params.contact_clearance, "build_axis": float(build_axis)},
             assumptions=("Support location is the body AABB centroid on the transverse plane.",),
+            manufacturing=_manufacturing("support_pad", params),
         ))
 
     load_axis, load_sign = _dominant_axis(annotations.loading_direction)
@@ -201,6 +252,7 @@ def generate_fixture_primitives(product: ProductModel, annotations: EngineeringA
          "contact_clearance": params.contact_clearance, "loading_axis": float(load_axis),
          "loading_sign": load_sign},
         assumptions=("Dominant loading-direction axis defines the proof-layer stop normal.",),
+        manufacturing=_manufacturing("hard_stop", params),
     ))
 
     first_component, first_body = physical[0]
@@ -225,6 +277,7 @@ def generate_fixture_primitives(product: ProductModel, annotations: EngineeringA
         "primary_round_locator", {"diameter": params.locator_wall, "height": params.locator_height,
                                   "contact_clearance": params.contact_clearance},
         assumptions=("AABB proof represents a round pin by its envelope.",),
+        manufacturing=_manufacturing("round_pin", params),
     ))
 
     relief_low = pin_low.copy()
@@ -236,6 +289,7 @@ def generate_fixture_primitives(product: ProductModel, annotations: EngineeringA
         (_ref(first_component.identity, first_body),), "secondary_relieved_locator",
         {"relief": params.manufacturing_allowance, "height": params.locator_height},
         assumptions=("Relief is an editable manufacturing allowance, not a tolerance guarantee.",),
+        manufacturing=_manufacturing("relieved_locator", params),
     ))
 
     findings: list[FixtureFinding] = []
