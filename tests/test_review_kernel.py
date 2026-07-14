@@ -70,6 +70,14 @@ class ReviewKernelContractTests(unittest.TestCase):
         )
         self.assertEqual(tuple(mesh.vertices_mm[index] for index in mesh.triangles[0]), mesh.vertices_mm)
 
+    def test_step_occurrence_labels_are_canonical_across_writer_history(self) -> None:
+        first = b"""ISO-10303-21;\nFILE_NAME('fixture.step','2026-07-14T13:00:00',(''),(''),'Open CASCADE STEP translator 7.9 3','Open CASCADE 7.9','');\n#10 = NEXT_ASSEMBLY_USAGE_OCCURRENCE('5','','',#1,#2,$);\n#11 = NEXT_ASSEMBLY_USAGE_OCCURRENCE('6','','',#1,#2,$);\nEND-ISO-10303-21;\n"""
+        second = b"""ISO-10303-21;\nFILE_NAME('fixture.step','2026-07-14T14:00:00',(''),(''),'Open CASCADE STEP translator 7.9 9','Open CASCADE 7.9','');\n#10 = NEXT_ASSEMBLY_USAGE_OCCURRENCE('7','','',#1,#2,$);\n#11 = NEXT_ASSEMBLY_USAGE_OCCURRENCE('8','','',#1,#2,$);\nEND-ISO-10303-21;\n"""
+        normalized = OcpKernel._normalize_step(first)
+        self.assertEqual(normalized, OcpKernel._normalize_step(second))
+        self.assertIn(b"NEXT_ASSEMBLY_USAGE_OCCURRENCE('1'", normalized)
+        self.assertIn(b"NEXT_ASSEMBLY_USAGE_OCCURRENCE('2'", normalized)
+
 
 if __name__ == "__main__":
     unittest.main()
