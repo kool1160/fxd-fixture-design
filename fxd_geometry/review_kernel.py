@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 
 from .kernel import (
     KernelEdgeRecord,
@@ -34,6 +35,28 @@ def has_volumetric_overlap(volume_mm3: float, tolerance_mm: float) -> bool:
 
 class OcpKernel(_BaseOcpKernel):
     """Hardened OCP adapter used by the application and public package API."""
+
+    @staticmethod
+    def _normalize_step(data: bytes) -> bytes:
+        """Remove OCCT process-global metadata while preserving STEP geometry.
+
+        OCCT increments the first identifier on
+        ``NEXT_ASSEMBLY_USAGE_OCCURRENCE`` across writer instances. That value
+        is occurrence metadata, not a geometry reference, and makes identical
+        exports differ merely because another export happened earlier in the
+        process. Renumber those labels deterministically by file order after
+        the base timestamp/translator normalization.
+        """
+        normalized = _BaseOcpKernel._normalize_step(data)
+        occurrence = 0
+        pattern = re.compile(rb"(NEXT_ASSEMBLY_USAGE_OCCURRENCE\(')\d+(')")
+
+        def replace_occurrence(match: re.Match[bytes]) -> bytes:
+            nonlocal occurrence
+            occurrence += 1
+            return match.group(1) + str(occurrence).encode("ascii") + match.group(2)
+
+        return pattern.sub(replace_occurrence, normalized)
 
     def intersects(self, left: object, right: object, tolerance_mm: float = 1e-7) -> bool:
         from OCP.BRepGProp import BRepGProp
