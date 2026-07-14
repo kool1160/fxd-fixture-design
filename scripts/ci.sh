@@ -23,7 +23,7 @@ python -m pip install --disable-pip-version-check -r requirements-kernel.txt
 node scripts/fxd-backlog.mjs validate
 python -m json.tool .github/codex/schemas/planning-handoff.schema.json >/dev/null
 python -m unittest discover -s tests >/dev/null
-python scripts/kernel_proof.py >/dev/null
+python -u scripts/kernel_proof.py
 
 if grep -RInE '(sk-[A-Za-z0-9_-]{20,}|OPENAI_API_KEY=.+)' \
   --exclude-dir=.git --exclude='*.md' --exclude='ci.sh' .; then
