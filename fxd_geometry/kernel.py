@@ -44,6 +44,28 @@ class TopologyCounts:
 
 
 @dataclass(frozen=True)
+class KernelTriangleMesh:
+    """Deterministic, kernel-neutral tessellation for review applications.
+
+    Coordinates are millimetres. Triangle indices refer to ``vertices_mm``;
+    ``face_reference`` keeps visual selection linked to the kernel face record.
+    """
+
+    face_reference: str
+    vertices_mm: tuple[tuple[float, float, float], ...]
+    triangles: tuple[tuple[int, int, int], ...]
+
+
+@dataclass(frozen=True)
+class KernelEdgeRecord:
+    """Stable inspection record for a topological edge."""
+
+    reference: str
+    start_mm: tuple[float, float, float]
+    end_mm: tuple[float, float, float]
+
+
+@dataclass(frozen=True)
 class KernelFace:
     reference: str
     area_mm2: float
@@ -86,6 +108,12 @@ class RealKernel(Protocol):
     def make_slot(self, minimum: tuple[float, float, float], maximum: tuple[float, float, float]) -> object: ...
     def make_hole(self, center: tuple[float, float, float], radius: float, height: float) -> object: ...
     def compound(self, models: tuple[object, ...]) -> object: ...
+    def intersects(self, left: object, right: object, tolerance_mm: float = 1e-7) -> bool: ...
+    def tessellate(self, model: object, linear_deflection_mm: float = 0.1,
+                  angular_deflection_rad: float = 0.5) -> tuple[KernelTriangleMesh, ...]: ...
+    def edge_records(self, model: object) -> tuple[KernelEdgeRecord, ...]: ...
+    def section(self, model: object, plane_origin_mm: tuple[float, float, float],
+                plane_normal: tuple[float, float, float]) -> object: ...
 
 
 class OcpKernel:
@@ -319,6 +347,85 @@ class OcpKernel:
                 raise KernelOperationError("cannot compound null manufacturing geometry")
             builder.Add(result, model)
         return result
+
+    def intersects(self, left: object, right: object, tolerance_mm: float = 1e-7) -> bool:
+        if tolerance_mm < 0:
+            raise KernelOperationError("intersection tolerance must be non-negative")
+        return self.clearance(left, right) <= tolerance_mm
+
+    def tessellate(self, model: object, linear_deflection_mm: float = 0.1,
+                   angular_deflection_rad: float = 0.5) -> tuple[KernelTriangleMesh, ...]:
+        """Mesh faces for display while retaining stable face selection links."""
+        from OCP.BRepMesh import BRepMesh_IncrementalMesh
+        from OCP.BRep import BRep_Tool
+        from OCP.TopAbs import TopAbs_REVERSED
+
+        if linear_deflection_mm <= 0 or angular_deflection_rad <= 0:
+            raise KernelOperationError("tessellation tolerances must be positive")
+        BRepMesh_IncrementalMesh(model, linear_deflection_mm, False,
+                                 angular_deflection_rad, True)
+        faces = self._subshapes(model, "face")
+        result = []
+        for face in faces:
+            # Resolve the reference from the individual face rather than
+            # relying on explorer order, which is not a stable selection key.
+            records = self.face_records(face)
+            if len(records) != 1:
+                raise KernelOperationError("OCCT face did not yield one stable face record")
+            record = records[0]
+            triangulation = BRep_Tool.Triangulation_s(face, face.Location())
+            if triangulation is None:
+                raise KernelOperationError("OCCT produced no tessellation for a face")
+            location = face.Location()
+            vertices = []
+            for index in range(1, triangulation.NbNodes() + 1):
+                point = triangulation.Node(index).Transformed(location.Transformation())
+                vertices.append(tuple(round(float(value), 9)
+                                      for value in (point.X(), point.Y(), point.Z())))
+            triangles = []
+            for index in range(1, triangulation.NbTriangles() + 1):
+                triangle = triangulation.Triangle(index)
+                values = (int(triangle.Value(1)), int(triangle.Value(2)), int(triangle.Value(3)))
+                if face.Orientation() == TopAbs_REVERSED:
+                    values = (values[0], values[2], values[1])
+                triangles.append(values)
+            result.append(KernelTriangleMesh(record.reference, tuple(vertices), tuple(triangles)))
+        return tuple(result)
+
+    def edge_records(self, model: object) -> tuple[KernelEdgeRecord, ...]:
+        from OCP.BRep import BRep_Tool
+        records = []
+        for edge in self._subshapes(model, "edge"):
+            curve, first, last = BRep_Tool.Curve_s(edge)
+            if curve is None:
+                raise KernelOperationError("edge has no geometric curve")
+            start = curve.Value(first)
+            end = curve.Value(last)
+            endpoints = tuple(sorted((tuple(round(float(v), 9) for v in
+                                              (start.X(), start.Y(), start.Z())),
+                                      tuple(round(float(v), 9) for v in
+                                            (end.X(), end.Y(), end.Z())))))
+            payload = repr(endpoints).encode()
+            records.append(KernelEdgeRecord("edge:" + hashlib.sha256(payload).hexdigest()[:24],
+                                            tuple(round(float(v), 9) for v in
+                                                  (start.X(), start.Y(), start.Z())),
+                                            tuple(round(float(v), 9) for v in
+                                                  (end.X(), end.Y(), end.Z()))))
+        return tuple(sorted(records, key=lambda item: item.reference))
+
+    def section(self, model: object, plane_origin_mm: tuple[float, float, float],
+                plane_normal: tuple[float, float, float]) -> object:
+        from OCP.BRepAlgoAPI import BRepAlgoAPI_Section
+        from OCP.gp import gp_Dir, gp_Pln, gp_Pnt
+        import math
+        if math.sqrt(sum(value * value for value in plane_normal)) <= 1e-12:
+            raise KernelOperationError("section plane normal must be non-zero")
+        plane = gp_Pln(gp_Pnt(*plane_origin_mm), gp_Dir(*plane_normal))
+        builder = BRepAlgoAPI_Section(model, plane)
+        builder.Build()
+        if not builder.IsDone() or builder.Shape().IsNull():
+            raise KernelOperationError("OCCT section operation failed")
+        return builder.Shape()
 
     def topology_counts(self, model: object) -> TopologyCounts:
         return TopologyCounts(*(len(self._subshapes(model, kind))

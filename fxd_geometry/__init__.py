@@ -25,11 +25,23 @@ from .connectors import (ApprovalRequired, CompatibilityProbe, ConnectorCapabili
                          ConnectorDescriptor, ConnectorError, NeutralStepConnector,
                          connector_registry, probe_solidworks,
                          require_destructive_approval)
-from .kernel import (KernelAssembly, KernelCapabilities, KernelComponent, KernelFace,
-                     KernelOperationError, KernelUnavailable, OcpKernel, RealKernel,
-                     TopologyCounts, installed_backend_candidates,
-                     require_real_kernel)
+from .kernel import (KernelAssembly, KernelCapabilities, KernelComponent, KernelEdgeRecord, KernelFace,
+                     KernelTriangleMesh, KernelOperationError, KernelUnavailable, RealKernel,
+                     TopologyCounts, installed_backend_candidates)
+from .review_kernel import OcpKernel
 from .validation import (VALIDATION_VERSION, ValidationFinding, ValidationResult,
                          validate_fixture_concept)
 
-__all__ = ["Aabb", "AccessAnalysis", "AccessAnalysisError", "AccessEnvelope", "AccessFinding", "AnnotationError", "ApprovalRequired", "Assumption", "Body", "Box", "CompatibilityProbe", "Component", "CompleteFixtureConcept", "ConceptScore", "ConnectorCapabilities", "ConnectorDescriptor", "ConnectorError", "ConstraintAnalysis", "ConstraintAnalysisError", "ConstraintFinding", "CorrectionRecord", "CriticalCharacteristic", "Edge", "EngineeringAnnotations", "ExportError", "FabricationPackage", "Face", "FixtureConcept", "FixtureCorrection", "FixtureFeature", "FixtureFinding", "FixtureGenerationError", "FixtureParameters", "GeometryReference", "KernelAssembly", "KernelCapabilities", "KernelComponent", "KernelFace", "KernelOperationError", "KernelUnavailable", "KnowledgeError", "KnowledgeStore", "LocatorContact", "LocatingAnalysis", "LocatingStrategy", "ManufacturingGeometry", "ManufacturingSolid", "ManufacturingSpec", "NeutralStepConnector", "OcpKernel", "ProductModel", "ProposedFeature", "RealKernel", "RankedFixtureConcepts", "StepImportError", "ToolingItem", "ToolingLibrary", "ToolingLibraryError", "ToolingSelection", "TopologyCounts", "Transform", "ValidationFinding", "ValidationResult", "VALIDATION_VERSION", "Vec3", "WeldAccessRequest", "WeldJoint", "WeldRecommendation", "WeldRuleAnalysis", "WeldRuleConfig", "WeldRuleError", "WeldRuleFinding", "analyze_locating_strategy", "build_fabrication_package", "connector_registry", "digest_text", "evaluate_access", "evaluate_weld_rules", "generate_fixture_concepts", "generate_fixture_primitives", "generate_manufacturing_geometry", "generic_tooling_library", "import_step", "installed_backend_candidates", "neutral_export", "private_knowledge_path", "probe_solidworks", "require_destructive_approval", "require_real_kernel", "validate_fixture_concept", "write_fabrication_package"]
+
+def require_real_kernel() -> RealKernel:
+    """Return the hardened reviewed adapter; AABB is never a runtime fallback."""
+    from importlib.util import find_spec
+    if find_spec("OCP") is None:
+        raise KernelUnavailable(f"Install {OcpKernel.PINNED_DISTRIBUTION}; AABB is not a fallback")
+    kernel = OcpKernel()
+    if not kernel.capabilities.is_complete:
+        raise KernelUnavailable("reviewed OCP adapter lacks required capabilities")
+    return kernel
+
+
+__all__ = ["Aabb", "AccessAnalysis", "AccessAnalysisError", "AccessEnvelope", "AccessFinding", "AnnotationError", "ApprovalRequired", "Assumption", "Body", "Box", "CompatibilityProbe", "Component", "CompleteFixtureConcept", "ConceptScore", "ConnectorCapabilities", "ConnectorDescriptor", "ConnectorError", "ConstraintAnalysis", "ConstraintAnalysisError", "ConstraintFinding", "CorrectionRecord", "CriticalCharacteristic", "Edge", "EngineeringAnnotations", "ExportError", "FabricationPackage", "Face", "FixtureConcept", "FixtureCorrection", "FixtureFeature", "FixtureFinding", "FixtureGenerationError", "FixtureParameters", "GeometryReference", "KernelAssembly", "KernelCapabilities", "KernelComponent", "KernelEdgeRecord", "KernelFace", "KernelOperationError", "KernelTriangleMesh", "KernelUnavailable", "KnowledgeError", "KnowledgeStore", "LocatorContact", "LocatingAnalysis", "LocatingStrategy", "ManufacturingGeometry", "ManufacturingSolid", "ManufacturingSpec", "NeutralStepConnector", "OcpKernel", "ProductModel", "ProposedFeature", "RealKernel", "RankedFixtureConcepts", "StepImportError", "ToolingItem", "ToolingLibrary", "ToolingLibraryError", "ToolingSelection", "TopologyCounts", "Transform", "ValidationFinding", "ValidationResult", "VALIDATION_VERSION", "Vec3", "WeldAccessRequest", "WeldJoint", "WeldRecommendation", "WeldRuleAnalysis", "WeldRuleConfig", "WeldRuleError", "WeldRuleFinding", "analyze_locating_strategy", "build_fabrication_package", "connector_registry", "digest_text", "evaluate_access", "evaluate_weld_rules", "generate_fixture_concepts", "generate_fixture_primitives", "generate_manufacturing_geometry", "generic_tooling_library", "import_step", "installed_backend_candidates", "neutral_export", "private_knowledge_path", "probe_solidworks", "require_destructive_approval", "require_real_kernel", "validate_fixture_concept", "write_fabrication_package"]

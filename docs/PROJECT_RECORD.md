@@ -278,3 +278,13 @@ currently reproducible in this environment because network/DNS access prevents
 installation of the already-pinned `cadquery-ocp==7.9.3.1.1` runtime; the
 existing real-kernel tests therefore remain unverified here. Milestone status
 remains Pending until that environment verification is completed.
+
+## 2026-07-14 — Milestone 17 implementation evidence
+
+The CAD-neutral kernel boundary now exposes review geometry primitives for the
+visual application: real-kernel triangle tessellation linked to face records,
+stable edge inspection records, interference checks, and section operations.
+These records are display and selection evidence only; they do not replace
+B-Rep validation or imply production approval. The pinned OCP runtime is not
+available locally, so real-kernel acceptance and release claims remain pending
+GitHub Actions evidence.
