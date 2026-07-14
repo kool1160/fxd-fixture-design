@@ -6,12 +6,13 @@ GitHub Actions Kernel acceptance passed with:
 
 - Python 3.12
 - `cadquery-ocp==7.9.3.1.1`
-- the complete repository test suite
+- 85 repository tests
 - the legally shareable synthetic STEP fixture
 
-The runtime and manufacturing foundation first passed on `main` and the final
-real-kernel visual application changes passed on PR #28 head
-`72269104d8c297ed07766375ffcc4e7ebd9eb2f8`.
+The runtime and manufacturing foundation first passed on `main`; the final
+real-kernel visual application changes passed on PR #28 code head
+`72269104d8c297ed07766375ffcc4e7ebd9eb2f8`. Later PR commits only record
+milestone closure and this evidence.
 
 ## Deterministic evidence proven
 
