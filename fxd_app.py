@@ -1,35 +1,41 @@
 """FXD local engineering review application (dependency-free Tkinter shell)."""
-
 from __future__ import annotations
 
 import math
 import tkinter as tk
-from tkinter import filedialog, messagebox, simpledialog, ttk
 from pathlib import Path
+from tkinter import filedialog, messagebox, simpledialog, ttk
 
 from fxd_geometry import (
     EngineeringAnnotations,
     KernelTriangleMesh,
     KernelUnavailable,
     OcpKernel,
+    ReviewGeometry,
     Vec3,
+    VisualEdge,
     build_review_geometry,
     generate_manufacturing_geometry,
     import_step,
 )
 from fxd_geometry.project import FxdProject, ProjectFormatError, SUPPORTED_LAYERS
 
+REVIEW_LAYERS = ("locators", "supports", "stops", "clamps")
+
 
 class FxdApp:
     def __init__(self, root: tk.Tk, project: FxdProject | None = None) -> None:
         self.root, self.project = root, project
         self.yaw, self.pitch, self.drag = 35.0, 22.0, None
+        self.kernel = None
+        self.product_shape = None
+        self.review_geometry: ReviewGeometry | None = None
         self.kernel_meshes: tuple[KernelTriangleMesh, ...] = ()
-        self.review_geometry = None
-        self.selected_face: str | None = None
-        self.collision_items: frozenset[str] = frozenset()
+        self.selected_reference: str | None = None
         self.display_mode = "solid"
         self.section_view = False
+        self.hidden_review_layers: set[str] = set()
+
         root.title("FXD — Engineering Review (not production approval)")
         root.geometry("1180x760")
         self.status = tk.StringVar(value="Open a legally shareable STEP assembly to begin.")
@@ -43,10 +49,15 @@ class FxdApp:
         self.concepts = tk.Listbox(side, height=5, exportselection=False)
         self.concepts.pack(fill="x", pady=8)
         self.concepts.bind("<<ListboxSelect>>", self.select_concept)
+
         ttk.Label(side, text="Layers").pack(anchor="w")
         for layer in sorted(SUPPORTED_LAYERS):
             ttk.Button(side, text=f"Toggle {layer}",
                        command=lambda item=layer: self.toggle(item)).pack(fill="x", pady=1)
+        for layer in REVIEW_LAYERS:
+            ttk.Button(side, text=f"Toggle {layer}",
+                       command=lambda item=layer: self.toggle_review_layer(item)).pack(fill="x", pady=1)
+
         ttk.Button(side, text="Suppress / unsuppress feature",
                    command=self.suppress_feature).pack(fill="x", pady=(8, 2))
         ttk.Button(side, text="Record correction", command=self.correct).pack(fill="x", pady=2)
@@ -55,16 +66,21 @@ class FxdApp:
         ttk.Button(side, text="Reject concept",
                    command=lambda: self.decide("reject")).pack(fill="x")
         ttk.Button(side, text="Fit to view", command=self.fit_view).pack(fill="x", pady=(8, 2))
-        ttk.Button(side, text="Toggle wireframe", command=lambda: self.set_display("wireframe")).pack(fill="x", pady=1)
-        ttk.Button(side, text="Toggle transparency", command=lambda: self.set_display("transparent")).pack(fill="x", pady=1)
-        ttk.Button(side, text="Toggle section", command=self.toggle_section).pack(fill="x", pady=1)
+        ttk.Button(side, text="Toggle wireframe",
+                   command=lambda: self.set_display("wireframe")).pack(fill="x", pady=1)
+        ttk.Button(side, text="Toggle transparency",
+                   command=lambda: self.set_display("transparent")).pack(fill="x", pady=1)
+        ttk.Button(side, text="Toggle kernel section", command=self.toggle_section).pack(fill="x", pady=1)
+
         self.findings = tk.Text(side, width=42, height=12, wrap="word", state="disabled")
         self.findings.pack(fill="both", expand=True, pady=8)
         ttk.Label(side, textvariable=self.status, wraplength=300).pack(anchor="w", pady=8)
         self.canvas.bind("<ButtonPress-1>", self.start_drag)
         self.canvas.bind("<B1-Motion>", self.rotate)
-        self.canvas.bind("<ButtonRelease-1>", self.pick_face)
+        self.canvas.bind("<ButtonRelease-1>", self.pick_item)
         self.canvas.bind("<Configure>", lambda _event: self.render())
+        if project:
+            self._restore_kernel_geometry()
         self.refresh()
 
     def import_step(self) -> None:
@@ -78,23 +94,10 @@ class FxdApp:
                 product, build_orientation=Vec3(0, 0, 1), loading_direction=Vec3(1, 0, 0),
                 process_type="manual MIG", production_quantity=1)
             self.project = FxdProject.from_product(product, annotations)
-            self.kernel_meshes = ()
-            self.review_geometry = None
-            try:
-                kernel = OcpKernel()
-                product_shape = kernel.import_step(source)
-                self.kernel_meshes = kernel.tessellate(product_shape)
-                concept = self.project.active
-                manufacturing = generate_manufacturing_geometry(concept, kernel)
-                self.review_geometry = build_review_geometry(
-                    kernel, product, product_shape, concept, manufacturing)
-                message = (f"Imported immutable STEP and {len(self.review_geometry.meshes)} "
-                           "selectable product/fixture B-Rep meshes.")
-            except KernelUnavailable:
-                message = "Imported immutable source geometry; real-kernel display is unavailable and review remains provisional."
-            except Exception as exc:
-                self.review_geometry = None
-                message = f"Real-kernel review geometry unavailable; review remains provisional ({exc})."
+            self._restore_kernel_geometry()
+            message = (f"Imported immutable STEP and {len(self.review_geometry.meshes)} selectable "
+                       "product/fixture B-Rep face meshes." if self.review_geometry else
+                       "Imported immutable STEP; real-kernel display is unavailable and review remains provisional.")
             self.refresh(message)
         except Exception as exc:
             messagebox.showerror("STEP import failed", str(exc))
@@ -105,10 +108,12 @@ class FxdApp:
             return
         try:
             self.project = FxdProject.load(name)
-            self.kernel_meshes = ()
-            self.review_geometry = None
-            self.selected_face = None
-            self.refresh("Loaded neutral project; reimport STEP to restore real-kernel display meshes.")
+            self.selected_reference = None
+            self._restore_kernel_geometry()
+            message = ("Loaded project and rebuilt real-kernel visual evidence from embedded immutable STEP."
+                       if self.review_geometry else
+                       "Loaded project; kernel evidence unavailable, so visual review remains provisional.")
+            self.refresh(message)
         except Exception as exc:
             messagebox.showerror("Project load failed", str(exc))
 
@@ -121,11 +126,42 @@ class FxdApp:
             self.project.save(name)
             self.status.set(f"Saved {Path(name).name}; production approval is not implied.")
 
+    def _restore_kernel_geometry(self) -> None:
+        self.kernel = None
+        self.product_shape = None
+        self.review_geometry = None
+        self.kernel_meshes = ()
+        if not self.project:
+            return
+        try:
+            self.kernel = OcpKernel()
+            self.product_shape = self.kernel.import_step(self.project.product.source_bytes)
+            self._rebuild_review_geometry()
+        except KernelUnavailable:
+            return
+        except Exception as exc:
+            self.status.set(f"Real-kernel evidence unavailable; provisional view only ({exc}).")
+
+    def _rebuild_review_geometry(self) -> None:
+        self.review_geometry = None
+        self.kernel_meshes = ()
+        if not self.project or not self.kernel or self.product_shape is None:
+            return
+        manufacturing = generate_manufacturing_geometry(self.project.active, self.kernel)
+        geometry = build_review_geometry(
+            self.kernel, self.project.product, self.product_shape,
+            self.project.active, manufacturing)
+        if geometry.concept_identity != self.project.active.identity:
+            raise RuntimeError("visual evidence does not match the active deterministic concept")
+        self.review_geometry = geometry
+        self.kernel_meshes = tuple(item for item in geometry.meshes)
+        self.selected_reference = None
+
     def refresh(self, message: str = "") -> None:
         self.concepts.delete(0, "end")
         if self.project:
+            from fxd_geometry import validate_fixture_concept
             for concept in self.project.concepts:
-                from fxd_geometry import validate_fixture_concept
                 status = validate_fixture_concept(self.project.product, concept).status
                 self.concepts.insert("end", f"{concept.identity} — {status.upper()}")
             index = next(i for i, item in enumerate(self.project.concepts)
@@ -139,8 +175,8 @@ class FxdApp:
             self.findings.insert("1.0", "\n\n".join(lines) or "No findings recorded.")
             self.findings.configure(state="disabled")
             if not message:
-                message = (f"Validation: {validation.status.upper()} · "
-                           f"evidence {validation.evidence_digest[:12]}")
+                message = (f"Validation: {validation.status.upper()} · evidence "
+                           f"{validation.evidence_digest[:12]}")
         if message:
             self.status.set(message)
         self.render()
@@ -149,7 +185,8 @@ class FxdApp:
         if self.project and self.concepts.curselection():
             identity = self.project.concepts[self.concepts.curselection()[0]].identity
             self.project = self.project.with_concept(identity)
-            self.refresh()
+            self._rebuild_review_geometry()
+            self.refresh("Active concept changed; real-kernel geometry regenerated.")
 
     def toggle(self, layer: str) -> None:
         if self.project:
@@ -158,6 +195,13 @@ class FxdApp:
                 self.render()
             except ProjectFormatError as exc:
                 messagebox.showerror("Layer change rejected", str(exc))
+
+    def toggle_review_layer(self, layer: str) -> None:
+        if layer in self.hidden_review_layers:
+            self.hidden_review_layers.remove(layer)
+        else:
+            self.hidden_review_layers.add(layer)
+        self.render()
 
     def suppress_feature(self) -> None:
         if not self.project:
@@ -168,8 +212,9 @@ class FxdApp:
             return
         try:
             self.project = self.project.suppress(identity)
-            self.refresh(f"Recorded validated feature edit: {identity}")
-        except ProjectFormatError as exc:
+            self._rebuild_review_geometry()
+            self.refresh(f"Feature state changed and visual evidence regenerated: {identity}")
+        except (ProjectFormatError, ValueError, RuntimeError) as exc:
             messagebox.showerror("Feature edit rejected", str(exc))
 
     def correct(self) -> None:
@@ -181,8 +226,9 @@ class FxdApp:
         if key and value and reason:
             try:
                 self.project = self.project.correct(key, value, reason)
-                self.refresh("Correction recorded and deterministic validation rerun.")
-            except (ProjectFormatError, ValueError) as exc:
+                self._rebuild_review_geometry()
+                self.refresh("Correction recorded; geometry and validation evidence regenerated.")
+            except (ProjectFormatError, ValueError, RuntimeError) as exc:
                 messagebox.showerror("Correction rejected", str(exc))
 
     def decide(self, action: str) -> None:
@@ -205,21 +251,20 @@ class FxdApp:
             self.pitch = max(-80, min(80, pitch + (event.y - y) * 0.7))
             self.render()
 
-    def pick_face(self, event) -> None:
+    def pick_item(self, _event) -> None:
         current = self.canvas.find_withtag("current")
         if current:
             tags = self.canvas.gettags(current[0])
-            selected = next((tag[5:] for tag in tags if tag.startswith("face:")), None)
+            selected = next((tag[5:] for tag in tags if tag.startswith("pick:")), None)
             if selected:
-                self.selected_face = selected
+                self.selected_reference = selected
                 item_id = selected.split("/", 1)[0]
                 item = self.review_geometry.item(item_id) if self.review_geometry else None
                 if item:
+                    refs = ", ".join(item.source_references) or "generated"
                     self.status.set(
-                        f"Selected {selected} · {item.category} · rule={item.rule or 'source'} "
-                        f"· {len(item.findings)} linked findings")
-                else:
-                    self.status.set(f"Selected {selected}; linked to a stable kernel face reference.")
+                        f"Selected {selected} · {item.category} · layer={item.layer} · "
+                        f"rule={item.rule or 'source'} · refs={refs} · findings={','.join(item.findings) or 'none'}")
                 self.render()
         self.drag = None
 
@@ -231,57 +276,68 @@ class FxdApp:
             return
         if self.review_geometry:
             self._render_review_geometry()
-        elif self.kernel_meshes and "product" not in self.project.hidden_layers:
-            self._render_meshes(self.kernel_meshes)
         else:
             self._render_bounds()
         validation = self.project.active_validation
         banner_color = "#ff6666" if validation.blocked else "#ffd166"
+        source = "REAL OCP" if self.review_geometry else "PROVISIONAL AABB"
         self.canvas.create_text(
             12, 12, anchor="nw", fill=banner_color,
-            text=(f"{self.project.active.identity}: {validation.status.upper()} · "
+            text=(f"{source} · {self.project.active.identity}: {validation.status.upper()} · "
                   f"evidence {validation.evidence_digest[:12]} — not production approval"))
 
-    def _render_meshes(self, meshes: tuple[KernelTriangleMesh, ...]) -> None:
+    def _visible_items(self):
+        assert self.review_geometry and self.project
+        for item in self.review_geometry.items:
+            if item.layer in self.hidden_review_layers:
+                continue
+            if item.category == "product" and "product" in self.project.hidden_layers:
+                continue
+            if item.category != "product" and "fixture" in self.project.hidden_layers:
+                continue
+            if item.identity in self.project.suppressed_features:
+                continue
+            yield item
+
+    def _render_review_geometry(self) -> None:
+        visible = tuple(self._visible_items())
+        meshes = tuple(mesh for item in visible for mesh in item.meshes)
+        edges = tuple(edge for item in visible for edge in
+                      (item.section_edges if self.section_view else item.edges))
         vertices = [point for mesh in meshes for point in mesh.vertices_mm]
+        vertices += [point for edge in edges for point in (edge.start_mm, edge.end_mm)]
         if not vertices:
             return
         center = tuple((min(point[i] for point in vertices) + max(point[i] for point in vertices)) / 2
                        for i in range(3))
         span = max(max(point[i] for point in vertices) - min(point[i] for point in vertices)
                    for i in range(3)) or 1
-        polygons = []
-        for mesh in meshes:
-            for triangle in mesh.triangles:
-                points = [mesh.vertices_mm[index] for index in triangle]
-                if self.section_view and sum(point[2] for point in points) / 3 < 0:
-                    continue
-                projected = [self.project_point(point, center, span) for point in points]
-                depth = sum(point[2] for point in points) / 3
-                polygons.append((depth, mesh.face_reference, projected))
-        for _depth, reference, projected in sorted(polygons):
-            item_id = reference.split("/", 1)[0]
-            color = ("#ffffff" if reference == self.selected_face else
-                     "#ff4d4d" if item_id in self.collision_items else "#66c2ff")
-            flat = [coordinate for point in projected for coordinate in point]
-            self.canvas.create_polygon(*flat, fill="" if self.display_mode == "wireframe" else "#24445c",
-                                       outline=color,
-                                       tags=(f"face:{reference}", "kernel-mesh"))
-
-    def _render_review_geometry(self) -> None:
-        geometry = self.review_geometry
-        self.collision_items = frozenset(
-            item.identity for item in geometry.items
-            if any("collision" in finding or "interference" in finding
-                   for finding in item.findings))
-        visible = [item for item in geometry.items
-                   if item.category == "product" and "product" not in self.project.hidden_layers
-                   or item.category != "product" and "fixture" not in self.project.hidden_layers
-                   and item.identity not in self.project.suppressed_features]
-        meshes = tuple(mesh for item in visible for mesh in item.meshes)
-        if not meshes:
-            return
-        self._render_meshes(meshes)
+        if not self.section_view:
+            polygons = []
+            for mesh in meshes:
+                for triangle in mesh.triangles:
+                    points = [mesh.vertices_mm[index] for index in triangle]
+                    projected = [self.project_point(point, center, span) for point in points]
+                    polygons.append((sum(point[2] for point in points) / 3,
+                                     mesh.face_reference, projected))
+            for _depth, reference, projected in sorted(polygons):
+                item_id = reference.split("/", 1)[0]
+                item = self.review_geometry.item(item_id)
+                outline = "#ffffff" if reference == self.selected_reference else (
+                    "#ff4d4d" if item and item.has_collision else "#66c2ff")
+                flat = [coordinate for point in projected for coordinate in point]
+                fill = "" if self.display_mode == "wireframe" else "#24445c"
+                stipple = "gray50" if self.display_mode == "transparent" else ""
+                self.canvas.create_polygon(*flat, fill=fill, stipple=stipple,
+                                           outline=outline,
+                                           tags=(f"pick:{reference}", "kernel-face"))
+        for edge in edges:
+            start = self.project_point(edge.start_mm, center, span)
+            end = self.project_point(edge.end_mm, center, span)
+            color = "#ffffff" if edge.reference == self.selected_reference else (
+                "#ffd166" if self.section_view else "#9bd3ff")
+            self.canvas.create_line(*start, *end, fill=color, width=2,
+                                    tags=(f"pick:{edge.reference}", "kernel-edge"))
 
     def set_display(self, mode: str) -> None:
         self.display_mode = "solid" if self.display_mode == mode else mode
@@ -289,7 +345,7 @@ class FxdApp:
 
     def toggle_section(self) -> None:
         self.section_view = not self.section_view
-        self.status.set("Section view is a review visualization; B-Rep validation remains authoritative.")
+        self.status.set("Kernel section edges enabled." if self.section_view else "Kernel section edges disabled.")
         self.render()
 
     def fit_view(self) -> None:
@@ -303,15 +359,10 @@ class FxdApp:
                 for body in component.bodies:
                     items.append((f"{component.identity}/{body.identity}",
                                   body.bounds.transformed(component.transform), "#66c2ff"))
-        concept = self.project.active
         if "fixture" not in self.project.hidden_layers:
-            for feature in concept.fixture.features:
-                if feature.identity in self.project.suppressed_features:
-                    continue
-                refs = ",".join(f"{ref.component_identity}/{ref.body_identity}"
-                                for ref in feature.source_references) or "generated"
-                items.append((f"{feature.identity} · {feature.rule} · {refs}",
-                              feature.bounds, "#ffb347"))
+            for feature in self.project.active.fixture.features:
+                if feature.identity not in self.project.suppressed_features:
+                    items.append((feature.identity, feature.bounds, "#ffb347"))
         if not items:
             return
         points = [point for _, box, _ in items for point in (box.minimum, box.maximum)]
