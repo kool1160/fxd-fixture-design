@@ -5,7 +5,7 @@ from pathlib import Path
 from fxd_geometry import (EngineeringAnnotations, ManufacturingSpec, Vec3,
                           build_fabrication_package, generate_fixture_concepts,
                           generate_fixture_primitives, generate_manufacturing_geometry,
-                          import_step)
+                          import_step, validate_fixture_concept)
 from fxd_geometry.export import ExportError
 from fxd_geometry.kernel import KernelCapabilities, KernelOperationError
 
@@ -89,7 +89,10 @@ class ManufacturingGeometryTests(unittest.TestCase):
         self.assertIn(b"support_pad_relief", geometry.dxf_bytes)
         self.assertIn(b"CIRCLE", geometry.dxf_bytes)
 
-        package = build_fabrication_package(concept, manufacturing=geometry)
+        validation = validate_fixture_concept(self.product, concept)
+        self.assertFalse(validation.blocked)
+        package = build_fabrication_package(
+            concept, manufacturing=geometry, validation=validation)
         self.assertIn('"geometry_source": "reviewed_real_kernel"', package.manifest)
         self.assertIn("supported prismatic/cylindrical DXF", package.manifest)
         self.assertIn("baseplate_slot", package.dxf)
