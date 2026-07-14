@@ -33,7 +33,9 @@ class ManufacturingSolid:
 @dataclass(frozen=True)
 class ManufacturingGeometry:
     concept_identity: str
+    source_sha256: str
     units: str
+    feature_identities: tuple[str, ...]
     solids: tuple[ManufacturingSolid, ...]
     model: object
     step_bytes: bytes
@@ -41,6 +43,18 @@ class ManufacturingGeometry:
     @property
     def identities(self) -> tuple[str, ...]:
         return tuple(item.identity for item in self.solids)
+
+    def __post_init__(self) -> None:
+        if not self.concept_identity or not self.source_sha256:
+            raise KernelOperationError("manufacturing geometry identity and source hash are required")
+        if self.units != "mm":
+            raise KernelOperationError("manufacturing geometry must use millimetres")
+        if len(set(self.feature_identities)) != len(self.feature_identities):
+            raise KernelOperationError("manufacturing feature identities must be unique")
+        if self.identities != self.feature_identities:
+            raise KernelOperationError("manufacturing solids must exactly match the declared feature order")
+        if not self.step_bytes.startswith(b"ISO-10303-21") or b"END-ISO-10303-21" not in self.step_bytes:
+            raise KernelOperationError("manufacturing STEP output is malformed or partial")
 
 
 def _spec(feature: FixtureFeature) -> ManufacturingSpec:
@@ -71,6 +85,9 @@ def generate_manufacturing_geometry(concept: CompleteFixtureConcept,
         raise KernelOperationError("invalid fixture concepts cannot author manufacturing geometry")
     if not kernel.capabilities.is_complete:
         raise KernelOperationError("complete real-kernel capabilities are required")
+    feature_identities = tuple(feature.identity for feature in concept.fixture.features)
+    if len(set(feature_identities)) != len(feature_identities):
+        raise KernelOperationError("fixture feature identities must be unique")
     solids: list[ManufacturingSolid] = []
     shapes: list[object] = []
     for feature in concept.fixture.features:
@@ -82,5 +99,12 @@ def generate_manufacturing_geometry(concept: CompleteFixtureConcept,
         ))
         shapes.append(shape)
     model = kernel.compound(tuple(shapes))
-    return ManufacturingGeometry(concept.identity, concept.fixture.units, tuple(solids),
-                                 model, kernel.export_step(model))
+    return ManufacturingGeometry(
+        concept.identity,
+        concept.fixture.source_sha256,
+        concept.fixture.units,
+        feature_identities,
+        tuple(solids),
+        model,
+        kernel.export_step(model),
+    )
