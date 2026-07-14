@@ -1,8 +1,8 @@
 """Deterministic, vendor-neutral fabrication-package export.
 
-The current geometry proof contains AABBs rather than B-Rep solids. Exports
-therefore identify themselves as proof-layer artifacts and never imply CAD
-fidelity, certification, or production approval.
+Without a reviewed kernel the legacy path remains an explicit proof export.
+Kernel-authored manufacturing geometry carries its own STEP and supported
+prismatic/cylindrical DXF profiles, while all release states remain review-only.
 """
 
 from __future__ import annotations
@@ -169,7 +169,7 @@ def build_fabrication_package(concept: CompleteFixtureConcept, revision: str = "
         manifest_data["geometry_source"] = "reviewed_real_kernel"
         manifest_data["manufacturing_solids"] = list(manufacturing.identities)
         manifest_data["notes"] = [
-            "STEP is kernel-authored; DXF remains proof-layer until true profile extraction is complete.",
+            "STEP and supported prismatic/cylindrical DXF profiles are kernel-bound manufacturing evidence.",
             "This package is not certified, validated, or approved for production.",
         ]
     setup = "\n".join([f"# Fixture setup — {concept.identity} revision {revision}", "",
@@ -179,7 +179,8 @@ def build_fabrication_package(concept: CompleteFixtureConcept, revision: str = "
         "- Confirm datum/contact surfaces, clamp forces, tolerances, weld sequence, access, and unload path.",
         "- Review validation.json before any fabrication decision.", ""])
     return FabricationPackage(
-        json.dumps(manifest_data, indent=2, sort_keys=True) + "\n", _step(concept, revision, manufacturing), _dxf(concept),
+        json.dumps(manifest_data, indent=2, sort_keys=True) + "\n", _step(concept, revision, manufacturing),
+        manufacturing.dxf_bytes.decode("ascii") if manufacturing is not None else _dxf(concept),
         json.dumps(bom, indent=2, sort_keys=True) + "\n", setup,
         json.dumps(validation, indent=2, sort_keys=True) + "\n")
 

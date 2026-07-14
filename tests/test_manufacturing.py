@@ -11,9 +11,14 @@ from fxd_geometry.kernel import KernelCapabilities, KernelOperationError
 
 
 class FakeKernel:
-    """Contract test double; real OCP coverage remains in kernel tests."""
+    """Contract test double; records the exact manufacturing operations."""
 
     capabilities = KernelCapabilities("test", "1", True, True, True, True, True, True)
+
+    def __init__(self):
+        self.slots = []
+        self.holes = []
+        self.cuts = []
 
     def make_box(self, minimum, maximum):
         return ("box", minimum, maximum)
@@ -21,8 +26,25 @@ class FakeKernel:
     def make_cylinder(self, center, radius, height):
         return ("cylinder", center, radius, height)
 
+    def cut(self, left, right):
+        self.cuts.append(right)
+        return ("cut", left, right)
+
+    def make_slot(self, minimum, maximum):
+        value = ("slot", minimum, maximum)
+        self.slots.append(value)
+        return value
+
+    def make_hole(self, center, radius, height):
+        value = ("hole", center, radius, height)
+        self.holes.append(value)
+        return value
+
     def compound(self, models):
         return ("compound", models)
+
+    def topology_counts(self, model):
+        return type("Counts", (), {"solids": 1})()
 
     def export_step(self, model):
         return b"ISO-10303-21;\nEND-ISO-10303-21;\n"
@@ -46,18 +68,32 @@ class ManufacturingGeometryTests(unittest.TestCase):
         self.assertEqual(next(f for f in concept.features if f.kind == "round_pin").manufacturing.method,
                          "machined")
 
-    def test_kernel_boundary_authors_bound_opaque_solids_and_step(self):
+    def test_kernel_and_dxf_share_the_same_cut_operation_plan(self):
         concept = generate_fixture_concepts(self.product, self.annotations).recommended
-        geometry = generate_manufacturing_geometry(concept, FakeKernel())
+        kernel = FakeKernel()
+        geometry = generate_manufacturing_geometry(concept, kernel)
         expected = tuple(feature.identity for feature in concept.fixture.features)
         self.assertEqual(geometry.units, "mm")
         self.assertEqual(geometry.source_sha256, concept.fixture.source_sha256)
         self.assertEqual(geometry.feature_identities, expected)
         self.assertEqual(geometry.identities, expected)
         self.assertTrue(geometry.step_bytes.startswith(b"ISO-10303-21"))
+        self.assertTrue(geometry.dxf_bytes.startswith(b"0\nSECTION"))
+
+        # Every supported B-Rep cut type must have a corresponding DXF layer.
+        self.assertGreaterEqual(len(kernel.slots), 4)
+        self.assertEqual(len(kernel.holes), 1)
+        self.assertEqual(len(kernel.cuts), len(kernel.slots) + len(kernel.holes))
+        self.assertIn(b"baseplate_slot", geometry.dxf_bytes)
+        self.assertIn(b"baseplate_pin_hole", geometry.dxf_bytes)
+        self.assertIn(b"support_pad_relief", geometry.dxf_bytes)
+        self.assertIn(b"CIRCLE", geometry.dxf_bytes)
+
         package = build_fabrication_package(concept, manufacturing=geometry)
         self.assertIn('"geometry_source": "reviewed_real_kernel"', package.manifest)
-        self.assertIn("DXF remains proof-layer", package.manifest)
+        self.assertIn("supported prismatic/cylindrical DXF", package.manifest)
+        self.assertIn("baseplate_slot", package.dxf)
+        self.assertIn("baseplate_pin_hole", package.dxf)
 
     def test_export_rejects_wrong_source_missing_or_reordered_features(self):
         concept = generate_fixture_concepts(self.product, self.annotations).recommended
@@ -70,11 +106,13 @@ class ManufacturingGeometryTests(unittest.TestCase):
         with self.assertRaisesRegex(KernelOperationError, "declared feature order"):
             replace(geometry, solids=geometry.solids[:-1])
 
-    def test_malformed_step_cannot_be_labeled_reviewed_geometry(self):
+    def test_malformed_step_or_dxf_cannot_be_labeled_reviewed_geometry(self):
         concept = generate_fixture_concepts(self.product, self.annotations).recommended
         geometry = generate_manufacturing_geometry(concept, FakeKernel())
-        with self.assertRaisesRegex(KernelOperationError, "malformed or partial"):
+        with self.assertRaisesRegex(KernelOperationError, "STEP output is malformed"):
             replace(geometry, step_bytes=b"not step")
+        with self.assertRaisesRegex(KernelOperationError, "DXF output is malformed"):
+            replace(geometry, dxf_bytes=b"not dxf")
 
 
 if __name__ == "__main__":
