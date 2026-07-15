@@ -306,3 +306,19 @@ environment-skipped real-kernel tests; `bash scripts/ci-contract.sh` passes.
 OCP is unavailable in this environment, so no new real-kernel acceptance claim
 is made. The workflow remains engineering-review-only and does not certify or
 approve production fixtures.
+
+## 2026-07-15 — Milestone 19 complete
+
+The neutral workflow layer adds editable, ordered weld, tack, clamp, and
+release sequence plans; traceable heat, distortion, spatter, and restricted-
+contact zones; shared torch, hand, operator, robot, cobot, and unload envelope
+references; deterministic envelope and trapped-part conflicts; and variant
+comparison that preserves blocked gates. Findings retain rule, geometry, and
+evidence links in a review visual model. No thermal, force, spatter, or robot
+kinematic simulation is claimed, and the workflow remains engineering-review-
+only.
+
+Evidence: `bash scripts/ci-contract.sh` passes with 94 tests and four skipped
+real-kernel tests. `bash scripts/ci.sh` was attempted but could not install the
+pinned `cadquery-ocp==7.9.3.1.1` because this environment cannot resolve
+PyPI; real-kernel acceptance remains an authoritative GitHub Actions concern.
