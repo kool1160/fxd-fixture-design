@@ -1,3 +1,4 @@
+import importlib.util
 import json
 import tempfile
 import unittest
@@ -9,6 +10,17 @@ from fxd_geometry import (EngineeringAnnotations, ExportError, OperationsError, 
 from fxd_geometry.project import FxdProject
 
 
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def _load_script(name: str, path: Path):
+    spec = importlib.util.spec_from_file_location(name, path)
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+    return module
+
+
 class OperationsTests(unittest.TestCase):
     def setUp(self):
         self.product = import_step(Path("tests/fixtures/synthetic_assembly.step"))
@@ -17,13 +29,14 @@ class OperationsTests(unittest.TestCase):
             process_type="manual MIG", production_quantity=1)
         self.project = FxdProject.from_product(self.product, self.annotations)
 
-    def test_project_v2_save_and_v1_load_compatibility(self):
+    def test_project_v2_save_and_true_v1_load_compatibility(self):
         with tempfile.TemporaryDirectory() as directory:
             path = self.project.save(Path(directory) / "fixture.fxd.json")
             payload = json.loads(path.read_text())
             self.assertEqual(payload["schema_version"], 2)
             self.assertEqual(FxdProject.load(path).product.source_sha256, self.product.source_sha256)
             payload["format"] = "fxd-neutral-project-v1"
+            payload.pop("schema_version")
             legacy = Path(directory) / "legacy.fxd.json"
             legacy.write_text(json.dumps(payload))
             self.assertEqual(FxdProject.load(legacy).revision_id, self.project.revision_id)
@@ -48,6 +61,31 @@ class OperationsTests(unittest.TestCase):
             with self.assertRaises(ExportError):
                 export_project_package(self.project, directory)
             self.assertEqual(list(Path(directory).iterdir()), [])
+
+    def test_large_legally_shareable_assembly_has_a_measured_budget(self):
+        performance = _load_script("fxd_performance_budget", ROOT / "scripts" / "performance_budget.py")
+        result = performance.measure()
+        self.assertGreaterEqual(result["components"], performance.INSTANCE_COUNT)
+        self.assertEqual(result["status"], "pass")
+        self.assertEqual(result["fixture"], "generated legally shareable large_synthetic_assembly.step")
+
+    def test_release_manifest_only_hashes_explicit_reviewed_artifacts(self):
+        manifest_script = _load_script("fxd_release_manifest", ROOT / "scripts" / "release-manifest.py")
+        with tempfile.TemporaryDirectory(dir=ROOT) as directory:
+            temp_root = Path(directory)
+            artifact = temp_root / "fxd-app.zip"
+            artifact.write_bytes(b"reviewed-build")
+            private = temp_root / ".fxd" / "customer.step"
+            private.parent.mkdir()
+            private.write_bytes(b"private")
+            output = temp_root / "manifest.json"
+            relative_artifact = artifact.relative_to(ROOT).as_posix()
+            manifest = manifest_script.build_manifest("0.1.0", output, [relative_artifact], root=ROOT)
+            self.assertEqual(list(manifest["files"]), [relative_artifact])
+            self.assertFalse(manifest["production_approval"])
+            with self.assertRaises(ValueError):
+                manifest_script.build_manifest(
+                    "0.1.0", output, [private.relative_to(ROOT).as_posix()], root=ROOT)
 
 
 if __name__ == "__main__":
