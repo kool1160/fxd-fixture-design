@@ -5,11 +5,12 @@ This document is the authoritative short-form handoff for continuing FXD strateg
 ## Current repository state
 
 - Repository: `kool1160/fxd-fixture-design`
-- Current `main`: `94ae592b29a6983953e5965d3b78c11d5d92e6a6`
+- Current `main`: `31b7945ab50cde14280bea6e341ce4010a4a8057`
 - Milestones 1–18 are complete.
 - Milestone 18 merged in PR #29 after local Windows validation: 91 tests passed, real OCP kernel proof passed, and backlog validation passed.
 - Duplicate Milestone 18 PR #31 was closed without merge.
 - Roadmap PR #38 is merged and defines Milestones 21–26 in `docs/ROADMAP_QUEUE.md`.
+- `AGENTS.md` now explicitly governs the transition from `BACKLOG.md` through Milestone 20 into `docs/ROADMAP_QUEUE.md` for Milestones 21–26.
 - Issues #32–#37 track Milestones 21–26.
 
 ## Active milestone
@@ -20,7 +21,7 @@ Remote branch:
 
 `milestone-19-weld-fixture-automation-workflow`
 
-The branch is currently aligned with `main` at `94ae592b29a6983953e5965d3b78c11d5d92e6a6` and has no remote Milestone 19 implementation commits yet.
+The branch must be aligned with current `main` before Foreman starts and currently has no remote Milestone 19 implementation commits.
 
 ## Existing foundation that must not be duplicated
 
