@@ -53,6 +53,9 @@ class FixtureParameters:
     manufacturing_allowance: float = 1.0
     locator_height: float = 12.0
     locator_wall: float = 8.0
+    locator_type: str = "round_pin"
+    clamp_choice: str = "standard_clamp"
+    fit: str = "nominal"
 
     def __post_init__(self) -> None:
         values = (self.base_margin, self.base_thickness, self.support_width,
@@ -63,6 +66,10 @@ class FixtureParameters:
             raise FixtureGenerationError("fixture dimensions must be finite and non-negative")
         if self.base_thickness == 0 or self.support_width == 0 or self.support_depth == 0:
             raise FixtureGenerationError("base and support dimensions must be positive")
+        if self.locator_type not in {"round_pin", "relieved_locator"}:
+            raise FixtureGenerationError("unsupported locator type")
+        if not self.clamp_choice or not self.fit:
+            raise FixtureGenerationError("clamp choice and fit are required")
 
 
 @dataclass(frozen=True)
