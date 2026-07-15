@@ -8,8 +8,10 @@ All AI coding agents working on FXD must read and follow, in order:
 4. `docs/ARCHITECTURE.md`
 5. `docs/ENGINEERING_TEAM.md`
 6. `BACKLOG.md`
+7. `docs/ROADMAP_QUEUE.md`
+8. `docs/STRATEGY_HANDOFF.md`
 
-The Engineering Constitution is the highest-priority engineering standard. Product Direction governs what FXD is becoming. The Engineering Team charter defines discipline ownership and collaboration. The Backlog controls implementation order.
+The Engineering Constitution is the highest-priority engineering standard. Product Direction governs what FXD is becoming. The Engineering Team charter defines discipline ownership and collaboration. `BACKLOG.md` controls implementation order through Milestone 20. After Milestone 20, the governed implementation order continues in `docs/ROADMAP_QUEUE.md`. `docs/STRATEGY_HANDOFF.md` records the current cross-chat repository and workflow state but does not override either milestone queue.
 
 ## Product identity
 
