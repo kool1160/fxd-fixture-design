@@ -288,3 +288,21 @@ These records are display and selection evidence only; they do not replace
 B-Rep validation or imply production approval. The pinned OCP runtime is not
 available locally, so real-kernel acceptance and release claims remain pending
 GitHub Actions evidence.
+
+## 2026-07-15 — Milestone 18 edit-regenerate-revalidate workflow
+
+FXD now exposes a restricted `FeatureEdit` command model for moving, resizing,
+suppressing, restoring, replacing, and parameter-editing supported fixture
+features. Each material edit regenerates the active objective from immutable
+source inputs, creates a revision identity, reruns deterministic validation,
+and scopes review approval to that revision. Original and revised concepts are
+retained for comparison and revision restoration; project persistence records
+the edit history and source remains byte-for-byte unchanged. Unsupported edit
+operations, feature identities, replacement kinds, and parameters fail closed.
+
+Evidence: project regression coverage passes for source immutability, revision
+retention/restoration, approval revocation, parameter regeneration, round-trip
+persistence, and unsupported-edit rejection. This remains engineering-review
+evidence only; it does not certify fixture safety or production approval.
+Real-kernel acceptance remains dependent on the existing GitHub Actions
+evidence boundary.

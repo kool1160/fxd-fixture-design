@@ -60,6 +60,8 @@ class FxdApp:
 
         ttk.Button(side, text="Suppress / unsuppress feature",
                    command=self.suppress_feature).pack(fill="x", pady=(8, 2))
+        ttk.Button(side, text="Edit supported feature",
+                   command=self.edit_feature).pack(fill="x", pady=2)
         ttk.Button(side, text="Record correction", command=self.correct).pack(fill="x", pady=2)
         ttk.Button(side, text="Approve for engineering review",
                    command=lambda: self.decide("approve_for_review")).pack(fill="x", pady=(8, 2))
@@ -230,6 +232,40 @@ class FxdApp:
                 self.refresh("Correction recorded; geometry and validation evidence regenerated.")
             except (ProjectFormatError, ValueError, RuntimeError) as exc:
                 messagebox.showerror("Correction rejected", str(exc))
+
+    def edit_feature(self) -> None:
+        """Expose only restricted neutral edit commands to the review UI."""
+        if not self.project:
+            return
+        choices = ", ".join(feature.identity for feature in self.project.active.fixture.features)
+        identity = simpledialog.askstring("Feature", f"Feature identity:\n{choices}")
+        operation = simpledialog.askstring(
+            "Edit operation", "Operation: move, resize, replace, restore, parameters")
+        if not identity or not operation:
+            return
+        values: dict[str, object] = {}
+        if operation == "move":
+            raw = simpledialog.askstring("Move", "dx,dy,dz in mm:")
+            if raw:
+                values.update(zip(("dx", "dy", "dz"), (float(item.strip()) for item in raw.split(","))))
+        elif operation == "resize":
+            raw = simpledialog.askstring("Resize", "xmin,ymin,zmin,xmax,ymax,zmax in mm:")
+            if raw:
+                values.update(zip(("x_min", "y_min", "z_min", "x_max", "y_max", "z_max"),
+                                  (float(item.strip()) for item in raw.split(","))))
+        elif operation == "replace":
+            values["kind"] = simpledialog.askstring("Replacement", "Supported kind:") or ""
+        elif operation == "parameters":
+            key = simpledialog.askstring("Parameter", "Supported parameter name:")
+            value = simpledialog.askstring("Parameter", "Value:")
+            if key and value:
+                values[key] = float(value) if key not in {"fit", "locator_type", "clamp_choice"} else value
+        try:
+            self.project = self.project.edit_feature(identity, operation, **values)
+            self._rebuild_kernel_geometry()
+            self.refresh(f"{operation} regenerated revision {self.project.revision}; validation rerun.")
+        except (ProjectFormatError, ValueError, RuntimeError) as exc:
+            messagebox.showerror("Feature edit rejected", str(exc))
 
     def decide(self, action: str) -> None:
         if not self.project:

@@ -100,6 +100,39 @@ class ProjectPersistenceTests(unittest.TestCase):
             with self.assertRaises(ProjectFormatError):
                 FxdProject.load(path)
 
+    def test_typed_edit_creates_revision_and_retains_original(self):
+        source_bytes = self.project.product.source_bytes
+        original = self.project.active
+        revised = self.project.move_feature("support-1", Vec3(1, 2, 3))
+        self.assertEqual(revised.revision, 1)
+        self.assertEqual(revised.parent_revision, 0)
+        self.assertNotEqual(revised.active_concept, original.identity)
+        self.assertIn(original.identity, {item.identity for item in revised.concepts})
+        self.assertEqual(revised.product.source_bytes, source_bytes)
+        self.assertEqual(revised.active_validation.evidence_digest,
+                         revised.active_validation.evidence_digest)
+        restored = revised.restore_revision(0)
+        self.assertEqual(restored.active_concept, original.identity)
+        self.assertEqual(restored.product.source_sha256, self.project.product.source_sha256)
+
+    def test_parameter_edit_regenerates_and_approval_is_revoked(self):
+        valid = ValidationResult(
+            "fxd-validation-v1", self.project.active.identity,
+            self.project.product.source_sha256, "mm", "valid", (), "valid-evidence")
+        with patch("fxd_geometry.project.validate_fixture_concept", return_value=valid):
+            approved = self.project.decide("approve_for_review", "engineering review")
+            self.assertTrue(approved.approved_for_review)
+            revised = approved.edit_parameters("baseplate", base_thickness=14.0)
+        self.assertFalse(revised.approved_for_review)
+        self.assertEqual(revised.active.fixture.parameters.base_thickness, 14.0)
+        self.assertNotEqual(revised.active_concept, approved.active_concept)
+
+    def test_unsupported_edit_fails_closed(self):
+        with self.assertRaisesRegex(ProjectFormatError, "unsupported feature edit"):
+            self.project.edit_feature("support-1", "free_form_mesh")
+        with self.assertRaisesRegex(ProjectFormatError, "unsupported fixture parameters"):
+            self.project.edit_parameters("support-1", secret_geometry="mesh")
+
 
 if __name__ == "__main__":
     unittest.main()
