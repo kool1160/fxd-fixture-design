@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import math
+import logging
 import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog, ttk
@@ -22,6 +23,9 @@ from fxd_geometry import (
 )
 from fxd_geometry.project import FxdProject, ProjectFormatError, SUPPORTED_LAYERS
 from fxd_geometry.operations import ProjectRecovery, StructuredLog, export_project_package
+
+
+logger = logging.getLogger("fxd.app")
 
 REVIEW_LAYERS = ("locators", "supports", "stops", "clamps")
 
@@ -123,15 +127,15 @@ class FxdApp:
                        "Imported immutable STEP; real-kernel display is unavailable and review remains provisional.")
             self.refresh(message)
         except Exception as neutral_error:
+            logger.exception("complete neutral STEP import traceback for %s", source.name)
             try:
                 self.workbench_document = load_step_for_workbench(source)
                 self.project = None
                 self.project_path = None
                 self.kernel = OcpKernel()
                 self.root.title(f"FXD — {source.name} · OCP engineering review")
-                mode = "OCP proof" if self.workbench_document.provisional else "OCP B-Rep"
                 self.status.set(
-                    f"Loaded {self.workbench_document.source_name}: {mode}, "
+                    f"Loaded {self.workbench_document.source_name}: OCP B-Rep, "
                     f"{self.workbench_document.component_count} OCP components, "
                     f"SHA-256 {self.workbench_document.source_sha256[:12]}."
                 )
@@ -217,6 +221,7 @@ class FxdApp:
         except KernelUnavailable:
             return
         except Exception as exc:
+            logger.exception("complete workbench geometry traceback for %s", self.project.product.source_name)
             self.status.set(f"Real-kernel evidence unavailable; provisional view only ({exc}).")
 
     def _rebuild_review_geometry(self) -> None:
@@ -370,7 +375,7 @@ class FxdApp:
                 self._render_workbench_document()
                 self.canvas.create_text(
                     12, 12, anchor="nw", fill="#9bd3ff",
-                    text=(f"{'REAL OCP PROOF' if self.workbench_document.provisional else 'REAL OCP'} · "
+                    text=(f"REAL OCP · "
                           f"{self.workbench_document.source_name} · "
                           f"{self.workbench_document.component_count} components · "
                           "engineering review only"),

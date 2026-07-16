@@ -3,11 +3,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import hashlib
+import logging
 from importlib.util import find_spec
 from pathlib import Path
 import re
 import tempfile
 from typing import Protocol
+
+
+logger = logging.getLogger("fxd.kernel")
 
 
 class KernelUnavailable(RuntimeError):
@@ -159,12 +163,19 @@ class OcpKernel:
             temp.write(data)
             temp.close()
             reader = STEPControl_Reader()
-            if reader.ReadFile(temp.name) != IFSelect_RetDone:
+            read_status = reader.ReadFile(temp.name)
+            logger.info("STEP read status=%s", read_status)
+            if read_status != IFSelect_RetDone:
                 raise KernelOperationError("OCCT could not read STEP source")
-            if reader.TransferRoots() <= 0:
+            root_count = int(reader.NbRootsForTransfer())
+            transferred_roots = int(reader.TransferRoots())
+            logger.info("STEP roots=%d transferred_roots=%d", root_count, transferred_roots)
+            if transferred_roots <= 0:
                 raise KernelOperationError("STEP source contains no transferable roots")
             shape = reader.OneShape()
+            logger.info("STEP resulting shape_type=%s null=%s", shape.ShapeType(), shape.IsNull())
             if shape.IsNull():
+                logger.error("STEP null-shape detection")
                 raise KernelOperationError("STEP import produced a null shape")
             return shape
         finally:
@@ -192,7 +203,9 @@ class OcpKernel:
             app.NewDocument(TCollection_ExtendedString("MDTV-XCAF"), document)
             reader = STEPCAFControl_Reader()
             reader.SetNameMode(True)
-            if reader.ReadFile(temporary.name) != IFSelect_RetDone:
+            read_status = reader.ReadFile(temporary.name)
+            logger.info("STEP assembly read status=%s", read_status)
+            if read_status != IFSelect_RetDone:
                 raise KernelOperationError("OCCT could not read STEP assembly")
             if not reader.Transfer(document):
                 raise KernelOperationError("OCCT could not transfer STEP assembly")
@@ -365,6 +378,7 @@ class OcpKernel:
         BRepMesh_IncrementalMesh(model, linear_deflection_mm, False,
                                  angular_deflection_rad, True)
         faces = self._subshapes(model, "face")
+        logger.info("STEP tessellation face_count=%d", len(faces))
         result = []
         for face in faces:
             # Resolve the reference from the individual face rather than
@@ -385,11 +399,17 @@ class OcpKernel:
             triangles = []
             for index in range(1, triangulation.NbTriangles() + 1):
                 triangle = triangulation.Triangle(index)
-                values = (int(triangle.Value(1)), int(triangle.Value(2)), int(triangle.Value(3)))
+                raw_values = (int(triangle.Value(1)), int(triangle.Value(2)), int(triangle.Value(3)))
+                if any(value < 1 or value > len(vertices) for value in raw_values):
+                    raise KernelOperationError(
+                        f"tessellation triangle index out of range: {raw_values} for {len(vertices)} vertices"
+                    )
+                values = tuple(value - 1 for value in raw_values)
                 if face.Orientation() == TopAbs_REVERSED:
                     values = (values[0], values[2], values[1])
                 triangles.append(values)
             result.append(KernelTriangleMesh(record.reference, tuple(vertices), tuple(triangles)))
+        logger.info("STEP tessellation triangle_count=%d", sum(len(mesh.triangles) for mesh in result))
         return tuple(result)
 
     def edge_records(self, model: object) -> tuple[KernelEdgeRecord, ...]:

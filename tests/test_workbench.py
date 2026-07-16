@@ -2,7 +2,7 @@ import unittest
 import tempfile
 from pathlib import Path
 
-from fxd_geometry import OcpKernel, load_step_for_workbench
+from fxd_geometry import KernelOperationError, OcpKernel, StepImportError, import_step, load_step_for_workbench
 from fxd_app import FxdApp
 
 
@@ -12,21 +12,43 @@ class WorkbenchTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             source = Path(directory) / "real_box.step"
             source.write_bytes(kernel.export_step(kernel.make_box((0, 0, 0), (40, 30, 20))))
-            document = load_step_for_workbench(source, kernel=kernel)
+            with self.assertLogs(level="INFO") as logs:
+                document = load_step_for_workbench(source, kernel=kernel)
             self.assertEqual(document.source_name, source.name)
             self.assertEqual(document.source_bytes, source.read_bytes())
+        diagnostic_text = "\n".join(logs.output)
+        self.assertIn("STEP read status=", diagnostic_text)
+        self.assertIn("STEP roots=", diagnostic_text)
+        self.assertIn("face_count=", diagnostic_text)
+        self.assertIn("triangle_count=", diagnostic_text)
         self.assertEqual(document.source_name, source.name)
         self.assertEqual(document.units, "mm")
         self.assertGreater(document.component_count, 0)
         self.assertTrue(document.meshes)
 
-    def test_synthetic_fixture_uses_explicit_real_ocp_proof_fallback(self):
+    def test_synthetic_fixture_is_neutral_metadata_not_ordinary_brep(self):
         source = Path(__file__).parent / "fixtures" / "synthetic_assembly.step"
-        document = load_step_for_workbench(source, kernel=OcpKernel())
-        self.assertTrue(document.provisional)
-        self.assertGreater(document.component_count, 0)
-        self.assertTrue(document.meshes)
-        self.assertEqual(document.source_bytes, source.read_bytes())
+        self.assertIsNotNone(import_step(source))
+        with self.assertLogs("fxd.workbench", level="ERROR") as logs:
+            with self.assertRaises(KernelOperationError):
+                load_step_for_workbench(source, kernel=OcpKernel())
+        self.assertIn("complete STEP import traceback", "\n".join(logs.output))
+
+    def test_generated_compound_and_multiple_root_step_use_transferred_geometry(self):
+        kernel = OcpKernel()
+        shape = kernel.compound((kernel.make_box((0, 0, 0), (10, 10, 10)),
+                                 kernel.make_box((20, 0, 0), (30, 10, 10))))
+        data = kernel.export_step(shape)
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "compound.step"
+            source.write_bytes(data)
+            document = load_step_for_workbench(source, kernel=kernel)
+        counts = kernel.topology_counts(document.shape)
+        self.assertEqual(counts.solids, 2)
+        self.assertGreater(len(document.meshes), 0)
+        self.assertGreater(sum(len(mesh.triangles) for mesh in document.meshes), 0)
+        with self.assertRaises(StepImportError):
+            import_step(data.decode("utf-8"))
 
     def test_camera_controls_have_deterministic_standard_views_and_fit(self):
         app = FxdApp.__new__(FxdApp)

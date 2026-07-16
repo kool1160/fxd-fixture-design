@@ -10,7 +10,9 @@ Choose **Import STEP** and select a `.step` or `.stp` file. FXD first tries
 the neutral product contract for the full review workflow. When a normal
 vendor STEP file is outside that small metadata contract, the workbench uses
 the real OCP kernel directly, retains the original source bytes and SHA-256,
-imports the B-Rep, and displays its tessellated faces in the 3D canvas.
+imports the B-Rep, and displays its tessellated faces in the 3D canvas. The
+repository's metadata-only synthetic fixture is intentionally rejected by the
+ordinary OCP path; it is not replaced with generated geometry.
 
 Drag on the canvas to rotate the view. The direct viewer is intentionally an
 engineering-review entry point: it does not modify customer CAD, infer a

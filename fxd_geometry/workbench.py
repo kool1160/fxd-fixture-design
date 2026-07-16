@@ -5,8 +5,13 @@ from dataclasses import dataclass
 from hashlib import sha256
 from pathlib import Path
 
-from .kernel import KernelAssembly, KernelOperationError, KernelTriangleMesh, OcpKernel
-from .step_import import import_step
+import logging
+
+from .kernel import KernelAssembly, KernelOperationError, KernelTriangleMesh
+from .review_kernel import OcpKernel
+
+
+logger = logging.getLogger("fxd.workbench")
 
 
 @dataclass(frozen=True)
@@ -19,7 +24,6 @@ class WorkbenchDocument:
     shape: object
     assembly: KernelAssembly
     meshes: tuple[KernelTriangleMesh, ...]
-    provisional: bool = False
 
     @property
     def units(self) -> str:
@@ -43,29 +47,11 @@ def load_step_for_workbench(source: str | Path | bytes, *, kernel: OcpKernel | N
         raise FileNotFoundError(f"STEP source does not exist: {path}")
     data = path.read_bytes() if path is not None else source
     active_kernel = kernel or OcpKernel()
-    provisional = False
     try:
         shape = active_kernel.import_step(data)
-    except KernelOperationError as real_import_error:
-        try:
-            product = import_step(
-                data.decode("utf-8"),
-                source_name=source_name or (path.name if path else "<memory>"),
-            )
-        except Exception:
-            raise real_import_error
-        shapes = tuple(
-            active_kernel.make_box(
-                (component.bounds.minimum.x, component.bounds.minimum.y, component.bounds.minimum.z),
-                (component.bounds.maximum.x, component.bounds.maximum.y, component.bounds.maximum.z),
-            )
-            for component in product.components
-            if component.bodies
-        )
-        if not shapes:
-            raise real_import_error
-        shape = active_kernel.compound(shapes)
-        provisional = True
+    except KernelOperationError:
+        logger.exception("complete STEP import traceback for %s", source_name or (path.name if path else "<bytes>"))
+        raise
     try:
         assembly = active_kernel.import_step_assembly(data)
     except KernelOperationError:
@@ -80,5 +66,5 @@ def load_step_for_workbench(source: str | Path | bytes, *, kernel: OcpKernel | N
         raise ValueError("STEP source produced no displayable faces")
     return WorkbenchDocument(
         source_name or (path.name if path else "<memory>"), sha256(data).hexdigest(),
-        data, shape, assembly, meshes, provisional,
+        data, shape, assembly, meshes,
     )
