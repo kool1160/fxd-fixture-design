@@ -53,6 +53,10 @@ from .component_geometry import (ComponentClassification, ComponentExport, Compo
                                  ManufacturingFinding, TabSlotSpec, build_manufacturing_export_package,
                                  generate_manufacturing_assembly, generate_manufacturing_assembly_for_product,
                                  validate_manufacturing_assembly, write_manufacturing_export_package)
+from .drawings import (APPROVAL_TEXT, NOT_RELEASED_TEXT, BomEntry, DrawingAnnotation,
+                       DrawingDimension, DrawingFinding, DrawingPackage, DrawingPackageError,
+                       DrawingSheet, DrawingView, HoleTableRow, RevisionBlock,
+                       generate_drawing_package, validate_drawing_package, write_drawing_package)
 
 
 def require_real_kernel() -> RealKernel:
@@ -85,3 +89,7 @@ __all__ += ["ComponentClassification", "ComponentExport", "ComponentGeometryErro
             "TabSlotSpec", "build_manufacturing_export_package", "generate_manufacturing_assembly",
             "generate_manufacturing_assembly_for_product", "validate_manufacturing_assembly",
             "write_manufacturing_export_package"]
+__all__ += ["APPROVAL_TEXT", "NOT_RELEASED_TEXT", "BomEntry", "DrawingAnnotation", "DrawingDimension",
+            "DrawingFinding", "DrawingPackage", "DrawingPackageError", "DrawingSheet", "DrawingView",
+            "HoleTableRow", "RevisionBlock", "generate_drawing_package", "validate_drawing_package",
+            "write_drawing_package"]

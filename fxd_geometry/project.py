@@ -119,6 +119,7 @@ class FxdProject:
     revisions: tuple[ProjectRevision, ...] = ()
     approved_revision: str | None = None
     placement: PlacementPlan | None = None
+    drawing_intent: dict[str, object] | None = None
 
     def __post_init__(self) -> None:
         if self.annotations.source_sha256 != self.product.source_sha256:
@@ -404,6 +405,7 @@ class FxdProject:
             "approved_revision": self.approved_revision,
             "annotations": self.annotations.to_dict(),
             "placement": self.placement.to_dict() if self.placement else None,
+            "drawing_intent": self.drawing_intent,
             "validations": validations,
             "concept_corrections": {
                 concept.identity: [correction.__dict__ for correction in concept.corrections]
@@ -509,7 +511,8 @@ class FxdProject:
                 for item in data.get("revisions", []))
             restored = replace(project, decisions=decisions,
                                revisions=saved_revisions or project.revisions,
-                               approved_revision=data.get("approved_revision"))
+                               approved_revision=data.get("approved_revision"),
+                               drawing_intent=data.get("drawing_intent"))
             if restored.approved_revision is not None and restored.approved_revision != restored.revision_id:
                 raise ProjectFormatError("saved approval does not belong to the restored revision")
             return restored
