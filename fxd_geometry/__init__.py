@@ -48,6 +48,11 @@ from .placement import (DatumCandidate, DatumCandidateScore, Placement, Placemen
                         PlacementError, PlacementFinding, PlacementParameters, PlacementPlan,
                         PlacementRole, compare_placement_plans, generate_placement_plan,
                         rank_datum_candidates, validate_placement_plan)
+from .component_geometry import (ComponentClassification, ComponentExport, ComponentGeometryError,
+                                 ComponentType, HoleSpec, ManufacturingAssembly, ManufacturingComponent,
+                                 ManufacturingFinding, TabSlotSpec, build_manufacturing_export_package,
+                                 generate_manufacturing_assembly, generate_manufacturing_assembly_for_product,
+                                 validate_manufacturing_assembly, write_manufacturing_export_package)
 
 
 def require_real_kernel() -> RealKernel:
@@ -75,3 +80,8 @@ __all__ += ["DatumCandidate", "DatumCandidateScore", "Placement", "PlacementAlte
             "PlacementFinding", "PlacementParameters", "PlacementPlan", "PlacementRole",
             "compare_placement_plans", "generate_placement_plan", "rank_datum_candidates",
             "validate_placement_plan"]
+__all__ += ["ComponentClassification", "ComponentExport", "ComponentGeometryError", "ComponentType",
+            "HoleSpec", "ManufacturingAssembly", "ManufacturingComponent", "ManufacturingFinding",
+            "TabSlotSpec", "build_manufacturing_export_package", "generate_manufacturing_assembly",
+            "generate_manufacturing_assembly_for_product", "validate_manufacturing_assembly",
+            "write_manufacturing_export_package"]
