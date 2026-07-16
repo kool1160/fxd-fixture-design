@@ -538,12 +538,22 @@ def generate_manufacturing_assembly_for_product(product: ProductModel, concept: 
 
 
 def build_manufacturing_export_package(assembly: ManufacturingAssembly,
-                                       validation: object | None = None) -> dict[str, bytes | str]:
+                                       validation: object | None = None,
+                                       drawing_package: object | None = None) -> dict[str, bytes | str]:
     """Return a deterministic review-only component export package."""
     if assembly.blocked:
         raise ComponentGeometryError("invalid manufacturing assembly cannot be exported")
     if validation is None or getattr(validation, "blocked", True):
         raise ComponentGeometryError("valid deterministic fixture validation is required before export")
+    if drawing_package is not None:
+        from .drawings import validate_drawing_package
+        drawing_findings = validate_drawing_package(assembly, drawing_package, validation)
+        if getattr(drawing_package, "blocked", True) or any(item.severity == "error" for item in drawing_findings):
+            raise ComponentGeometryError("invalid drawing package cannot be exported")
+        if (getattr(drawing_package, "source_sha256", None) != assembly.source_sha256 or
+                getattr(drawing_package, "concept_identity", None) != assembly.concept_identity or
+                getattr(drawing_package, "manufacturing_evidence_digest", None) != assembly.evidence_digest):
+            raise ComponentGeometryError("drawing package provenance does not match manufacturing assembly")
     files: dict[str, bytes | str] = {
         "manifest.json": json.dumps(assembly.to_dict() | {"review_status": "ENGINEERING_REVIEW_REQUIRED"},
                                      indent=2, sort_keys=True) + "\n",
@@ -553,6 +563,12 @@ def build_manufacturing_export_package(assembly: ManufacturingAssembly,
         files[item.step_filename] = item.step_bytes
         if item.dxf_filename and item.dxf_bytes is not None:
             files[item.dxf_filename] = item.dxf_bytes
+    if drawing_package is not None:
+        import json as _json
+        files["fixture-drawings.pdf"] = drawing_package.pdf_bytes
+        files["drawing-manifest.json"] = _json.dumps(drawing_package.manifest_dict(), indent=2, sort_keys=True) + "\n"
+        files["drawing-bom.json"] = _json.dumps([item.to_dict() for item in drawing_package.bom],
+                                                 indent=2, sort_keys=True) + "\n"
     return dict(sorted(files.items()))
 
 

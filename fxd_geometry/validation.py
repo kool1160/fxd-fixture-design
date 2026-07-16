@@ -132,6 +132,7 @@ def validate_fixture_concept(product: ProductModel, concept: CompleteFixtureConc
                              tooling: ToolingLibrary | None = None,
                              manufacturing: ManufacturingGeometry | None = None,
                              manufacturing_assembly: ManufacturingAssembly | None = None,
+                             drawing_package: object | None = None,
                              kernel: RealKernel | None = None,
                              minimum_clearance_mm: float = 0.5) -> ValidationResult:
     """Run available deterministic gates; scores and AI cannot override them."""
@@ -198,6 +199,13 @@ def validate_fixture_concept(product: ProductModel, concept: CompleteFixtureConc
                                  item.evidence + tuple(f"component={value}" for value in item.component_identities),
                                  item.assumptions)
                         for item in manufacturing_assembly.findings)
+    if drawing_package is not None:
+        if (getattr(drawing_package, "source_sha256", None) != product.source_sha256
+                or getattr(drawing_package, "concept_identity", None) != concept.identity):
+            findings.append(_finding("drawing_identity_mismatch", "error", "drawings",
+                                     "drawing package does not match the validated concept source"))
+        findings.extend(_finding(item.code, item.severity, "drawings", item.message, item.evidence)
+                        for item in getattr(drawing_package, "findings", ()))
     tooling = tooling or generic_tooling_library()
     if not any(feature.kind == "clamp_mount" for feature in concept.fixture.features):
         findings.append(_finding("clamp_evidence_missing", "error", "clamp", "fixture concept contains no clamp mount"))
