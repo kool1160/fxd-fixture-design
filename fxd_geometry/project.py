@@ -19,6 +19,7 @@ from .product_model import ProductModel
 from .step_import import import_step
 from .validation import ValidationResult, validate_fixture_concept
 from .structure import generate_structural_assembly
+from .placement import PlacementPlan
 
 
 class ProjectFormatError(ValueError):
@@ -117,6 +118,7 @@ class FxdProject:
     edit_log: tuple[FixtureEdit, ...] = ()
     revisions: tuple[ProjectRevision, ...] = ()
     approved_revision: str | None = None
+    placement: PlacementPlan | None = None
 
     def __post_init__(self) -> None:
         if self.annotations.source_sha256 != self.product.source_sha256:
@@ -133,12 +135,13 @@ class FxdProject:
             raise ProjectFormatError("approval does not belong to the current revision")
 
     @classmethod
-    def from_product(cls, product: ProductModel, annotations: EngineeringAnnotations) -> "FxdProject":
+    def from_product(cls, product: ProductModel, annotations: EngineeringAnnotations,
+                     placement: PlacementPlan | None = None) -> "FxdProject":
         annotations.validate_references(product)
-        concepts = generate_fixture_concepts(product, annotations).concepts
+        concepts = generate_fixture_concepts(product, annotations, placement=placement).concepts
         if not concepts:
             raise ProjectFormatError("fixture generation produced no concepts")
-        return cls(product, annotations, concepts, concepts[0].identity)._record_revision(None)
+        return cls(product, annotations, concepts, concepts[0].identity, placement=placement)._record_revision(None)
 
     @property
     def active(self) -> CompleteFixtureConcept:
@@ -205,7 +208,7 @@ class FxdProject:
             except (TypeError, ValueError) as exc:
                 raise ProjectFormatError(f"invalid value for fixture parameter {edit.target!r}") from exc
 
-        generated = generate_fixture_concepts(self.product, self.annotations, params).concepts
+        generated = generate_fixture_concepts(self.product, self.annotations, params, placement=self.placement).concepts
         result: list[CompleteFixtureConcept] = []
         for concept in generated:
             features = list(concept.fixture.features)
@@ -400,6 +403,7 @@ class FxdProject:
                           for item in self.revisions],
             "approved_revision": self.approved_revision,
             "annotations": self.annotations.to_dict(),
+            "placement": self.placement.to_dict() if self.placement else None,
             "validations": validations,
             "concept_corrections": {
                 concept.identity: [correction.__dict__ for correction in concept.corrections]
@@ -465,7 +469,8 @@ class FxdProject:
             product = import_step(raw.decode("utf-8"), source_name=data["source_name"])
             if product.source_sha256 != data["source_sha256"]:
                 raise ProjectFormatError("project source hash does not match embedded source")
-            project = cls.from_product(product, cls._annotations(data["annotations"], product))
+            placement = PlacementPlan.from_dict(data["placement"]) if data.get("placement") else None
+            project = cls.from_product(product, cls._annotations(data["annotations"], product), placement=placement)
             for raw_edit in data.get("edit_log", []):
                 edit = FixtureEdit(raw_edit["operation"], raw_edit["target"],
                                    raw_edit.get("value"), raw_edit.get("reason", ""))

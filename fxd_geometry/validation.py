@@ -14,6 +14,7 @@ from .manufacturing import ManufacturingGeometry, ManufacturingSolid
 from .product_model import ProductModel
 from .tooling import ToolingLibrary, generic_tooling_library
 from .weld_rules import WeldRuleAnalysis
+from .placement import validate_placement_plan
 
 VALIDATION_VERSION = "fxd-validation-v1"
 
@@ -180,6 +181,11 @@ def validate_fixture_concept(product: ProductModel, concept: CompleteFixtureConc
                 findings.append(_finding(item.code, item.severity, "structure", item.message,
                                          item.evidence + tuple(f"member={value}" for value in item.member_identities),
                                          item.assumptions))
+    if concept.placement is not None:
+        findings.extend(_finding(item.code, item.severity, "placement", item.message,
+                                 item.evidence + tuple(f"placement={value}" for value in item.placement_identities),
+                                 item.assumptions)
+                        for item in validate_placement_plan(product, concept.placement))
     tooling = tooling or generic_tooling_library()
     if not any(feature.kind == "clamp_mount" for feature in concept.fixture.features):
         findings.append(_finding("clamp_evidence_missing", "error", "clamp", "fixture concept contains no clamp mount"))

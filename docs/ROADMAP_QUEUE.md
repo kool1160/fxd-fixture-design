@@ -15,7 +15,11 @@ This roadmap extends the product beyond the current Phase 3 backlog. It preserve
 
 ## Milestone 21 — Generate complete fixture structures
 
-**Status:** Pending
+**Status:** Complete
+
+Implemented and merged in PR #43. The structural layer remains an editable,
+traceable engineering-review proof layer; it does not claim structural adequacy
+or production approval.
 
 Generate coherent fixture assemblies around imported customer products instead of isolated fixture primitives.
 
@@ -33,7 +37,11 @@ Acceptance criteria:
 
 ## Milestone 22 — Optimize locator, support, and clamp placement
 
-**Status:** Pending
+**Status:** Complete
+
+Implemented as a deterministic placement proof layer. Kernel-derived surface
+evidence, final B-Rep tooling geometry, and qualified human approval remain
+required for production use.
 
 Build the serious engineering placement engine that turns locating, distortion, access, tooling, and production intent into practical fixture arrangements.
 

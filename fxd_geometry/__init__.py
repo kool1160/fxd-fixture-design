@@ -44,6 +44,10 @@ from .structure import (StructuralAssembly, StructuralComparison, StructuralFind
                          StructuralStrategy, compare_structural_concepts,
                          generate_structural_assembly, select_structural_strategy,
                          validate_structural_assembly)
+from .placement import (DatumCandidate, DatumCandidateScore, Placement, PlacementAlternative,
+                        PlacementError, PlacementFinding, PlacementParameters, PlacementPlan,
+                        PlacementRole, compare_placement_plans, generate_placement_plan,
+                        rank_datum_candidates, validate_placement_plan)
 
 
 def require_real_kernel() -> RealKernel:
@@ -67,3 +71,7 @@ __all__ += ["DiagnosticEvent", "OperationsError", "ProjectRecovery", "Structured
 __all__ += ["StructuralAssembly", "StructuralComparison", "StructuralFinding", "StructuralGenerationError",
             "StructuralMember", "StructuralParameters", "StructuralStrategy", "compare_structural_concepts",
             "generate_structural_assembly", "select_structural_strategy", "validate_structural_assembly"]
+__all__ += ["DatumCandidate", "DatumCandidateScore", "Placement", "PlacementAlternative", "PlacementError",
+            "PlacementFinding", "PlacementParameters", "PlacementPlan", "PlacementRole",
+            "compare_placement_plans", "generate_placement_plan", "rank_datum_candidates",
+            "validate_placement_plan"]
