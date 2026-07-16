@@ -7,7 +7,7 @@ from fxd_geometry import (
     EngineeringAnnotations, FixtureParameters, StructuralParameters, StructuralStrategy,
     Vec3, compare_structural_concepts, generate_fixture_concepts,
     generate_fixture_primitives, generate_structural_assembly, import_step,
-    select_structural_strategy, validate_structural_assembly,
+    select_structural_strategy, validate_fixture_concept, validate_structural_assembly,
 )
 from fxd_geometry.fixture import FixtureFeature
 from fxd_geometry.project import FxdProject
@@ -76,6 +76,13 @@ class StructuralConceptTests(unittest.TestCase):
         assembly = generate_structural_assembly(self.product, self.annotations, self.fixture)
         self.assertEqual(assembly.source_sha256, self.product.source_sha256)
         self.assertEqual(self.product.source_bytes, Path("tests/fixtures/synthetic_assembly.step").read_bytes())
+
+    def test_validation_rejects_foreign_structural_evidence(self):
+        concept = generate_fixture_concepts(self.product, self.annotations).concepts[0]
+        forged_structure = replace(concept.structure, source_sha256="foreign-source")
+        result = validate_fixture_concept(self.product, replace(concept, structure=forged_structure))
+        self.assertEqual(result.status, "invalid")
+        self.assertIn("structural_identity_mismatch", {item.code for item in result.findings})
 
     def test_alternate_structures_are_comparable_without_overriding_status(self):
         concepts = generate_fixture_concepts(self.product, self.annotations).concepts
