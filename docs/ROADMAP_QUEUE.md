@@ -37,9 +37,9 @@ Acceptance criteria:
 
 ## Milestone 22 — Optimize locator, support, and clamp placement
 
-**Status:** Complete
+**Status:** Pending
 
-Implemented as a deterministic placement proof layer. Kernel-derived surface
+Implementation is complete and under independent PR review. Kernel-derived surface
 evidence, final B-Rep tooling geometry, and qualified human approval remain
 required for production use.
 
