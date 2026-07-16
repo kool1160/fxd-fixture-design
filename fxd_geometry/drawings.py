@@ -472,12 +472,72 @@ def _validate_package_shape(assembly: ManufacturingAssembly, validation: object,
     dimensions = [item.identity for sheet in sheets for item in sheet.dimensions]
     if len(set(dimensions)) != len(dimensions):
         findings.append(DrawingFinding("duplicate_dimension_identity", "error", "drawing dimension identities must be unique"))
-    component_ids = {item.identity for item in assembly.components}
-    if {item.component_identity for item in bom} != component_ids:
-        findings.append(DrawingFinding("bom_coverage_mismatch", "error", "BOM does not cover the manufacturing assembly"))
+    if len({item.item_number for item in bom}) != len(bom):
+        findings.append(DrawingFinding("bom_item_number_duplicate", "error", "BOM item numbers must be unique"))
+    if len({item.component_identity for item in bom}) != len(bom):
+        findings.append(DrawingFinding("bom_component_identity_duplicate", "error", "BOM component identities must be unique"))
+    components = {item.identity: item for item in assembly.components}
+    exports = {item.component_identity: item for item in assembly.exports}
+    if len(exports) != len(assembly.exports):
+        findings.append(DrawingFinding("bom_export_identity_duplicate", "error", "component exports must have unique identities"))
+    component_ids = set(components)
+    bom_ids = {item.component_identity for item in bom}
+    for identity in sorted(component_ids - bom_ids):
+        findings.append(DrawingFinding("bom_component_missing", "error",
+                                       f"manufacturing component {identity} is missing from the BOM"))
+    for identity in sorted(bom_ids - component_ids):
+        findings.append(DrawingFinding("bom_component_orphan", "error",
+                                       f"BOM component {identity} is not in the manufacturing assembly"))
     for item in bom:
+        component = components.get(item.component_identity)
+        export = exports.get(item.component_identity)
+        if component is None:
+            continue
+        if export is None:
+            findings.append(DrawingFinding("bom_export_missing", "error",
+                                           f"missing component export for {item.component_identity}"))
+            continue
+        authoritative = {
+            "part_number": component.part_number,
+            "revision": component.revision,
+            "description": component.description,
+            "classification": component.classification.value,
+            "material": component.material,
+            "thickness_mm": component.thickness_mm,
+            "section_size_mm": tuple(component.section_size_mm),
+            "quantity": component.quantity,
+            "finish": component.finish,
+            "process": component.manufacturing_process,
+            "tooling_identity": component.purchased_tooling_identity,
+            "step_filename": export.step_filename,
+            "dxf_filename": export.dxf_filename,
+        }
+        documented = {
+            "part_number": item.part_number, "revision": item.revision,
+            "description": item.description, "classification": item.classification,
+            "material": item.material, "thickness_mm": item.thickness_mm,
+            "section_size_mm": tuple(item.section_size_mm), "quantity": item.quantity,
+            "finish": item.finish, "process": item.process,
+            "tooling_identity": item.tooling_identity, "step_filename": item.step_filename,
+            "dxf_filename": item.dxf_filename,
+        }
+        codes = {
+            "part_number": "bom_part_number_mismatch", "revision": "bom_revision_mismatch",
+            "description": "bom_description_mismatch", "classification": "bom_classification_mismatch",
+            "material": "bom_material_mismatch", "thickness_mm": "bom_thickness_mismatch",
+            "section_size_mm": "bom_section_size_mismatch", "quantity": "bom_quantity_mismatch",
+            "finish": "bom_finish_mismatch", "process": "bom_process_mismatch",
+            "tooling_identity": "bom_tooling_identity_mismatch",
+            "step_filename": "bom_step_filename_mismatch", "dxf_filename": "bom_dxf_filename_mismatch",
+        }
+        for field, code in codes.items():
+            if documented[field] != authoritative[field]:
+                findings.append(DrawingFinding(code, "error",
+                                               f"BOM field {field} for {item.component_identity} does not match authoritative assembly evidence",
+                                               (f"component={item.component_identity}", f"field={field}")))
         if not item.step_filename:
-            findings.append(DrawingFinding("step_link_missing", "error", f"BOM item {item.component_identity} has no STEP link"))
+            findings.append(DrawingFinding("bom_step_filename_missing", "error",
+                                           f"BOM item {item.component_identity} has no STEP link"))
     if not all(sheet.revision_block.approval_text == APPROVAL_TEXT and
                sheet.revision_block.release_text == NOT_RELEASED_TEXT for sheet in sheets):
         findings.append(DrawingFinding("approval_boundary_missing", "error", "drawing approval boundary is missing"))
@@ -501,12 +561,26 @@ def validate_drawing_package(assembly: ManufacturingAssembly, package: DrawingPa
                                        "drawing package manufacturing evidence does not match assembly"))
     if hashlib.sha256(package.pdf_bytes).hexdigest() != package.pdf_digest:
         findings.append(DrawingFinding("pdf_digest_mismatch", "error", "drawing PDF digest does not match bytes"))
+    if not package.pdf_bytes.startswith(b"%PDF-1.4"):
+        findings.append(DrawingFinding("pdf_signature_invalid", "error", "drawing PDF has no supported PDF signature"))
+    if package.pdf_bytes.count(b"/Type /Page ") != len(package.sheets):
+        findings.append(DrawingFinding("pdf_page_count_mismatch", "error", "PDF page count does not match drawing sheet count"))
+    for required_text in (APPROVAL_TEXT, NOT_RELEASED_TEXT):
+        if required_text.encode("ascii") not in package.pdf_bytes:
+            findings.append(DrawingFinding("pdf_approval_boundary_missing", "error",
+                                           f"PDF is missing required text: {required_text}"))
+    for sheet in package.sheets:
+        if sheet.required and sheet.title.encode("ascii", "replace") not in package.pdf_bytes:
+            findings.append(DrawingFinding("pdf_required_sheet_title_missing", "error",
+                                           f"PDF is missing required sheet title: {sheet.title}"))
     return tuple(findings)
 
 
-def write_drawing_package(package: DrawingPackage, destination: str | Path) -> tuple[Path, ...]:
-    if package.blocked:
-        raise DrawingPackageError("blocked drawing package cannot be written")
+def write_drawing_package(package: DrawingPackage, destination: str | Path, *,
+                          assembly: ManufacturingAssembly, validation: object) -> tuple[Path, ...]:
+    if package.blocked or any(item.severity == "error"
+                              for item in validate_drawing_package(assembly, package, validation)):
+        raise DrawingPackageError("drawing package failed authoritative validation")
     root = Path(destination)
     root.mkdir(parents=True, exist_ok=True)
     payloads: dict[str, bytes] = {

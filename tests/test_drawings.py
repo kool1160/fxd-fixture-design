@@ -1,4 +1,5 @@
 import json
+import hashlib
 import tempfile
 import unittest
 from dataclasses import replace
@@ -80,6 +81,58 @@ class DrawingPackageTests(unittest.TestCase):
         self.assertEqual(len(base_sheet.hole_table), 4)
         self.assertTrue(any(item.kind == "plate-thickness" for item in base_sheet.dimensions))
 
+    def assert_bom_mutation_blocked(self, mutated):
+        findings = validate_drawing_package(self.assembly, mutated, self.validation)
+        self.assertTrue(any(item.severity == "error" for item in findings))
+        with self.assertRaises(ComponentGeometryError):
+            build_manufacturing_export_package(self.assembly, self.validation, mutated)
+
+    def test_bom_authoritative_fields_are_reconciled(self):
+        package = self.make_package()
+        first, second = package.bom[:2]
+        mutations = (
+            replace(first, part_number="WRONG-PART"),
+            replace(first, revision="Z"),
+            replace(first, quantity=first.quantity + 1),
+            replace(first, material="wrong-material"),
+            replace(first, process="wrong-process"),
+            replace(first, step_filename="wrong.step"),
+            replace(first, dxf_filename="wrong.dxf"),
+        )
+        for mutation in mutations:
+            with self.subTest(field=mutation):
+                self.assert_bom_mutation_blocked(replace(package, bom=(mutation,) + package.bom[1:]))
+        self.assert_bom_mutation_blocked(replace(package, bom=(replace(second, item_number=first.item_number),) + package.bom[1:]))
+        self.assert_bom_mutation_blocked(replace(package, bom=package.bom[:-1]))
+        self.assert_bom_mutation_blocked(replace(package, bom=(replace(first, component_identity="orphan"),) + package.bom[1:]))
+
+    def test_pdf_boundary_and_page_evidence_are_reconciled(self):
+        package = self.make_package()
+
+        def tamper(payload):
+            return replace(package, pdf_bytes=payload, pdf_digest=hashlib.sha256(payload).hexdigest())
+
+        missing_review = package.pdf_bytes.replace(b"ENGINEERING REVIEW REQUIRED", b"REVIEW ONLY")
+        missing_release = package.pdf_bytes.replace(b"NOT RELEASED FOR PRODUCTION", b"RELEASE TEXT")
+        bad_page = package.pdf_bytes.replace(b"/Type /Page ", b"/Type /Pge ", 1)
+        missing_title = package.pdf_bytes.replace(b"FIXTURE ASSEMBLY", b"MISSING TITLE", 1)
+        for label, payload in (("review", missing_review), ("release", missing_release),
+                               ("page-count", bad_page), ("required-title", missing_title)):
+            with self.subTest(reason=label):
+                mutated = tamper(payload)
+                findings = validate_drawing_package(self.assembly, mutated, self.validation)
+                self.assertTrue(any(item.severity == "error" for item in findings))
+                with self.assertRaises(ComponentGeometryError):
+                    build_manufacturing_export_package(self.assembly, self.validation, mutated)
+
+    def test_standalone_writer_revalidates_tampered_package(self):
+        package = self.make_package()
+        payload = package.pdf_bytes.replace(b"ENGINEERING REVIEW REQUIRED", b"REMOVED")
+        tampered = replace(package, pdf_bytes=payload, pdf_digest=hashlib.sha256(payload).hexdigest(), findings=())
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaises(DrawingPackageError):
+                write_drawing_package(tampered, directory, assembly=self.assembly, validation=self.validation)
+
     def test_package_integrates_with_manufacturing_export(self):
         package = self.make_package()
         files = build_manufacturing_export_package(self.assembly, self.validation, package)
@@ -123,7 +176,8 @@ class DrawingPackageTests(unittest.TestCase):
     def test_write_package_and_source_are_stable(self):
         package = self.make_package()
         with tempfile.TemporaryDirectory() as directory:
-            paths = write_drawing_package(package, directory)
+            paths = write_drawing_package(package, directory,
+                                          assembly=self.assembly, validation=self.validation)
             self.assertEqual([item.name for item in paths],
                              ["drawing-bom.json", "drawing-manifest.json", "fixture-drawings.pdf"])
             self.assertTrue((Path(directory) / "fixture-drawings.pdf").read_bytes().startswith(b"%PDF-1.4"))
