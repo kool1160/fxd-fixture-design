@@ -226,6 +226,12 @@ class DrawingPackage:
     def page_count(self) -> int:
         return len(self.sheets)
 
+    @property
+    def evidence_digest(self) -> str:
+        """Digest all deterministic drawing evidence, not only rendered bytes."""
+        encoded = json.dumps(self.intent_dict(), sort_keys=True, separators=(",", ":"))
+        return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
     def intent_dict(self) -> dict[str, object]:
         return {
             "format": DRAWING_FORMAT, "source_sha256": self.source_sha256,
@@ -244,6 +250,7 @@ class DrawingPackage:
             "approval_boundary": [APPROVAL_TEXT, NOT_RELEASED_TEXT],
             "step_filenames": [item.step_filename for item in self.bom],
             "dxf_filenames": [item.dxf_filename for item in self.bom if item.dxf_filename],
+            "evidence_digest": self.evidence_digest,
         }
 
 
@@ -559,10 +566,16 @@ def validate_drawing_package(assembly: ManufacturingAssembly, package: DrawingPa
     if package.manufacturing_evidence_digest != assembly.evidence_digest:
         findings.append(DrawingFinding("manufacturing_identity_mismatch", "error",
                                        "drawing package manufacturing evidence does not match assembly"))
+    if any(sheet.revision_block.drawing_revision != package.revision for sheet in package.sheets):
+        findings.append(DrawingFinding("drawing_revision_mismatch", "error",
+                                       "drawing sheet revisions do not match package revision"))
     if hashlib.sha256(package.pdf_bytes).hexdigest() != package.pdf_digest:
         findings.append(DrawingFinding("pdf_digest_mismatch", "error", "drawing PDF digest does not match bytes"))
     if not package.pdf_bytes.startswith(b"%PDF-1.4"):
         findings.append(DrawingFinding("pdf_signature_invalid", "error", "drawing PDF has no supported PDF signature"))
+    if f"REV {package.revision}".encode("ascii", "replace") not in package.pdf_bytes:
+        findings.append(DrawingFinding("pdf_package_revision_missing", "error",
+                                       f"PDF is missing package revision evidence: {package.revision}"))
     if package.pdf_bytes.count(b"/Type /Page ") != len(package.sheets):
         findings.append(DrawingFinding("pdf_page_count_mismatch", "error", "PDF page count does not match drawing sheet count"))
     for required_text in (APPROVAL_TEXT, NOT_RELEASED_TEXT):
@@ -573,6 +586,10 @@ def validate_drawing_package(assembly: ManufacturingAssembly, package: DrawingPa
         if sheet.required and sheet.title.encode("ascii", "replace") not in package.pdf_bytes:
             findings.append(DrawingFinding("pdf_required_sheet_title_missing", "error",
                                            f"PDF is missing required sheet title: {sheet.title}"))
+        revision_marker = f"REV {sheet.revision_block.drawing_revision}".encode("ascii", "replace")
+        if revision_marker not in package.pdf_bytes:
+            findings.append(DrawingFinding("pdf_revision_missing", "error",
+                                           f"PDF is missing revision evidence: {sheet.revision_block.drawing_revision}"))
     return tuple(findings)
 
 

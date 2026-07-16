@@ -153,6 +153,38 @@ class FxdProject:
     def active_validation(self) -> ValidationResult:
         return validate_fixture_concept(self.product, self.active)
 
+    def _invalidate_derived_intent(self) -> "FxdProject":
+        """Clear evidence derived from manufacturing or drawing state."""
+        return replace(self, drawing_intent=None, optimization_intent=None)
+
+    def with_drawing_intent(self, intent: dict[str, object] | None) -> "FxdProject":
+        """Attach drawing evidence and invalidate dependent cost evidence."""
+        return replace(self, drawing_intent=intent, optimization_intent=None)
+
+    def with_optimization_intent(self, intent: dict[str, object] | None) -> "FxdProject":
+        """Attach cost evidence only after drawing evidence is present."""
+        if intent is not None and self.drawing_intent is None:
+            raise ProjectFormatError("optimization intent requires persisted drawing intent")
+        return replace(self, optimization_intent=intent)
+
+    def with_placement(self, placement: PlacementPlan | None) -> "FxdProject":
+        """Regenerate concepts after a placement change and clear derived evidence."""
+        concepts = generate_fixture_concepts(self.product, self.annotations, placement=placement).concepts
+        candidate = replace(self._invalidate_derived_intent(), concepts=concepts,
+                            active_concept=next(item.identity for item in concepts),
+                            placement=placement, suppressed_features=frozenset(),
+                            approved_revision=None)
+        return candidate._record_revision(self.revision_id)
+
+    def with_annotations(self, annotations: EngineeringAnnotations) -> "FxdProject":
+        """Regenerate concepts after an engineering-intent change."""
+        annotations.validate_references(self.product)
+        concepts = generate_fixture_concepts(self.product, annotations, placement=self.placement).concepts
+        candidate = replace(self._invalidate_derived_intent(), annotations=annotations,
+                            concepts=concepts, active_concept=next(item.identity for item in concepts),
+                            suppressed_features=frozenset(), approved_revision=None)
+        return candidate._record_revision(self.revision_id)
+
     @property
     def revision_id(self) -> str:
         payload = {
@@ -180,7 +212,7 @@ class FxdProject:
             raise ProjectFormatError(f"unknown concept {identity!r}")
         if identity == self.active_concept:
             return self
-        candidate = replace(self, active_concept=identity, suppressed_features=frozenset(),
+        candidate = replace(self._invalidate_derived_intent(), active_concept=identity, suppressed_features=frozenset(),
                             approved_revision=None)
         return candidate._record_revision(self.revision_id)
 
@@ -312,7 +344,7 @@ class FxdProject:
                                        "feature is suppressed in the current revision")
                         for identity in sorted(target_suppressed))))
                 for concept in concepts)
-        candidate = replace(self, concepts=concepts, suppressed_features=target_suppressed,
+        candidate = replace(self._invalidate_derived_intent(), concepts=concepts, suppressed_features=target_suppressed,
                             edit_log=edits, approved_revision=None)
         validation = candidate.active_validation
         decision = ReviewDecision(edit.operation, edit.target, edit.reason,
@@ -347,7 +379,7 @@ class FxdProject:
         if revision is None:
             raise ProjectFormatError(f"unknown project revision {revision_id!r}")
         concepts = self._regenerate(revision.changes)
-        candidate = replace(self, concepts=concepts, active_concept=revision.active_concept,
+        candidate = replace(self._invalidate_derived_intent(), concepts=concepts, active_concept=revision.active_concept,
                             suppressed_features=revision.suppressed_features,
                             edit_log=revision.changes, approved_revision=None)
         if candidate.revision_id != revision.revision_id:

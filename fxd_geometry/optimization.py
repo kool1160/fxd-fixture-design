@@ -414,7 +414,7 @@ def _process_cost(component: object, rates: CostRateTable) -> tuple[ProcessCost,
 
 
 def analyze_fixture_cost(assembly: ManufacturingAssembly, *, validation: object,
-                         drawing_package: object | None = None,
+                         drawing_package: object | None,
                          rates: CostRateTable | None = None,
                          assumptions: CostAssumptions | None = None,
                          production_quantity: int | None = None) -> CostAnalysis:
@@ -436,10 +436,14 @@ def analyze_fixture_cost(assembly: ManufacturingAssembly, *, validation: object,
     if getattr(validation, "concept_identity", assembly.concept_identity) != assembly.concept_identity:
         findings.append(_finding("concept_identity_mismatch", "error", "validation concept identity does not match assembly"))
     drawing_digest = None
-    if drawing_package is not None:
+    if drawing_package is None:
+        findings.append(_finding("drawing_package_missing", "error", "validated Milestone 24 drawing evidence is required"))
+    else:
         from .drawings import validate_drawing_package
         drawing_findings = validate_drawing_package(assembly, drawing_package, validation)
-        drawing_digest = getattr(drawing_package, "pdf_digest", None)
+        drawing_digest = getattr(drawing_package, "evidence_digest", None)
+        if not drawing_digest:
+            findings.append(_finding("drawing_evidence_missing", "error", "drawing package evidence digest is required"))
         if getattr(drawing_package, "blocked", True) or any(item.severity == "error" for item in drawing_findings):
             findings.append(_finding("drawing_package_blocked", "error", "invalid drawing package blocks cost analysis"))
     component_costs: list[ComponentCost] = []
