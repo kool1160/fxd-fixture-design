@@ -2,6 +2,7 @@ import unittest
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from fxd_geometry import (
     ComponentGeometryError,
@@ -12,6 +13,7 @@ from fxd_geometry import (
     build_manufacturing_export_package,
     generate_fixture_concepts,
     generate_manufacturing_assembly,
+    generate_manufacturing_assembly_for_product,
     import_step,
     validate_fixture_concept,
     validate_manufacturing_assembly,
@@ -100,6 +102,32 @@ class ManufacturingComponentTests(unittest.TestCase):
     def test_source_bytes_remain_unchanged_and_project_roundtrip_stays_compatible(self):
         source = FIXTURE.read_bytes()
         self.make_assembly()
+        self.assertEqual(source, FIXTURE.read_bytes())
+
+    def test_product_compatibility_entry_point_preserves_kernel_collision_findings(self):
+        source = FIXTURE.read_bytes()
+        assembly = self.make_assembly()
+        first, second = assembly.components[:2]
+        overlapping = replace(
+            assembly,
+            components=(
+                replace(first, parent_component_identity=None, interface=None),
+                replace(second, shape=first.shape, bounds=first.bounds,
+                        parent_component_identity=None, interface=None),
+            ) + assembly.components[2:],
+        )
+        kernel = OcpKernel()
+        kernel_findings = validate_manufacturing_assembly(self.product, overlapping, kernel=kernel)
+        self.assertIn("component_collision", {item.code for item in kernel_findings})
+        blocked = replace(overlapping, findings=kernel_findings)
+
+        with patch("fxd_geometry.component_geometry.generate_manufacturing_assembly", return_value=blocked):
+            retained = generate_manufacturing_assembly_for_product(self.product, self.concept, kernel)
+
+        self.assertIn("component_collision", {item.code for item in retained.findings})
+        self.assertTrue(retained.blocked)
+        with self.assertRaises(ComponentGeometryError):
+            build_manufacturing_export_package(retained, SimpleNamespace(blocked=False))
         self.assertEqual(source, FIXTURE.read_bytes())
 
 

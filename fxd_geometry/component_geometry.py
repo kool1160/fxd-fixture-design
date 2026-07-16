@@ -534,10 +534,7 @@ def generate_manufacturing_assembly_for_product(product: ProductModel, concept: 
                                                 kernel: RealKernel, *,
                                                 tooling: ToolingLibrary | None = None) -> ManufacturingAssembly:
     """Compatibility alias for the explicit product-bound entry point."""
-    assembly = generate_manufacturing_assembly(product, concept, kernel, tooling=tooling)
-    findings = validate_manufacturing_assembly(product, assembly, tooling=tooling)
-    return ManufacturingAssembly(assembly.concept_identity, assembly.source_sha256, assembly.units,
-                                  assembly.components, assembly.model, findings, assembly.exports)
+    return generate_manufacturing_assembly(product, concept, kernel, tooling=tooling)
 
 
 def build_manufacturing_export_package(assembly: ManufacturingAssembly,
