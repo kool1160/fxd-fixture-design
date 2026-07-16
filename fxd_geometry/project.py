@@ -18,6 +18,7 @@ from .fixture import FixtureFeature, FixtureFinding, FixtureParameters, Manufact
 from .product_model import ProductModel
 from .step_import import import_step
 from .validation import ValidationResult, validate_fixture_concept
+from .structure import generate_structural_assembly
 
 
 class ProjectFormatError(ValueError):
@@ -287,7 +288,8 @@ class FxdProject:
                 if edit.operation == "correction":
                     corrections = [item for item in corrections if item.key != edit.target]
                     corrections.append(FixtureCorrection(edit.target, str(edit.value), edit.reason))
-            result.append(replace(concept, fixture=fixture, corrections=tuple(corrections)))
+            result.append(replace(concept, fixture=fixture, corrections=tuple(corrections),
+                                  structure=generate_structural_assembly(self.product, self.annotations, fixture)))
         return tuple(result)
 
     def _material_edit(self, edit: FixtureEdit,

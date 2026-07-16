@@ -166,6 +166,20 @@ def validate_fixture_concept(product: ProductModel, concept: CompleteFixtureConc
     else:
         findings.extend(_finding(item.code, item.severity, "weld", item.message,
                                  item.evidence, item.assumptions) for item in weld.findings)
+    if concept.structure is not None:
+        if concept.structure.source_sha256 != product.source_sha256 or concept.structure.units != "mm":
+            findings.append(_finding(
+                "structural_identity_mismatch", "error", "structure",
+                "structural assembly does not match the validated product source or millimetre units",
+                (f"structure_source_sha256={concept.structure.source_sha256}",
+                 f"product_source_sha256={product.source_sha256}",
+                 f"structure_units={concept.structure.units}"),
+            ))
+        else:
+            for item in concept.structure.findings:
+                findings.append(_finding(item.code, item.severity, "structure", item.message,
+                                         item.evidence + tuple(f"member={value}" for value in item.member_identities),
+                                         item.assumptions))
     tooling = tooling or generic_tooling_library()
     if not any(feature.kind == "clamp_mount" for feature in concept.fixture.features):
         findings.append(_finding("clamp_evidence_missing", "error", "clamp", "fixture concept contains no clamp mount"))

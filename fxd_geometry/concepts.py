@@ -15,6 +15,7 @@ from .fixture import (FixtureConcept, FixtureFeature, FixtureFinding,
                       FixtureParameters, ManufacturingSpec, generate_fixture_primitives)
 from .constraints import LocatingAnalysis, LocatingStrategy, analyze_locating_strategy
 from .product_model import Body, ProductModel
+from .structure import StructuralAssembly, generate_structural_assembly
 
 
 @dataclass(frozen=True)
@@ -57,11 +58,14 @@ class CompleteFixtureConcept:
     constraints: ConstraintAnalysis
     score: ConceptScore
     corrections: tuple[FixtureCorrection, ...] = ()
+    structure: StructuralAssembly | None = None
 
     @property
     def engineering_status(self) -> str:
         """Return valid, provisional, or invalid from deterministic evidence."""
         severities = {finding.severity for finding in self.fixture.findings}
+        if self.structure is not None:
+            severities.update(item.severity for item in self.structure.findings)
         if "error" in severities:
             return "invalid"
         if "warning" in severities or self.constraints.warnings:
@@ -188,9 +192,10 @@ def generate_fixture_concepts(product: ProductModel, annotations: EngineeringAnn
             severity = "error" if constraints.locating_analysis and not constraints.locating_analysis.strategy_valid else "warning"
             findings.append(FixtureFinding(code, severity, None, warning))
         fixture = replace(primitive, features=features, findings=tuple(findings))
+        structure = generate_structural_assembly(product, annotations, fixture)
         concepts.append(CompleteFixtureConcept(
             f"concept-{objective}", objective, fixture,
             "3-2-1 proof-layer locating", "standard toggle clamp reaction path",
-            constraints, _score(objective, clamp_count, constraints),
+            constraints, _score(objective, clamp_count, constraints), structure=structure,
         ))
     return RankedFixtureConcepts(product.source_sha256, "mm", tuple(concepts))
