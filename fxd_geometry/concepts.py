@@ -16,6 +16,7 @@ from .fixture import (FixtureConcept, FixtureFeature, FixtureFinding,
 from .constraints import LocatingAnalysis, LocatingStrategy, analyze_locating_strategy
 from .product_model import Body, ProductModel
 from .structure import StructuralAssembly, generate_structural_assembly
+from .placement import PlacementPlan
 
 
 @dataclass(frozen=True)
@@ -59,6 +60,7 @@ class CompleteFixtureConcept:
     score: ConceptScore
     corrections: tuple[FixtureCorrection, ...] = ()
     structure: StructuralAssembly | None = None
+    placement: PlacementPlan | None = None
 
     @property
     def engineering_status(self) -> str:
@@ -66,6 +68,8 @@ class CompleteFixtureConcept:
         severities = {finding.severity for finding in self.fixture.findings}
         if self.structure is not None:
             severities.update(item.severity for item in self.structure.findings)
+        if self.placement is not None:
+            severities.update(item.severity for item in self.placement.findings)
         if "error" in severities:
             return "invalid"
         if "warning" in severities or self.constraints.warnings:
@@ -173,7 +177,8 @@ def _score(objective: str, clamp_count: int, constraints: ConstraintAnalysis) ->
 
 def generate_fixture_concepts(product: ProductModel, annotations: EngineeringAnnotations,
                               parameters: FixtureParameters | None = None,
-                              locating_strategy: LocatingStrategy | None = None) -> RankedFixtureConcepts:
+                              locating_strategy: LocatingStrategy | None = None,
+                              placement: PlacementPlan | None = None) -> RankedFixtureConcepts:
     """Generate three deterministic alternatives and rank them by gated evidence."""
     annotations.validate_references(product)
     primitive = generate_fixture_primitives(product, annotations, parameters)
@@ -197,5 +202,6 @@ def generate_fixture_concepts(product: ProductModel, annotations: EngineeringAnn
             f"concept-{objective}", objective, fixture,
             "3-2-1 proof-layer locating", "standard toggle clamp reaction path",
             constraints, _score(objective, clamp_count, constraints), structure=structure,
+            placement=placement,
         ))
     return RankedFixtureConcepts(product.source_sha256, "mm", tuple(concepts))

@@ -16,6 +16,28 @@ pinned OCP dependency because this environment cannot resolve PyPI. Real-kernel
 large-assembly performance evidence and authorized release signing remain
 pending. No production approval or certification claim is made.
 
+## 2026-07-16 - Milestone 22 deterministic placement proof layer
+
+Milestone 22 adds explicit datum-candidate ranking and editable placement
+contracts for primary, secondary, and tertiary datum contacts, round and
+diamond pins, stops, supports, and clamps. Placement validation composes the
+existing six-DOF locating solver, access findings, vendor-neutral tooling
+selection, weld intent, and Milestone 21 structural members. It reports
+overconstraint, duplicate directions, missing or invalid geometry evidence,
+unsupported mounts, blocked access, insufficient clamp capacity, and retained
+alternative arrangements without allowing preference scores to override
+deterministic validity.
+
+Placement plans preserve source SHA-256 identity, millimetre units, evidence,
+assumptions, confidence, deterministic JSON, validation digests, and optional
+project save/load round trips. The implementation is a proof layer only: it
+does not author final B-Rep tooling, simulate force or thermal behavior, plan
+robot motion, certify safety, or approve production fixtures.
+
+Evidence: 10 focused placement tests, 121 full tests, compileall, backlog and
+schema validation, secret scan, and real OCP kernel proof passed. Bash is not
+available on this Windows host, so `bash scripts/ci.sh` could not be run.
+
 ## 2026-07-13 — Project founded
 
 FXD was defined as intelligent industrial fixture-design software, beginning with weld fixtures for sheet-metal and fabricated products.
