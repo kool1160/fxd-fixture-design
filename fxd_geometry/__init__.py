@@ -57,6 +57,11 @@ from .drawings import (APPROVAL_TEXT, NOT_RELEASED_TEXT, BomEntry, DrawingAnnota
                        DrawingDimension, DrawingFinding, DrawingPackage, DrawingPackageError,
                        DrawingSheet, DrawingView, HoleTableRow, RevisionBlock,
                        generate_drawing_package, validate_drawing_package, write_drawing_package)
+from .optimization import (ENGINEERING_ESTIMATE_NOTICE, CostAnalysis, CostAssumptions, CostEvidence, CostModel,
+                            CostRateTable, CostValidationFinding, ComponentCost, FixtureCostSummary,
+                            LaborCost, ManufacturabilityFinding, MaterialCost, OptimizationAlternative,
+                            OptimizationError, OptimizationRecommendation, ProcessCost, PurchasedToolingCost,
+                            VolumeScenario, analyze_fixture_cost)
 
 
 def require_real_kernel() -> RealKernel:
@@ -93,3 +98,8 @@ __all__ += ["APPROVAL_TEXT", "NOT_RELEASED_TEXT", "BomEntry", "DrawingAnnotation
             "DrawingFinding", "DrawingPackage", "DrawingPackageError", "DrawingSheet", "DrawingView",
             "HoleTableRow", "RevisionBlock", "generate_drawing_package", "validate_drawing_package",
             "write_drawing_package"]
+__all__ += ["ENGINEERING_ESTIMATE_NOTICE", "CostAnalysis", "CostAssumptions", "CostEvidence", "CostModel", "CostRateTable",
+            "CostValidationFinding", "ComponentCost", "FixtureCostSummary", "LaborCost",
+            "ManufacturabilityFinding", "MaterialCost", "OptimizationAlternative", "OptimizationError",
+            "OptimizationRecommendation", "ProcessCost", "PurchasedToolingCost", "VolumeScenario",
+            "analyze_fixture_cost"]

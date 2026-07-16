@@ -120,6 +120,7 @@ class FxdProject:
     approved_revision: str | None = None
     placement: PlacementPlan | None = None
     drawing_intent: dict[str, object] | None = None
+    optimization_intent: dict[str, object] | None = None
 
     def __post_init__(self) -> None:
         if self.annotations.source_sha256 != self.product.source_sha256:
@@ -159,6 +160,7 @@ class FxdProject:
             "active_concept": self.active_concept,
             "suppressed_features": sorted(self.suppressed_features),
             "edits": [_edit_dict(item) for item in self.edit_log],
+            "optimization_intent": self.optimization_intent,
         }
         encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"))
         return "rev-" + hashlib.sha256(encoded.encode()).hexdigest()[:16]
@@ -406,6 +408,7 @@ class FxdProject:
             "annotations": self.annotations.to_dict(),
             "placement": self.placement.to_dict() if self.placement else None,
             "drawing_intent": self.drawing_intent,
+            "optimization_intent": self.optimization_intent,
             "validations": validations,
             "concept_corrections": {
                 concept.identity: [correction.__dict__ for correction in concept.corrections]
@@ -512,7 +515,8 @@ class FxdProject:
             restored = replace(project, decisions=decisions,
                                revisions=saved_revisions or project.revisions,
                                approved_revision=data.get("approved_revision"),
-                               drawing_intent=data.get("drawing_intent"))
+                               drawing_intent=data.get("drawing_intent"),
+                               optimization_intent=data.get("optimization_intent"))
             if restored.approved_revision is not None and restored.approved_revision != restored.revision_id:
                 raise ProjectFormatError("saved approval does not belong to the restored revision")
             return restored
