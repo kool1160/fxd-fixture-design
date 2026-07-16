@@ -539,7 +539,8 @@ def generate_manufacturing_assembly_for_product(product: ProductModel, concept: 
 
 def build_manufacturing_export_package(assembly: ManufacturingAssembly,
                                        validation: object | None = None,
-                                       drawing_package: object | None = None) -> dict[str, bytes | str]:
+                                       drawing_package: object | None = None,
+                                       optimization: object | None = None) -> dict[str, bytes | str]:
     """Return a deterministic review-only component export package."""
     if assembly.blocked:
         raise ComponentGeometryError("invalid manufacturing assembly cannot be exported")
@@ -554,6 +555,14 @@ def build_manufacturing_export_package(assembly: ManufacturingAssembly,
                 getattr(drawing_package, "concept_identity", None) != assembly.concept_identity or
                 getattr(drawing_package, "manufacturing_evidence_digest", None) != assembly.evidence_digest):
             raise ComponentGeometryError("drawing package provenance does not match manufacturing assembly")
+    if optimization is not None:
+        from .optimization import analyze_fixture_cost
+        analysis = analyze_fixture_cost(assembly, validation=validation, drawing_package=drawing_package,
+                                        rates=getattr(optimization, "rate_table", None),
+                                        assumptions=getattr(optimization, "assumptions", None),
+                                        production_quantity=getattr(optimization, "selected_quantity", None))
+        if analysis.blocked or analysis.evidence_digest != getattr(optimization, "evidence_digest", ""):
+            raise ComponentGeometryError("invalid or stale cost analysis cannot be exported")
     files: dict[str, bytes | str] = {
         "manifest.json": json.dumps(assembly.to_dict() | {"review_status": "ENGINEERING_REVIEW_REQUIRED"},
                                      indent=2, sort_keys=True) + "\n",
@@ -569,12 +578,20 @@ def build_manufacturing_export_package(assembly: ManufacturingAssembly,
         files["drawing-manifest.json"] = _json.dumps(drawing_package.manifest_dict(), indent=2, sort_keys=True) + "\n"
         files["drawing-bom.json"] = _json.dumps([item.to_dict() for item in drawing_package.bom],
                                                  indent=2, sort_keys=True) + "\n"
+    if optimization is not None:
+        files["fixture-cost-summary.json"] = json.dumps(optimization.summary.to_dict() if optimization.summary else {}, indent=2, sort_keys=True) + "\n"
+        files["component-cost-breakdown.json"] = json.dumps([item.to_dict() for item in (optimization.summary.component_costs if optimization.summary else ())], indent=2, sort_keys=True) + "\n"
+        files["volume-scenarios.json"] = json.dumps([item.to_dict() for item in optimization.scenarios], indent=2, sort_keys=True) + "\n"
+        files["manufacturability-findings.json"] = json.dumps([item.to_dict() for item in optimization.manufacturability_findings], indent=2, sort_keys=True) + "\n"
+        files["optimization-recommendations.json"] = json.dumps([item.to_dict() for item in optimization.recommendations], indent=2, sort_keys=True) + "\n"
     return dict(sorted(files.items()))
 
 
 def write_manufacturing_export_package(assembly: ManufacturingAssembly, destination: str | Path,
-                                       validation: object | None = None) -> tuple[Path, ...]:
-    files = build_manufacturing_export_package(assembly, validation)
+                                       validation: object | None = None,
+                                       drawing_package: object | None = None,
+                                       optimization: object | None = None) -> tuple[Path, ...]:
+    files = build_manufacturing_export_package(assembly, validation, drawing_package, optimization)
     root = Path(destination)
     root.mkdir(parents=True, exist_ok=True)
     written: list[Path] = []
