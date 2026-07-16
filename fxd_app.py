@@ -14,9 +14,11 @@ from fxd_geometry import (
     ReviewGeometry,
     Vec3,
     VisualEdge,
+    WorkbenchDocument,
     build_review_geometry,
     generate_manufacturing_geometry,
     import_step,
+    load_step_for_workbench,
 )
 from fxd_geometry.project import FxdProject, ProjectFormatError, SUPPORTED_LAYERS
 from fxd_geometry.operations import ProjectRecovery, StructuredLog, export_project_package
@@ -37,6 +39,7 @@ class FxdApp:
         self.section_view = False
         self.hidden_review_layers: set[str] = set()
         self.project_path: Path | None = None
+        self.workbench_document: WorkbenchDocument | None = None
         self.log = StructuredLog(Path.home() / ".fxd" / "diagnostics.jsonl")
 
         root.title("FXD — Engineering Review (not production approval)")
@@ -99,14 +102,31 @@ class FxdApp:
                 product, build_orientation=Vec3(0, 0, 1), loading_direction=Vec3(1, 0, 0),
                 process_type="manual MIG", production_quantity=1)
             self.project = FxdProject.from_product(product, annotations)
+            self.workbench_document = None
             self.project_path = None
             self._restore_kernel_geometry()
             message = (f"Imported immutable STEP and {len(self.review_geometry.meshes)} selectable "
                        "product/fixture B-Rep face meshes." if self.review_geometry else
                        "Imported immutable STEP; real-kernel display is unavailable and review remains provisional.")
             self.refresh(message)
-        except Exception as exc:
-            messagebox.showerror("STEP import failed", str(exc))
+        except Exception as neutral_error:
+            try:
+                self.workbench_document = load_step_for_workbench(source)
+                self.project = None
+                self.project_path = None
+                self.kernel = OcpKernel()
+                self.status.set(
+                    f"Loaded {self.workbench_document.source_name}: "
+                    f"{self.workbench_document.component_count} OCP components, "
+                    f"SHA-256 {self.workbench_document.source_sha256[:12]}."
+                )
+                self.refresh()
+            except Exception as kernel_error:
+                messagebox.showerror(
+                    "STEP import failed",
+                    f"Neutral FXD import failed:\n{neutral_error}\n\n"
+                    f"Real OCP import failed:\n{kernel_error}",
+                )
 
     def open_project(self) -> None:
         name = filedialog.askopenfilename(filetypes=(("FXD project", "*.fxd.json"),))
@@ -310,6 +330,15 @@ class FxdApp:
     def render(self) -> None:
         self.canvas.delete("all")
         if not self.project:
+            if self.workbench_document:
+                self._render_workbench_document()
+                self.canvas.create_text(
+                    12, 12, anchor="nw", fill="#9bd3ff",
+                    text=(f"REAL OCP · {self.workbench_document.source_name} · "
+                          f"{self.workbench_document.component_count} components · "
+                          "engineering review only"),
+                )
+                return
             self.canvas.create_text(30, 30, anchor="nw", fill="white",
                                     text="FXD visual engineering review\n\nDrag to rotate the 3D projection.")
             return
@@ -324,6 +353,27 @@ class FxdApp:
             12, 12, anchor="nw", fill=banner_color,
             text=(f"{source} · {self.project.active.identity}: {validation.status.upper()} · "
                   f"evidence {validation.evidence_digest[:12]} — not production approval"))
+
+    def _render_workbench_document(self) -> None:
+        document = self.workbench_document
+        if not document:
+            return
+        vertices = [point for mesh in document.meshes for point in mesh.vertices_mm]
+        if not vertices:
+            return
+        center = tuple((min(point[i] for point in vertices) + max(point[i] for point in vertices)) / 2
+                       for i in range(3))
+        span = max(max(point[i] for point in vertices) - min(point[i] for point in vertices)
+                   for i in range(3)) or 1
+        polygons = []
+        for mesh in document.meshes:
+            for triangle in mesh.triangles:
+                points = [mesh.vertices_mm[index] for index in triangle]
+                polygons.append((sum(point[2] for point in points) / 3,
+                                 [self.project_point(point, center, span) for point in points]))
+        for _depth, projected in sorted(polygons):
+            flat = [coordinate for point in projected for coordinate in point]
+            self.canvas.create_polygon(*flat, fill="#24445c", outline="#66c2ff")
 
     def _visible_items(self):
         assert self.review_geometry and self.project
