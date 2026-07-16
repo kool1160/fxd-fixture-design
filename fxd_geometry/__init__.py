@@ -39,6 +39,11 @@ from .workflow import (SequencePlan, WorkflowComparison, WorkflowEnvelope, Workf
                        WorkflowFinding, WorkflowReport, WorkflowStep, WorkflowVariant,
                        WorkflowVisualItem,
                        ReviewZone, compare_workflow_variants, evaluate_workflow)
+from .structure import (StructuralAssembly, StructuralComparison, StructuralFinding,
+                         StructuralGenerationError, StructuralMember, StructuralParameters,
+                         StructuralStrategy, compare_structural_concepts,
+                         generate_structural_assembly, select_structural_strategy,
+                         validate_structural_assembly)
 
 
 def require_real_kernel() -> RealKernel:
@@ -59,3 +64,6 @@ __all__ += ["ReviewZone", "SequencePlan", "WorkflowComparison", "WorkflowEnvelop
             "compare_workflow_variants", "evaluate_workflow"]
 __all__ += ["DiagnosticEvent", "OperationsError", "ProjectRecovery", "StructuredLog",
             "export_project_package", "load_preferences", "save_preferences"]
+__all__ += ["StructuralAssembly", "StructuralComparison", "StructuralFinding", "StructuralGenerationError",
+            "StructuralMember", "StructuralParameters", "StructuralStrategy", "compare_structural_concepts",
+            "generate_structural_assembly", "select_structural_strategy", "validate_structural_assembly"]

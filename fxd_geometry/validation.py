@@ -166,6 +166,11 @@ def validate_fixture_concept(product: ProductModel, concept: CompleteFixtureConc
     else:
         findings.extend(_finding(item.code, item.severity, "weld", item.message,
                                  item.evidence, item.assumptions) for item in weld.findings)
+    if concept.structure is not None:
+        for item in concept.structure.findings:
+            findings.append(_finding(item.code, item.severity, "structure", item.message,
+                                     item.evidence + tuple(f"member={value}" for value in item.member_identities),
+                                     item.assumptions))
     tooling = tooling or generic_tooling_library()
     if not any(feature.kind == "clamp_mount" for feature in concept.fixture.features):
         findings.append(_finding("clamp_evidence_missing", "error", "clamp", "fixture concept contains no clamp mount"))
