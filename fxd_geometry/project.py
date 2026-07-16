@@ -4,6 +4,8 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import os
+import tempfile
 from dataclasses import dataclass, replace
 from pathlib import Path
 
@@ -23,6 +25,7 @@ class ProjectFormatError(ValueError):
 
 
 SUPPORTED_LAYERS = frozenset({"product", "fixture", "datums", "welds", "access", "warnings"})
+PROJECT_FORMAT = "fxd-neutral-project-v2"
 
 
 @dataclass(frozen=True)
@@ -377,7 +380,7 @@ class FxdProject:
             for result in (validate_fixture_concept(self.product, concept),)
         }
         return {
-            "format": "fxd-neutral-project-v1", "units": "mm",
+            "format": PROJECT_FORMAT, "schema_version": 2, "units": "mm",
             "source_name": self.product.source_name,
             "source_sha256": self.product.source_sha256,
             "source_step_base64": base64.b64encode(self.product.source_bytes).decode("ascii"),
@@ -403,7 +406,21 @@ class FxdProject:
 
     def save(self, destination: str | Path) -> Path:
         path = Path(destination)
-        path.write_text(json.dumps(self.to_dict(), indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        payload = json.dumps(self.to_dict(), indent=2, sort_keys=True) + "\n"
+        fd, temporary = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as handle:
+                handle.write(payload)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary, path)
+        except Exception:
+            try:
+                os.unlink(temporary)
+            except FileNotFoundError:
+                pass
+            raise
         return path
 
     @staticmethod
@@ -440,7 +457,7 @@ class FxdProject:
     def load(cls, source: str | Path) -> "FxdProject":
         try:
             data = json.loads(Path(source).read_text(encoding="utf-8"))
-            if data.get("format") != "fxd-neutral-project-v1" or data.get("units") != "mm":
+            if data.get("format") not in {"fxd-neutral-project-v1", PROJECT_FORMAT} or data.get("units") != "mm":
                 raise ProjectFormatError("unsupported FXD project format or units")
             raw = base64.b64decode(data["source_step_base64"], validate=True)
             product = import_step(raw.decode("utf-8"), source_name=data["source_name"])

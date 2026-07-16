@@ -1,5 +1,21 @@
 # FXD Project Record
 
+## 2026-07-15 — Milestone 20 safe internal phase
+
+Milestone 20 adds versioned `fxd-neutral-project-v2` persistence with legacy
+v1 loading, atomic saves, adjacent autosave recovery, structured local JSONL
+diagnostics, and isolated user preferences. The application can now invoke
+the existing fail-closed fabrication-package gate and export engineering-
+review artifacts when deterministic validation permits it. A neutral synthetic
+performance proof measured 0.727 ms against a 1000 ms budget, and release
+manifest/signing procedures are documented without embedding keys.
+
+The milestone remains Pending: `bash scripts/ci-contract.sh` passes (99 tests,
+4 real-kernel tests skipped), but `bash scripts/ci.sh` could not install the
+pinned OCP dependency because this environment cannot resolve PyPI. Real-kernel
+large-assembly performance evidence and authorized release signing remain
+pending. No production approval or certification claim is made.
+
 ## 2026-07-13 — Project founded
 
 FXD was defined as intelligent industrial fixture-design software, beginning with weld fixtures for sheet-metal and fabricated products.

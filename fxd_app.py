@@ -19,6 +19,7 @@ from fxd_geometry import (
     import_step,
 )
 from fxd_geometry.project import FxdProject, ProjectFormatError, SUPPORTED_LAYERS
+from fxd_geometry.operations import ProjectRecovery, StructuredLog, export_project_package
 
 REVIEW_LAYERS = ("locators", "supports", "stops", "clamps")
 
@@ -35,6 +36,8 @@ class FxdApp:
         self.display_mode = "solid"
         self.section_view = False
         self.hidden_review_layers: set[str] = set()
+        self.project_path: Path | None = None
+        self.log = StructuredLog(Path.home() / ".fxd" / "diagnostics.jsonl")
 
         root.title("FXD — Engineering Review (not production approval)")
         root.geometry("1180x760")
@@ -46,6 +49,8 @@ class FxdApp:
         ttk.Button(side, text="Import STEP", command=self.import_step).pack(fill="x")
         ttk.Button(side, text="Open FXD project", command=self.open_project).pack(fill="x", pady=3)
         ttk.Button(side, text="Save FXD project", command=self.save_project).pack(fill="x", pady=3)
+        ttk.Button(side, text="Export review package", command=self.export_package).pack(fill="x", pady=3)
+        ttk.Button(side, text="Recover autosave", command=self.recover_autosave).pack(fill="x", pady=3)
         self.concepts = tk.Listbox(side, height=5, exportselection=False)
         self.concepts.pack(fill="x", pady=8)
         self.concepts.bind("<<ListboxSelect>>", self.select_concept)
@@ -94,6 +99,7 @@ class FxdApp:
                 product, build_orientation=Vec3(0, 0, 1), loading_direction=Vec3(1, 0, 0),
                 process_type="manual MIG", production_quantity=1)
             self.project = FxdProject.from_product(product, annotations)
+            self.project_path = None
             self._restore_kernel_geometry()
             message = (f"Imported immutable STEP and {len(self.review_geometry.meshes)} selectable "
                        "product/fixture B-Rep face meshes." if self.review_geometry else
@@ -108,6 +114,9 @@ class FxdApp:
             return
         try:
             self.project = FxdProject.load(name)
+            self.project_path = Path(name)
+            self.log.record("project_opened", source_sha256=self.project.product.source_sha256,
+                            revision=self.project.revision_id)
             self.selected_reference = None
             self._restore_kernel_geometry()
             message = ("Loaded project and rebuilt real-kernel visual evidence from embedded immutable STEP."
@@ -124,7 +133,37 @@ class FxdApp:
             defaultextension=".fxd.json", filetypes=(("FXD project", "*.fxd.json"),))
         if name:
             self.project.save(name)
+            self.project_path = Path(name)
+            ProjectRecovery(self.project_path).autosave(self.project)
+            self.log.record("project_saved", revision=self.project.revision_id)
             self.status.set(f"Saved {Path(name).name}; production approval is not implied.")
+
+    def export_package(self) -> None:
+        if not self.project:
+            return
+        destination = filedialog.askdirectory(title="Export engineering review package")
+        if not destination:
+            return
+        try:
+            paths = export_project_package(self.project, destination, kernel=self.kernel)
+            self.log.record("review_package_exported", revision=self.project.revision_id,
+                            artifact_count=len(paths))
+            self.status.set("Exported engineering-review package; production approval is not implied.")
+        except Exception as exc:
+            self.log.record("review_package_export_failed", error=str(exc))
+            messagebox.showerror("Package export failed", str(exc))
+
+    def recover_autosave(self) -> None:
+        if not self.project_path:
+            messagebox.showinfo("Recover autosave", "Open or save a project first so its autosave location is known.")
+            return
+        try:
+            self.project = ProjectRecovery(self.project_path).recover()
+            self._restore_kernel_geometry()
+            self.refresh("Recovered autosave; review state remains subject to deterministic validation.")
+            self.log.record("autosave_recovered", revision=self.project.revision_id)
+        except Exception as exc:
+            messagebox.showerror("Autosave recovery failed", str(exc))
 
     def _restore_kernel_geometry(self) -> None:
         self.kernel = None

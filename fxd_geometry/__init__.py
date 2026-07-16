@@ -31,6 +31,8 @@ from .kernel import (KernelAssembly, KernelCapabilities, KernelComponent, Kernel
 from .review_kernel import OcpKernel
 from .visual import ReviewGeometry, ReviewVisualItem, VisualEdge, build_review_geometry
 from .project import FixtureEdit, ProjectRevision
+from .operations import (DiagnosticEvent, OperationsError, ProjectRecovery, StructuredLog,
+                         export_project_package, load_preferences, save_preferences)
 from .validation import (VALIDATION_VERSION, ValidationFinding, ValidationResult,
                          validate_fixture_concept)
 from .workflow import (SequencePlan, WorkflowComparison, WorkflowEnvelope, WorkflowError,
@@ -55,3 +57,5 @@ __all__ += ["ReviewZone", "SequencePlan", "WorkflowComparison", "WorkflowEnvelop
             "WorkflowFinding", "WorkflowReport", "WorkflowStep", "WorkflowVariant",
             "WorkflowVisualItem",
             "compare_workflow_variants", "evaluate_workflow"]
+__all__ += ["DiagnosticEvent", "OperationsError", "ProjectRecovery", "StructuredLog",
+            "export_project_package", "load_preferences", "save_preferences"]
