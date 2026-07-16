@@ -10,11 +10,13 @@ review artifacts when deterministic validation permits it. A neutral synthetic
 performance proof measured 0.727 ms against a 1000 ms budget, and release
 manifest/signing procedures are documented without embedding keys.
 
-The milestone remains Pending: `bash scripts/ci-contract.sh` passes (99 tests,
-4 real-kernel tests skipped), but `bash scripts/ci.sh` could not install the
-pinned OCP dependency because this environment cannot resolve PyPI. Real-kernel
-large-assembly performance evidence and authorized release signing remain
-pending. No production approval or certification claim is made.
+The milestone remains Pending: `bash scripts/ci-contract.sh` passes (103 tests,
+4 real-kernel tests skipped), but `bash scripts/ci.sh` cannot install the
+pinned OCP dependency because this environment cannot resolve PyPI. Neutral
+large-assembly performance passes at 6.907 ms against a 5000 ms budget; real-
+kernel performance evidence and authorized release signing remain pending.
+Autosave recovery now rejects stale snapshots, and preferences are persisted by
+atomic replacement. No production approval or certification claim is made.
 
 ## 2026-07-13 — Project founded
 

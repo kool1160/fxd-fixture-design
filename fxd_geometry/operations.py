@@ -63,8 +63,8 @@ class ProjectRecovery:
         return self.autosave_path.stat().st_mtime >= self.project_path.stat().st_mtime
 
     def recover(self) -> FxdProject:
-        if not self.autosave_path.is_file():
-            raise OperationsError("no autosave is available")
+        if not self.available():
+            raise OperationsError("no current autosave is available")
         return FxdProject.load(self.autosave_path)
 
 
@@ -90,7 +90,20 @@ def save_preferences(path: str | Path, preferences: dict[str, Any]) -> Path:
         raise OperationsError("preferences may not contain engineering or unknown fields")
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(json.dumps({**DEFAULT_PREFERENCES, **preferences}, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    payload = json.dumps({**DEFAULT_PREFERENCES, **preferences}, indent=2, sort_keys=True) + "\n"
+    temporary = target.with_name(f".{target.name}.tmp")
+    try:
+        with temporary.open("w", encoding="utf-8", newline="\n") as handle:
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, target)
+    except Exception:
+        try:
+            temporary.unlink()
+        except FileNotFoundError:
+            pass
+        raise
     return target
 
 

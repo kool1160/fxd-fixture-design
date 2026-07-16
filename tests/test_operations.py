@@ -56,6 +56,22 @@ class OperationsTests(unittest.TestCase):
             with self.assertRaises(OperationsError):
                 save_preferences(preferences, {"engineering_rule": "bad"})
 
+    def test_stale_autosave_is_not_recovered(self):
+        with tempfile.TemporaryDirectory() as directory:
+            project_path = Path(directory) / "fixture.fxd.json"
+            recovery = ProjectRecovery(project_path)
+            recovery.autosave(self.project)
+            project_path.write_text("newer project marker", encoding="utf-8")
+            with self.assertRaisesRegex(OperationsError, "current autosave"):
+                recovery.recover()
+
+    def test_preferences_replace_atomically(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "preferences.json"
+            save_preferences(path, {"theme": "light"})
+            self.assertEqual(load_preferences(path)["theme"], "light")
+            self.assertFalse(path.with_name(".preferences.json.tmp").exists())
+
     def test_application_export_uses_review_gate_and_fails_closed(self):
         with tempfile.TemporaryDirectory() as directory:
             with self.assertRaises(ExportError):
