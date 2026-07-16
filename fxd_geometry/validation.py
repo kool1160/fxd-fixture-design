@@ -15,6 +15,7 @@ from .product_model import ProductModel
 from .tooling import ToolingLibrary, generic_tooling_library
 from .weld_rules import WeldRuleAnalysis
 from .placement import validate_placement_plan
+from .component_geometry import ManufacturingAssembly
 
 VALIDATION_VERSION = "fxd-validation-v1"
 
@@ -130,6 +131,7 @@ def validate_fixture_concept(product: ProductModel, concept: CompleteFixtureConc
                              weld: WeldRuleAnalysis | None = None,
                              tooling: ToolingLibrary | None = None,
                              manufacturing: ManufacturingGeometry | None = None,
+                             manufacturing_assembly: ManufacturingAssembly | None = None,
                              kernel: RealKernel | None = None,
                              minimum_clearance_mm: float = 0.5) -> ValidationResult:
     """Run available deterministic gates; scores and AI cannot override them."""
@@ -186,6 +188,16 @@ def validate_fixture_concept(product: ProductModel, concept: CompleteFixtureConc
                                  item.evidence + tuple(f"placement={value}" for value in item.placement_identities),
                                  item.assumptions)
                         for item in validate_placement_plan(product, concept.placement))
+    if manufacturing_assembly is not None:
+        if (manufacturing_assembly.source_sha256 != product.source_sha256
+                or manufacturing_assembly.concept_identity != concept.identity
+                or manufacturing_assembly.units != "mm"):
+            findings.append(_finding("manufacturing_identity_mismatch", "error", "manufacturing",
+                                     "component manufacturing assembly does not match the validated concept source"))
+        findings.extend(_finding(item.code, item.severity, "manufacturing", item.message,
+                                 item.evidence + tuple(f"component={value}" for value in item.component_identities),
+                                 item.assumptions)
+                        for item in manufacturing_assembly.findings)
     tooling = tooling or generic_tooling_library()
     if not any(feature.kind == "clamp_mount" for feature in concept.fixture.features):
         findings.append(_finding("clamp_evidence_missing", "error", "clamp", "fixture concept contains no clamp mount"))
@@ -200,7 +212,7 @@ def validate_fixture_concept(product: ProductModel, concept: CompleteFixtureConc
                 "kernel-authored manufacturing geometry does not match the validated concept source"))
         else:
             findings.extend(_kernel_findings(manufacturing, kernel, minimum_clearance_mm))
-    else:
+    elif manufacturing_assembly is None:
         findings.append(_finding("manufacturing_geometry_missing", "warning", "manufacturing",
             "kernel-authored manufacturing solids were not supplied"))
     if analysis is not None:
