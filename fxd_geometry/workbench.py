@@ -24,6 +24,7 @@ class WorkbenchDocument:
     shape: object
     assembly: KernelAssembly
     meshes: tuple[KernelTriangleMesh, ...]
+    source_path: Path | None = None
 
     @property
     def units(self) -> str:
@@ -66,5 +67,5 @@ def load_step_for_workbench(source: str | Path | bytes, *, kernel: OcpKernel | N
         raise ValueError("STEP source produced no displayable faces")
     return WorkbenchDocument(
         source_name or (path.name if path else "<memory>"), sha256(data).hexdigest(),
-        data, shape, assembly, meshes,
+        data, shape, assembly, meshes, path.resolve() if path is not None else None,
     )

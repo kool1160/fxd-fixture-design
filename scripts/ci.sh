@@ -7,6 +7,7 @@ required_files=(
   AGENTS.md
   BACKLOG.md
   requirements-kernel.txt
+  requirements-desktop.txt
   docs/PRODUCT_DIRECTION.md
   docs/ENGINEERING_CONSTITUTION.md
   docs/ARCHITECTURE.md
@@ -19,14 +20,15 @@ for file in "${required_files[@]}"; do
   [[ -f "$file" ]] || { echo "Missing required file: $file" >&2; exit 1; }
 done
 
-python -m pip install --disable-pip-version-check -r requirements-kernel.txt
+python -m pip install --disable-pip-version-check --only-binary=:all: -r requirements-desktop.txt
 node scripts/fxd-backlog.mjs validate
 python -m json.tool .github/codex/schemas/planning-handoff.schema.json >/dev/null
 python -m unittest discover -s tests >/dev/null
 python -u scripts/kernel_proof.py
 
 if grep -RInE '(sk-[A-Za-z0-9_-]{20,}|OPENAI_API_KEY=.+)' \
-  --exclude-dir=.git --exclude='*.md' --exclude='ci.sh' --exclude='ci-contract.sh' .; then
+  --exclude-dir=.git --exclude-dir=.venv \
+  --exclude='*.md' --exclude='ci.sh' --exclude='ci-contract.sh' .; then
   echo 'Potential committed secret detected.' >&2
   exit 1
 fi

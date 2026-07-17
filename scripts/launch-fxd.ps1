@@ -35,12 +35,14 @@ try {
     }
     Write-Host "OCP: $ocp"
 
-    $tk = & $python -c "import tkinter as tk; root=tk.Tk(); root.withdraw(); root.destroy(); print('available')" 2>&1
+    $qt = & $python -c "import PySide6, vtk; from vtkmodules.vtkRenderingCore import vtkRenderWindow; print(PySide6.__version__ + '|' + vtk.vtkVersion.GetVTKVersion())" 2>&1
     if ($LASTEXITCODE -ne 0) {
-        Write-Error "Tk verification failed: $tk"
+        Write-Error "PySide6/VTK Qt verification failed: $qt"
         exit 5
     }
-    Write-Host "Tk: $tk"
+    $desktopVersions = "$qt".Split('|')
+    Write-Host "PySide6: $($desktopVersions[0])"
+    Write-Host "VTK: $($desktopVersions[1])"
 
     if ($CheckOnly) {
         exit 0
