@@ -1,0 +1,1195 @@
+"""Milestone 30 fixture-construction contracts and deterministic checks.
+
+This module composes the existing structure, placement, component geometry, and
+validation layers.  It deliberately does not interpret provisional dimensions,
+shop practices, or customer tooling as universal manufacturing policy.  A
+fixture build plan is editable review evidence; OCP authoring happens only for
+components whose authority is explicitly ``AUTHORED_MANUFACTURING``.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from enum import Enum
+import hashlib
+import json
+import math
+import re
+from pathlib import Path
+
+from .aabb import Aabb, Vec3
+from .annotations import GeometryReference
+from .concepts import CompleteFixtureConcept
+from .kernel import KernelOperationError, RealKernel, TopologyCounts
+from .product_model import ProductModel
+
+
+M30_SCHEMA = "fxd-fixture-build-v1"
+
+
+class FixtureBuildError(ValueError):
+    """Raised when fixture-build evidence is malformed or unsafe to author."""
+
+
+class FixturePurpose(str, Enum):
+    FULL_WELD = "full_weld_fixture"
+    TACK_LOCATION = "tack_location_fixture"
+    ASSEMBLY = "assembly_fixture"
+    INSPECTION = "inspection_fixture"
+    PROFILE_CHECK = "profile_check_fixture"
+    GO_NO_GO = "go_no_go_gauge"
+    REWORK = "rework_fixture"
+    ROBOTIC = "robotic_or_cobot_fixture"
+    COMBINED_BUILD_CHECK = "combined_build_and_check_fixture"
+
+
+class ConstructionMethod(str, Enum):
+    AUTO = "auto_select"
+    LASER_CUT_FABRICATED = "laser_cut_fabricated"
+    CNC_MACHINED = "cnc_machined"
+    HYBRID = "hybrid_fabricated_and_machined"
+    WELDED_TUBE_FRAME = "welded_tube_frame"
+    SHOP_STANDARD = "shop_standard"
+    TACK_LOCATION = "tack_location_fixture"
+
+
+class FixtureLifecycle(str, Enum):
+    STORE_AND_REUSE = "store_and_reuse"
+    DISPOSABLE_RECUT = "disposable_or_job_run_recut"
+    REUSABLE_TOOLING_ON_DISPOSABLE = "reusable_tooling_on_disposable_fixture"
+    PERMANENT = "full_permanent_fixture"
+
+
+class ClecoStrategy(str, Enum):
+    NONE = "none"
+    PRODUCT_HOLES = "product_cleco_holes"
+    SEPARATE_FIXTURE_HOLES = "separate_fixture_cleco_holes"
+
+
+class GeometryAuthority(str, Enum):
+    SOURCE = "source_geometry"
+    AUTHORED_MANUFACTURING = "authored_manufacturing_geometry"
+    PURCHASED_COMPONENT = "purchased_component_geometry"
+    PROVISIONAL_ENVELOPE = "provisional_engineering_envelope"
+
+
+class BuildComponentRole(str, Enum):
+    BASEPLATE = "baseplate"
+    TUBE_FRAME = "tube_frame"
+    CROSSMEMBER = "crossmember"
+    RISER = "riser"
+    TOWER = "tower"
+    GUSSET = "gusset"
+    LOCATOR_PLATE = "locator_plate"
+    SUPPORT_PAD = "support_pad"
+    HARD_STOP = "hard_stop"
+    ROUND_PIN = "round_pin"
+    DIAMOND_PIN = "diamond_pin"
+    PIN_BUSHING = "pin_bushing"
+    SHIM_PACK = "shim_pack"
+    CLAMP_PLATE = "clamp_plate"
+    TAB = "tab"
+    SLOT = "slot"
+    RELIEF = "relief"
+    ACCESS_CUTOUT = "access_cutout"
+    WEAR_PLATE = "wear_plate"
+    LOCATOR_BLOCK = "replaceable_locator_block"
+    TOOLING_MOUNT = "purchased_tooling_mount"
+    FORK_POCKET = "fork_pocket"
+    LIFTING_FEATURE = "lifting_feature"
+
+
+class HoleProcess(str, Enum):
+    LASER_CLEARANCE = "laser_cut_clearance"
+    LASER_PILOT = "laser_cut_pilot"
+    DRILLED = "drilled"
+    TAPPED = "tapped"
+    REAMED = "reamed"
+    BORED = "bored"
+    MACHINED = "machined"
+    DOWEL = "dowel"
+    LOCATOR_BORE = "locator_bore"
+    ACCESS = "access"
+    INSPECTION_ONLY = "inspection_only"
+    CLECO = "cleco"
+    PLUG_WELD = "plug_weld"
+    WELD_FILL_GRIND = "weld_fill_and_grind"
+
+
+class AdjustmentState(str, Enum):
+    PROVISIONAL = "provisional_adjustment"
+    PROVE_OUT = "prove_out_setting"
+    LOCKED = "locked_production_position"
+    DOWELED = "doweled_production_position"
+    REVALIDATION_REQUIRED = "revalidation_required"
+
+
+class NestClassification(str, Enum):
+    PRODUCT = "sellable_product_part"
+    FIXTURE = "fixture_part_not_for_shipment"
+    REUSABLE_HARDWARE = "reusable_fixture_hardware"
+    PURCHASED_TOOLING = "purchased_tooling"
+
+
+@dataclass(frozen=True)
+class M30Rule:
+    """Stable, auditable rule definition tied to the supplied M30 handoff."""
+
+    identity: str
+    title: str
+    description: str
+    applicability: str
+    required_evidence: tuple[str, ...]
+    deterministic_logic: str
+    result_states: tuple[str, ...]
+    severity: str
+    override_policy: str
+    source_handoff_reference: str
+    test_mapping: tuple[str, ...]
+
+
+def _rule(identity: str, title: str, description: str, applicability: str,
+          evidence: tuple[str, ...], logic: str, severity: str,
+          test: tuple[str, ...]) -> M30Rule:
+    return M30Rule(
+        identity, title, description, applicability, evidence, logic,
+        ("valid", "provisional", "invalid", "not_evaluated"), severity,
+        "Engineer assumptions and overrides remain explicit evidence; they never silently pass a gate.",
+        "M30-USER-SPEC", test,
+    )
+
+
+# Each required category is represented by at least one stable public rule.
+RULE_CATALOG: tuple[M30Rule, ...] = (
+    _rule("FXD-DAT-001", "Three-point primary datum", "Four fixed primary datum pads can overconstrain a workpiece.", "locating", ("primary datum contacts",), "flag more than three fixed primary pads", "error", ("test_four_fixed_pads",)),
+    _rule("FXD-LOC-001", "Locator contact suitability", "Locators cannot silently use weld seams or tube radii.", "locating", ("contact condition",), "flag seam or radius contacts", "error", ("test_locator_contact",)),
+    _rule("FXD-SUP-001", "Clamp reaction support", "A clamp reaction requires an explicit supporting feature.", "clamping", ("reaction support",), "flag a missing support reference", "error", ("test_clamp_support",)),
+    _rule("FXD-PIN-001", "Two-hole locating pattern", "Two full round pins may bind under tolerance variation.", "pin locating", ("pin roles",), "flag two or more full round pins", "error", ("test_round_diamond",)),
+    _rule("FXD-CLP-001", "Clamp loading and release", "Clamp information must remain explicit and supported.", "clamping", ("clamp reaction", "unload evidence"), "flag unsupported clamps or fixed-pin traps", "error", ("test_clamp_support", "test_unload_trap")),
+    _rule("FXD-ACC-001", "Purpose-specific access", "Tack fixtures require tack access; full-weld access is a separate check.", "access", ("fixture purpose", "tack access"), "do not require full weld access for tack purpose", "warning", ("test_tack_access",)),
+    _rule("FXD-WLD-001", "Weld-access evidence", "Visible weld geometry is not proof of workable torch access.", "weld access", ("torch approach evidence",), "retain unavailable evidence as provisional", "warning", ("test_tack_access",)),
+    _rule("FXD-DST-001", "Welded-shape unloading", "Nominal CAD is not proof of post-weld unloading clearance.", "unloading", ("unload clearance evidence",), "flag fixed pins without unload clearance", "error", ("test_unload_trap",)),
+    _rule("FXD-MFG-001", "Manufacturing geometry authority", "Only authored or purchased geometry is eligible for manufacturing export.", "export", ("geometry authority",), "block provisional envelopes", "error", ("test_geometry_authority",)),
+    _rule("FXD-TAB-001", "Tab and slot fit", "Tabs require deterministic clearance, engagement, relief, and insertion evidence.", "fabrication", ("tab thickness", "slot width", "assembly direction"), "reject undersized slots and bottoming tabs", "error", ("test_tab_slot",)),
+    _rule("FXD-HOL-001", "Hole process authority", "Circular CAD is not proof of a precision manufactured hole.", "holes", ("hole process",), "reject precision requested from laser-only holes", "error", ("test_hole_process",)),
+    _rule("FXD-THR-001", "Threaded mounting evidence", "Tapped mount holes require explicit thread and plate evidence.", "threaded mounts", ("thread pitch", "engagement"), "flag incomplete tapped-hole evidence", "warning", ("test_hole_process",)),
+    _rule("FXD-PKY-001", "Poka-yoke accessibility", "Poka-yoke must not silently create a trapped or hidden seating state.", "loading", ("poka-yoke evidence",), "flag absent explicit orientation evidence", "warning", ("test_poka_yoke",)),
+    _rule("FXD-CLE-001", "Cleco construction and removal", "Clecos are temporary construction aids, not automatic precision locators.", "Cleco", ("diameter", "grip range", "access", "removal"), "validate fit, access, and product-hole approval", "error", ("test_cleco",)),
+    _rule("FXD-TACK-001", "Tack/location workflow", "Tack fixtures locate, tack, release, and unload before finish welding elsewhere.", "tack fixture", ("tack access", "release sequence"), "validate tack evidence without requiring full-weld access", "error", ("test_tack_workflow",)),
+    _rule("FXD-COST-001", "Lifecycle comparison", "Store/reuse versus recut is a ranked preference, not universal law.", "lifecycle", ("quantity", "repeat frequency", "job revision"), "keep lifecycle rationale explicit", "warning", ("test_lifecycle",)),
+    _rule("FXD-MNT-001", "Replaceable service items", "Wear and locator items need accessible replacement evidence.", "maintenance", ("replacement evidence",), "flag inaccessible non-replaceable wear contacts", "warning", ("test_maintenance",)),
+    _rule("FXD-EXP-001", "Review-only export gate", "Stale, suppressed, provisional, or invalid build evidence cannot export.", "export", ("validation digest", "authority"), "fail closed before package creation", "error", ("test_export_gate",)),
+)
+RULES_BY_ID = {item.identity: item for item in RULE_CATALOG}
+
+
+@dataclass(frozen=True)
+class HoleProcessSpec:
+    identity: str
+    center_mm: Vec3
+    diameter_mm: float
+    process: HoleProcess
+    precision_required: bool = False
+    thread_pitch: str | None = None
+    thread_engagement_mm: float | None = None
+    final_operation: HoleProcess | None = None
+    notes: str = ""
+    evidence: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not self.identity.strip() or not math.isfinite(self.diameter_mm) or self.diameter_mm <= 0:
+            raise FixtureBuildError("hole identity and positive finite diameter are required")
+        if self.thread_engagement_mm is not None and self.thread_engagement_mm <= 0:
+            raise FixtureBuildError("thread engagement must be positive when supplied")
+        if self.process == HoleProcess.TAPPED and not self.thread_pitch:
+            raise FixtureBuildError("tapped holes require an explicit thread pitch")
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "identity": self.identity, "center_mm": self.center_mm.__dict__,
+            "diameter_mm": self.diameter_mm, "process": self.process.value,
+            "precision_required": self.precision_required, "thread_pitch": self.thread_pitch,
+            "thread_engagement_mm": self.thread_engagement_mm,
+            "final_operation": self.final_operation.value if self.final_operation else None,
+            "notes": self.notes, "evidence": list(self.evidence),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, object]) -> "HoleProcessSpec":
+        final = data.get("final_operation")
+        return cls(str(data["identity"]), Vec3(**data["center_mm"]), float(data["diameter_mm"]),
+                   HoleProcess(data["process"]), bool(data.get("precision_required", False)),
+                   data.get("thread_pitch"), data.get("thread_engagement_mm"),
+                   HoleProcess(final) if final else None, str(data.get("notes", "")),
+                   tuple(data.get("evidence", ())))
+
+
+@dataclass(frozen=True)
+class TabSlotJoint:
+    identity: str
+    tab_component_identity: str
+    slot_component_identity: str
+    tab_thickness_mm: float
+    slot_width_mm: float
+    engagement_mm: float
+    clearance_mm: float
+    insertion_direction: Vec3
+    dog_bone_relief: bool = False
+    weld_relief: bool = False
+    bottoms_out: bool = False
+    assembly_sequence: int = 1
+    evidence: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        values = (self.tab_thickness_mm, self.slot_width_mm, self.engagement_mm, self.clearance_mm)
+        if not self.identity.strip() or self.assembly_sequence < 1 or any(value < 0 for value in values):
+            raise FixtureBuildError("tab-slot dimensions and a positive assembly sequence are required")
+        if self.insertion_direction == Vec3(0.0, 0.0, 0.0):
+            raise FixtureBuildError("tab-slot insertion direction must be non-zero")
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "identity": self.identity, "tab_component_identity": self.tab_component_identity,
+            "slot_component_identity": self.slot_component_identity,
+            "tab_thickness_mm": self.tab_thickness_mm, "slot_width_mm": self.slot_width_mm,
+            "engagement_mm": self.engagement_mm, "clearance_mm": self.clearance_mm,
+            "insertion_direction": self.insertion_direction.__dict__, "dog_bone_relief": self.dog_bone_relief,
+            "weld_relief": self.weld_relief, "bottoms_out": self.bottoms_out,
+            "assembly_sequence": self.assembly_sequence, "evidence": list(self.evidence),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, object]) -> "TabSlotJoint":
+        return cls(str(data["identity"]), str(data["tab_component_identity"]), str(data["slot_component_identity"]),
+                   float(data["tab_thickness_mm"]), float(data["slot_width_mm"]),
+                   float(data["engagement_mm"]), float(data["clearance_mm"]),
+                   Vec3(**data["insertion_direction"]), bool(data.get("dog_bone_relief", False)),
+                   bool(data.get("weld_relief", False)), bool(data.get("bottoms_out", False)),
+                   int(data.get("assembly_sequence", 1)), tuple(data.get("evidence", ())))
+
+
+@dataclass(frozen=True)
+class ClecoSpec:
+    identity: str
+    strategy: ClecoStrategy
+    component_identity: str
+    diameter_mm: float
+    hole_diameter_mm: float
+    material_stack_mm: float
+    minimum_grip_mm: float
+    maximum_grip_mm: float
+    quantity: int
+    installation_access: bool
+    removal_access: bool
+    plier_access: bool
+    removed_before_welding: bool
+    retained_during_tack: bool
+    product_hole_approved: bool = False
+    post_use_process: HoleProcess | None = None
+    spacing_mm: float | None = None
+    evidence: tuple[str, ...] = ()
+    assumptions: tuple[str, ...] = ()
+    installation_side: str = "fixture assembly side"
+    removal_side: str = "fixture assembly side"
+    fixture_build_role: str = "temporary fixture assembly"
+    product_location_role: str | None = None
+    hole_remains: bool = True
+
+    def __post_init__(self) -> None:
+        values = (self.diameter_mm, self.hole_diameter_mm, self.material_stack_mm,
+                  self.minimum_grip_mm, self.maximum_grip_mm)
+        if not self.identity.strip() or self.quantity < 1 or any(value <= 0 for value in values):
+            raise FixtureBuildError("Cleco dimensions, identity, and quantity must be positive")
+        if self.minimum_grip_mm > self.maximum_grip_mm:
+            raise FixtureBuildError("Cleco grip range is reversed")
+        if self.spacing_mm is not None and self.spacing_mm <= 0:
+            raise FixtureBuildError("Cleco spacing must be positive when supplied")
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "identity": self.identity, "strategy": self.strategy.value,
+            "component_identity": self.component_identity, "diameter_mm": self.diameter_mm,
+            "hole_diameter_mm": self.hole_diameter_mm, "material_stack_mm": self.material_stack_mm,
+            "minimum_grip_mm": self.minimum_grip_mm, "maximum_grip_mm": self.maximum_grip_mm,
+            "quantity": self.quantity, "installation_access": self.installation_access,
+            "removal_access": self.removal_access, "plier_access": self.plier_access,
+            "removed_before_welding": self.removed_before_welding,
+            "retained_during_tack": self.retained_during_tack,
+            "product_hole_approved": self.product_hole_approved,
+            "post_use_process": self.post_use_process.value if self.post_use_process else None,
+            "spacing_mm": self.spacing_mm, "evidence": list(self.evidence),
+            "assumptions": list(self.assumptions),
+            "installation_side": self.installation_side, "removal_side": self.removal_side,
+            "fixture_build_role": self.fixture_build_role,
+            "product_location_role": self.product_location_role, "hole_remains": self.hole_remains,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, object]) -> "ClecoSpec":
+        post = data.get("post_use_process")
+        return cls(str(data["identity"]), ClecoStrategy(data["strategy"]), str(data["component_identity"]),
+                   float(data["diameter_mm"]), float(data["hole_diameter_mm"]), float(data["material_stack_mm"]),
+                   float(data["minimum_grip_mm"]), float(data["maximum_grip_mm"]), int(data["quantity"]),
+                   bool(data["installation_access"]), bool(data["removal_access"]), bool(data["plier_access"]),
+                   bool(data["removed_before_welding"]), bool(data["retained_during_tack"]),
+                   bool(data.get("product_hole_approved", False)), HoleProcess(post) if post else None,
+                   data.get("spacing_mm"), tuple(data.get("evidence", ())), tuple(data.get("assumptions", ())),
+                   str(data.get("installation_side", "fixture assembly side")),
+                   str(data.get("removal_side", "fixture assembly side")),
+                   str(data.get("fixture_build_role", "temporary fixture assembly")),
+                   data.get("product_location_role"), bool(data.get("hole_remains", True)))
+
+
+@dataclass(frozen=True)
+class PokaYokeSpec:
+    """Explicit anti-reversal evidence for a fabricated fixture feature."""
+
+    identity: str
+    component_identity: str
+    strategy: str
+    prevents_reversal: bool
+    avoids_pinch_point: bool
+    avoids_hidden_seating: bool
+    supports_unloading: bool
+    evidence: tuple[str, ...] = ()
+    assumptions: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not self.identity.strip() or not self.component_identity.strip() or not self.strategy.strip():
+            raise FixtureBuildError("poka-yoke identity, component, and strategy are required")
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "identity": self.identity, "component_identity": self.component_identity,
+            "strategy": self.strategy, "prevents_reversal": self.prevents_reversal,
+            "avoids_pinch_point": self.avoids_pinch_point,
+            "avoids_hidden_seating": self.avoids_hidden_seating,
+            "supports_unloading": self.supports_unloading,
+            "evidence": list(self.evidence), "assumptions": list(self.assumptions),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, object]) -> "PokaYokeSpec":
+        return cls(
+            str(data["identity"]), str(data["component_identity"]), str(data["strategy"]),
+            bool(data.get("prevents_reversal", False)), bool(data.get("avoids_pinch_point", False)),
+            bool(data.get("avoids_hidden_seating", False)), bool(data.get("supports_unloading", False)),
+            tuple(data.get("evidence", ())), tuple(data.get("assumptions", ())),
+        )
+
+
+@dataclass(frozen=True)
+class FixtureBuildRequirements:
+    source_sha256: str
+    fixture_purpose: FixturePurpose
+    construction_method: ConstructionMethod
+    lifecycle: FixtureLifecycle
+    job_revision: str | None
+    fixture_revision: str
+    production_quantity: int | None = None
+    repeat_frequency: str | None = None
+    weld_process: str | None = None
+    shop_capabilities: tuple[str, ...] = ()
+    tack_access_available: bool | None = None
+    full_weld_access_available: bool | None = None
+    unload_clearance_evaluated: bool | None = None
+    adjustment_state: AdjustmentState = AdjustmentState.PROVISIONAL
+    assumptions: tuple[str, ...] = ()
+    evidence: tuple[str, ...] = ()
+    cleco_strategy: ClecoStrategy = ClecoStrategy.NONE
+    product_hole_approved: bool = False
+    product_hole_justification: str | None = None
+
+    def __post_init__(self) -> None:
+        if not re.fullmatch(r"[0-9a-f]{64}", self.source_sha256):
+            raise FixtureBuildError("fixture build requires a SHA-256 source identity")
+        if not self.fixture_revision.strip():
+            raise FixtureBuildError("fixture revision is required")
+        if self.production_quantity is not None and self.production_quantity < 1:
+            raise FixtureBuildError("production quantity must be positive when supplied")
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "source_sha256": self.source_sha256, "fixture_purpose": self.fixture_purpose.value,
+            "construction_method": self.construction_method.value, "lifecycle": self.lifecycle.value,
+            "job_revision": self.job_revision, "fixture_revision": self.fixture_revision,
+            "production_quantity": self.production_quantity, "repeat_frequency": self.repeat_frequency,
+            "weld_process": self.weld_process, "shop_capabilities": list(self.shop_capabilities),
+            "tack_access_available": self.tack_access_available,
+            "full_weld_access_available": self.full_weld_access_available,
+            "unload_clearance_evaluated": self.unload_clearance_evaluated,
+            "adjustment_state": self.adjustment_state.value, "assumptions": list(self.assumptions),
+            "evidence": list(self.evidence),
+            "cleco_strategy": self.cleco_strategy.value,
+            "product_hole_approved": self.product_hole_approved,
+            "product_hole_justification": self.product_hole_justification,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, object]) -> "FixtureBuildRequirements":
+        return cls(str(data["source_sha256"]), FixturePurpose(data["fixture_purpose"]),
+                   ConstructionMethod(data["construction_method"]), FixtureLifecycle(data["lifecycle"]),
+                   data.get("job_revision"), str(data["fixture_revision"]), data.get("production_quantity"),
+                   data.get("repeat_frequency"), data.get("weld_process"), tuple(data.get("shop_capabilities", ())),
+                   data.get("tack_access_available"), data.get("full_weld_access_available"),
+                   data.get("unload_clearance_evaluated"), AdjustmentState(data.get("adjustment_state", AdjustmentState.PROVISIONAL.value)),
+                   tuple(data.get("assumptions", ())), tuple(data.get("evidence", ())),
+                   ClecoStrategy(data.get("cleco_strategy", ClecoStrategy.NONE.value)),
+                   bool(data.get("product_hole_approved", False)), data.get("product_hole_justification"))
+
+
+@dataclass(frozen=True)
+class FixtureBuildComponent:
+    identity: str
+    part_number: str
+    description: str
+    role: BuildComponentRole
+    geometry_authority: GeometryAuthority
+    material: str
+    thickness_mm: float | None
+    stock_mm: tuple[float, ...]
+    quantity: int
+    manufacturing_process: str
+    bounds: Aabb
+    source_references: tuple[GeometryReference, ...]
+    rule_ids: tuple[str, ...]
+    parent_component_identity: str | None = None
+    nest_classification: NestClassification = NestClassification.FIXTURE
+    reusable: bool = False
+    disposable: bool = False
+    contact_condition: str | None = None
+    reaction_support_identity: str | None = None
+    fixed: bool = False
+    locating_constraint: bool = False
+    holes: tuple[HoleProcessSpec, ...] = ()
+    assumptions: tuple[str, ...] = ()
+    evidence: tuple[str, ...] = ()
+    replaceable: bool = False
+    maintenance_access: bool | None = None
+
+    def __post_init__(self) -> None:
+        if not self.identity.strip() or not self.part_number.strip() or not self.description.strip():
+            raise FixtureBuildError("build component identity, part number, and description are required")
+        if not self.material.strip() or not self.manufacturing_process.strip() or self.quantity < 1:
+            raise FixtureBuildError("build component material, process, and quantity are required")
+        if self.thickness_mm is not None and self.thickness_mm <= 0:
+            raise FixtureBuildError("component thickness must be positive")
+        if any(value <= 0 for value in self.stock_mm):
+            raise FixtureBuildError("component stock dimensions must be positive")
+        if not self.source_references:
+            raise FixtureBuildError("every fixture component needs source geometry traceability")
+        if not self.rule_ids or any(rule not in RULES_BY_ID for rule in self.rule_ids):
+            raise FixtureBuildError("every fixture component needs known deterministic rule references")
+        if self.disposable and self.reusable:
+            raise FixtureBuildError("a component cannot be both disposable and reusable")
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "identity": self.identity, "part_number": self.part_number, "description": self.description,
+            "role": self.role.value, "geometry_authority": self.geometry_authority.value,
+            "material": self.material, "thickness_mm": self.thickness_mm,
+            "stock_mm": list(self.stock_mm), "quantity": self.quantity,
+            "manufacturing_process": self.manufacturing_process, "bounds": self.bounds.as_dict(),
+            "source_references": [item.__dict__ for item in self.source_references],
+            "rule_ids": list(sorted(self.rule_ids)), "parent_component_identity": self.parent_component_identity,
+            "nest_classification": self.nest_classification.value, "reusable": self.reusable,
+            "disposable": self.disposable, "contact_condition": self.contact_condition,
+            "reaction_support_identity": self.reaction_support_identity, "fixed": self.fixed,
+            "locating_constraint": self.locating_constraint,
+            "holes": [item.to_dict() for item in sorted(self.holes, key=lambda item: item.identity)],
+            "assumptions": list(self.assumptions), "evidence": list(self.evidence),
+            "replaceable": self.replaceable, "maintenance_access": self.maintenance_access,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, object]) -> "FixtureBuildComponent":
+        bounds = data["bounds"]
+        return cls(
+            str(data["identity"]), str(data["part_number"]), str(data["description"]),
+            BuildComponentRole(data["role"]), GeometryAuthority(data["geometry_authority"]),
+            str(data["material"]), data.get("thickness_mm"), tuple(float(item) for item in data.get("stock_mm", ())),
+            int(data["quantity"]), str(data["manufacturing_process"]),
+            Aabb(Vec3(**bounds["minimum"]), Vec3(**bounds["maximum"])),
+            tuple(GeometryReference(**item) for item in data.get("source_references", ())),
+            tuple(data.get("rule_ids", ())), data.get("parent_component_identity"),
+            NestClassification(data.get("nest_classification", NestClassification.FIXTURE.value)),
+            bool(data.get("reusable", False)), bool(data.get("disposable", False)), data.get("contact_condition"),
+            data.get("reaction_support_identity"), bool(data.get("fixed", False)),
+            bool(data.get("locating_constraint", False)),
+            tuple(HoleProcessSpec.from_dict(item) for item in data.get("holes", ())),
+            tuple(data.get("assumptions", ())), tuple(data.get("evidence", ())),
+            bool(data.get("replaceable", False)), data.get("maintenance_access"),
+        )
+
+
+@dataclass(frozen=True)
+class FixtureBuildPlan:
+    identity: str
+    concept_identity: str
+    requirements: FixtureBuildRequirements
+    components: tuple[FixtureBuildComponent, ...]
+    tab_slots: tuple[TabSlotJoint, ...] = ()
+    clecos: tuple[ClecoSpec, ...] = ()
+    loading_sequence: tuple[str, ...] = ()
+    tack_sequence: tuple[str, ...] = ()
+    release_sequence: tuple[str, ...] = ()
+    unload_sequence: tuple[str, ...] = ()
+    finish_weld_handoff: str = ""
+    assumptions: tuple[str, ...] = ()
+    evidence: tuple[str, ...] = ()
+    poka_yokes: tuple[PokaYokeSpec, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not self.identity.strip() or not self.concept_identity.strip():
+            raise FixtureBuildError("build plan identity and concept identity are required")
+        if len({item.identity for item in self.components}) != len(self.components):
+            raise FixtureBuildError("fixture build component identities must be unique")
+        if len({item.part_number for item in self.components}) != len(self.components):
+            raise FixtureBuildError("fixture build part numbers must be unique")
+        if len({item.identity for item in self.tab_slots}) != len(self.tab_slots):
+            raise FixtureBuildError("tab-slot identities must be unique")
+        if len({item.identity for item in self.clecos}) != len(self.clecos):
+            raise FixtureBuildError("Cleco identities must be unique")
+        if len({item.identity for item in self.poka_yokes}) != len(self.poka_yokes):
+            raise FixtureBuildError("poka-yoke identities must be unique")
+
+    @property
+    def evidence_digest(self) -> str:
+        payload = json.dumps(self.to_dict(), sort_keys=True, separators=(",", ":"))
+        return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "schema": M30_SCHEMA, "identity": self.identity, "concept_identity": self.concept_identity,
+            "requirements": self.requirements.to_dict(),
+            "components": [item.to_dict() for item in sorted(self.components, key=lambda item: item.identity)],
+            "tab_slots": [item.to_dict() for item in sorted(self.tab_slots, key=lambda item: item.identity)],
+            "clecos": [item.to_dict() for item in sorted(self.clecos, key=lambda item: item.identity)],
+            "loading_sequence": list(self.loading_sequence), "tack_sequence": list(self.tack_sequence),
+            "release_sequence": list(self.release_sequence), "unload_sequence": list(self.unload_sequence),
+            "finish_weld_handoff": self.finish_weld_handoff, "assumptions": list(self.assumptions),
+            "evidence": list(self.evidence),
+            "poka_yokes": [item.to_dict() for item in sorted(self.poka_yokes, key=lambda item: item.identity)],
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, object]) -> "FixtureBuildPlan":
+        if data.get("schema", M30_SCHEMA) != M30_SCHEMA:
+            raise FixtureBuildError("unsupported fixture build schema")
+        return cls(
+            str(data["identity"]), str(data["concept_identity"]),
+            FixtureBuildRequirements.from_dict(data["requirements"]),
+            tuple(FixtureBuildComponent.from_dict(item) for item in data.get("components", ())),
+            tuple(TabSlotJoint.from_dict(item) for item in data.get("tab_slots", ())),
+            tuple(ClecoSpec.from_dict(item) for item in data.get("clecos", ())),
+            tuple(data.get("loading_sequence", ())), tuple(data.get("tack_sequence", ())),
+            tuple(data.get("release_sequence", ())), tuple(data.get("unload_sequence", ())),
+            str(data.get("finish_weld_handoff", "")), tuple(data.get("assumptions", ())),
+            tuple(data.get("evidence", ())),
+            tuple(PokaYokeSpec.from_dict(item) for item in data.get("poka_yokes", ())),
+        )
+
+
+@dataclass(frozen=True)
+class FixtureBuildFinding:
+    identity: str
+    rule_id: str
+    severity: str
+    status: str
+    message: str
+    component_identities: tuple[str, ...] = ()
+    geometry_references: tuple[GeometryReference, ...] = ()
+    evidence: tuple[str, ...] = ()
+    assumptions: tuple[str, ...] = ()
+    confidence: str = "deterministic"
+
+    def __post_init__(self) -> None:
+        if self.rule_id not in RULES_BY_ID:
+            raise FixtureBuildError(f"unknown Milestone 30 rule {self.rule_id!r}")
+        if self.severity not in {"error", "warning", "info"}:
+            raise FixtureBuildError("fixture build finding severity is unsupported")
+        if self.status not in {"valid", "provisional", "invalid", "not_evaluated"}:
+            raise FixtureBuildError("fixture build finding status is unsupported")
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "identity": self.identity, "rule_id": self.rule_id, "severity": self.severity,
+            "status": self.status, "message": self.message,
+            "component_identities": list(self.component_identities),
+            "geometry_references": [item.__dict__ for item in self.geometry_references],
+            "evidence": list(self.evidence), "assumptions": list(self.assumptions),
+            "confidence": self.confidence,
+        }
+
+
+@dataclass(frozen=True)
+class FixtureBuildValidation:
+    plan_identity: str
+    source_sha256: str
+    status: str
+    findings: tuple[FixtureBuildFinding, ...]
+    evidence_digest: str
+
+    @property
+    def valid(self) -> bool:
+        return self.status == "valid"
+
+    @property
+    def blocked(self) -> bool:
+        return self.status == "invalid"
+
+
+@dataclass(frozen=True)
+class FixtureBuildComparison:
+    plan_identity: str
+    construction_method: ConstructionMethod
+    lifecycle: FixtureLifecycle
+    status: str
+    score: float
+    cost: float
+    access: float
+    precision: float
+    build_time: float
+    maintenance: float
+    rationale: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class AuthoredFixtureComponent:
+    component: FixtureBuildComponent
+    shape: object
+    topology: TopologyCounts
+    step_bytes: bytes
+    dxf_bytes: bytes | None
+
+
+@dataclass(frozen=True)
+class AuthoredFixtureAssembly:
+    plan_identity: str
+    source_sha256: str
+    units: str
+    components: tuple[AuthoredFixtureComponent, ...]
+    model: object
+    validation: FixtureBuildValidation
+
+    @property
+    def blocked(self) -> bool:
+        return self.validation.blocked
+
+    @property
+    def evidence_digest(self) -> str:
+        payload = json.dumps({
+            "plan": self.plan_identity, "source": self.source_sha256,
+            "validation": self.validation.evidence_digest,
+            "components": [(item.component.identity, hashlib.sha256(item.step_bytes).hexdigest()) for item in self.components],
+        }, sort_keys=True, separators=(",", ":"))
+        return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _finding(rule_id: str, severity: str, message: str, *, components: tuple[str, ...] = (),
+             references: tuple[GeometryReference, ...] = (), evidence: tuple[str, ...] = (),
+             assumptions: tuple[str, ...] = (), status: str | None = None) -> FixtureBuildFinding:
+    payload = (rule_id, severity, message, tuple(sorted(components)),
+               tuple(sorted((item.component_identity, item.body_identity or "", item.face_identity or "") for item in references)),
+               tuple(sorted(evidence)), tuple(sorted(assumptions)))
+    identity = "m30-" + hashlib.sha256(repr(payload).encode("utf-8")).hexdigest()[:20]
+    return FixtureBuildFinding(identity, rule_id, severity, status or ("invalid" if severity == "error" else "provisional"),
+                               message, tuple(sorted(components)), references, tuple(sorted(evidence)),
+                               tuple(sorted(assumptions)))
+
+
+def _reference_valid(product: ProductModel, reference: GeometryReference) -> bool:
+    component = next((item for item in product.components if item.identity == reference.component_identity), None)
+    if component is None:
+        return False
+    if reference.body_identity is None:
+        return True
+    body = next((item for item in component.bodies if item.identity == reference.body_identity), None)
+    if body is None:
+        return False
+    faces = {item.identity for item in body.faces}
+    edges = {item.identity for item in body.edges}
+    return (reference.face_identity is None or reference.face_identity in faces) and (
+        reference.edge_identity is None or reference.edge_identity in edges)
+
+
+def _component_reference(product: ProductModel) -> GeometryReference:
+    for component in product.components:
+        if component.bodies:
+            return GeometryReference(component.identity, component.bodies[0].identity)
+        return GeometryReference(component.identity)
+    raise FixtureBuildError("product has no component available for source traceability")
+
+
+def _product_bounds(product: ProductModel) -> Aabb:
+    boxes: list[Aabb] = []
+    for component in product.components:
+        boxes.extend(body.bounds.transformed(component.transform) for body in component.bodies)
+    if not boxes:
+        raise FixtureBuildError("product has no physical bodies")
+    return Aabb(
+        Vec3(min(item.minimum.x for item in boxes), min(item.minimum.y for item in boxes), min(item.minimum.z for item in boxes)),
+        Vec3(max(item.maximum.x for item in boxes), max(item.maximum.y for item in boxes), max(item.maximum.z for item in boxes)),
+    )
+
+
+def _stock(bounds: Aabb) -> tuple[float, float, float]:
+    return tuple(round(high - low, 6) for low, high in zip(bounds.minimum.__dict__.values(), bounds.maximum.__dict__.values()))
+
+
+def _component(identity: str, part: str, description: str, role: BuildComponentRole,
+               bounds: Aabb, reference: GeometryReference, *, parent: str | None,
+               process: str, thickness: float | None, rule_ids: tuple[str, ...],
+               authority: GeometryAuthority = GeometryAuthority.AUTHORED_MANUFACTURING,
+               nest: NestClassification = NestClassification.FIXTURE,
+               reusable: bool = False, disposable: bool = False, fixed: bool = False,
+               locating: bool = False, reaction_support: str | None = None,
+               contact_condition: str | None = None, holes: tuple[HoleProcessSpec, ...] = (),
+               assumptions: tuple[str, ...] = (), evidence: tuple[str, ...] = (),
+               replaceable: bool = False, maintenance_access: bool | None = None) -> FixtureBuildComponent:
+    return FixtureBuildComponent(
+        identity, part, description, role, authority, "mild steel" if authority != GeometryAuthority.PURCHASED_COMPONENT else "purchased tooling",
+        thickness, _stock(bounds), 1, process, bounds, (reference,), rule_ids, parent,
+        nest, reusable, disposable, contact_condition, reaction_support, fixed, locating,
+        holes, assumptions, evidence, replaceable, maintenance_access,
+    )
+
+
+def _method_for(requirements: FixtureBuildRequirements) -> ConstructionMethod:
+    if requirements.construction_method != ConstructionMethod.AUTO:
+        return requirements.construction_method
+    if requirements.fixture_purpose == FixturePurpose.TACK_LOCATION:
+        return ConstructionMethod.TACK_LOCATION
+    if requirements.production_quantity is not None and requirements.production_quantity >= 100:
+        return ConstructionMethod.WELDED_TUBE_FRAME
+    return ConstructionMethod.LASER_CUT_FABRICATED
+
+
+def generate_fixture_build_plan(product: ProductModel, concept: CompleteFixtureConcept,
+                                requirements: FixtureBuildRequirements) -> FixtureBuildPlan:
+    """Create a small, editable construction plan around immutable product geometry.
+
+    The sizing is visible proof geometry derived from product bounds.  It is not
+    a structural calculation, final drawing package, or production approval.
+    """
+    if product.source_sha256 != requirements.source_sha256:
+        raise FixtureBuildError("fixture build requirements do not match immutable source geometry")
+    if concept.fixture.source_sha256 != product.source_sha256:
+        raise FixtureBuildError("fixture concept does not match immutable source geometry")
+    method = _method_for(requirements)
+    if method != requirements.construction_method:
+        requirements = FixtureBuildRequirements(
+            requirements.source_sha256, requirements.fixture_purpose, method, requirements.lifecycle,
+            requirements.job_revision, requirements.fixture_revision, requirements.production_quantity,
+            requirements.repeat_frequency, requirements.weld_process, requirements.shop_capabilities,
+            requirements.tack_access_available, requirements.full_weld_access_available,
+            requirements.unload_clearance_evaluated, requirements.adjustment_state,
+            requirements.assumptions, requirements.evidence, requirements.cleco_strategy,
+            requirements.product_hole_approved, requirements.product_hole_justification,
+        )
+    product_box = _product_bounds(product)
+    reference = _component_reference(product)
+    margin, plate = 35.0, 12.0
+    base = Aabb(Vec3(product_box.minimum.x - margin, product_box.minimum.y - margin, product_box.minimum.z - 32.0),
+                Vec3(product_box.maximum.x + margin, product_box.maximum.y + margin, product_box.minimum.z - 32.0 + plate))
+    base_holes = (
+        HoleProcessSpec("m30-fixture-cleco-hole", Vec3(base.minimum.x + 20.0, base.minimum.y + 20.0, base.minimum.z),
+                        5.0, HoleProcess.CLECO, evidence=("Separate fixture construction Cleco hole.",)),
+    ) if requirements.cleco_strategy == ClecoStrategy.SEPARATE_FIXTURE_HOLES else ()
+    support_top = product_box.minimum.z
+    components: list[FixtureBuildComponent] = [
+        _component("m30-baseplate", "FXD-M30-001", "fixture baseplate", BuildComponentRole.BASEPLATE, base,
+                   reference, parent=None, process="laser cut", thickness=plate,
+                   rule_ids=("FXD-MFG-001", "FXD-EXP-001"),
+                   disposable=requirements.lifecycle in {FixtureLifecycle.DISPOSABLE_RECUT, FixtureLifecycle.REUSABLE_TOOLING_ON_DISPOSABLE},
+                   holes=base_holes,
+                   evidence=("Generated from immutable product bounds with explicit clearance margin.",)),
+    ]
+    support_points = (
+        (product_box.minimum.x + 10.0, product_box.minimum.y + 10.0),
+        (product_box.maximum.x - 20.0, product_box.minimum.y + 10.0),
+        ((product_box.minimum.x + product_box.maximum.x) / 2.0, product_box.maximum.y - 20.0),
+    )
+    for index, (x, y) in enumerate(support_points, 1):
+        bounds = Aabb(Vec3(x, y, base.maximum.z), Vec3(x + 10.0, y + 10.0, support_top))
+        components.append(_component(
+            f"m30-support-{index}", f"FXD-M30-01{index}", f"replaceable primary support pad {index}",
+            BuildComponentRole.SUPPORT_PAD, bounds, reference, parent="m30-baseplate", process="machined",
+            thickness=10.0, rule_ids=("FXD-DAT-001", "FXD-SUP-001"), fixed=True, locating=True,
+            assumptions=("Support contact height is provisional and requires measured incoming-part evidence.",),
+            replaceable=True, maintenance_access=True,
+        ))
+    locator_bounds = Aabb(Vec3(product_box.minimum.x - 22.0, product_box.minimum.y + 12.0, base.maximum.z),
+                          Vec3(product_box.minimum.x - 10.0, product_box.minimum.y + 32.0, support_top))
+    components.append(_component("m30-round-pin", "FXD-M30-020", "round locating pin cartridge", BuildComponentRole.ROUND_PIN,
+                                 locator_bounds, reference, parent="m30-baseplate", process="machined", thickness=12.0,
+                                 rule_ids=("FXD-PIN-001", "FXD-LOC-001"), fixed=True, locating=True,
+                                 contact_condition="functional_hole", assumptions=("Pin fit and hole tolerance require product evidence.",),
+                                 replaceable=True, maintenance_access=True))
+    diamond_bounds = Aabb(Vec3(product_box.minimum.x - 22.0, product_box.maximum.y - 32.0, base.maximum.z),
+                          Vec3(product_box.minimum.x - 10.0, product_box.maximum.y - 12.0, support_top))
+    components.append(_component("m30-diamond-pin", "FXD-M30-021", "relieved diamond locating pin cartridge", BuildComponentRole.DIAMOND_PIN,
+                                 diamond_bounds, reference, parent="m30-baseplate", process="machined", thickness=12.0,
+                                 rule_ids=("FXD-PIN-001", "FXD-DST-001"), fixed=False, locating=True,
+                                 contact_condition="functional_hole", assumptions=("Diamond relief remains an engineer-selected tolerance strategy.",),
+                                 replaceable=True, maintenance_access=True))
+    stop_bounds = Aabb(Vec3(product_box.maximum.x + 10.0, product_box.minimum.y + 15.0, base.maximum.z),
+                       Vec3(product_box.maximum.x + 22.0, product_box.minimum.y + 35.0, support_top))
+    components.append(_component("m30-end-stop", "FXD-M30-022", "tertiary hard stop", BuildComponentRole.HARD_STOP,
+                                 stop_bounds, reference, parent="m30-baseplate", process="laser cut", thickness=12.0,
+                                 rule_ids=("FXD-LOC-001", "FXD-DST-001"), fixed=True, locating=True,
+                                 replaceable=True, maintenance_access=True))
+    clamp_bounds = Aabb(Vec3(product_box.minimum.x + 15.0, product_box.minimum.y + 15.0, support_top),
+                        Vec3(product_box.minimum.x + 45.0, product_box.minimum.y + 45.0, support_top + 45.0))
+    components.append(_component("m30-clamp-plate", "FXD-M30-030", "replaceable clamp mounting plate", BuildComponentRole.CLAMP_PLATE,
+                                 clamp_bounds, reference, parent="m30-support-1", process="laser cut then drill/tap", thickness=12.0,
+                                 rule_ids=("FXD-CLP-001", "FXD-SUP-001", "FXD-THR-001"),
+                                 reaction_support="m30-support-1",
+                                 holes=(HoleProcessSpec("m30-clamp-pilot", Vec3(clamp_bounds.minimum.x + 15.0, clamp_bounds.minimum.y + 15.0, clamp_bounds.minimum.z), 6.8, HoleProcess.LASER_PILOT, False, "M8x1.25", 12.0, HoleProcess.TAPPED, evidence=("Laser pilot is followed by explicit tapping operation.",)),),
+                                 assumptions=("Clamp force, fastener loading, and plate adequacy require engineering review.",),
+                                 replaceable=True, maintenance_access=True))
+    if method in {ConstructionMethod.WELDED_TUBE_FRAME, ConstructionMethod.HYBRID}:
+        rail_y = Aabb(Vec3(base.minimum.x, base.minimum.y, base.maximum.z), Vec3(base.maximum.x, base.minimum.y + 35.0, base.maximum.z + 35.0))
+        rail_x = Aabb(Vec3(base.minimum.x, base.minimum.y, base.maximum.z), Vec3(base.minimum.x + 35.0, base.maximum.y, base.maximum.z + 35.0))
+        components.extend((
+            _component("m30-frame-rail-longitudinal", "FXD-M30-040", "welded tube-frame longitudinal rail", BuildComponentRole.TUBE_FRAME, rail_y, reference, parent="m30-baseplate", process="cut tube and weld", thickness=3.0, rule_ids=("FXD-MFG-001", "FXD-SUP-001"), assumptions=("Tube section wall and member sizing are explicit review assumptions, not structural certification.",)),
+            _component("m30-frame-crossmember", "FXD-M30-041", "welded tube-frame crossmember", BuildComponentRole.CROSSMEMBER, rail_x, reference, parent="m30-baseplate", process="cut tube and weld", thickness=3.0, rule_ids=("FXD-MFG-001", "FXD-SUP-001")),
+        ))
+    if method in {ConstructionMethod.LASER_CUT_FABRICATED, ConstructionMethod.HYBRID, ConstructionMethod.TACK_LOCATION}:
+        riser = Aabb(Vec3(product_box.minimum.x - 8.0, product_box.minimum.y + 45.0, base.maximum.z), Vec3(product_box.minimum.x + 8.0, product_box.minimum.y + 95.0, support_top + 30.0))
+        gusset = Aabb(Vec3(product_box.minimum.x + 8.0, product_box.minimum.y + 45.0, base.maximum.z), Vec3(product_box.minimum.x + 28.0, product_box.minimum.y + 65.0, support_top + 30.0))
+        components.extend((
+            _component("m30-riser", "FXD-M30-050", "laser-cut locating riser", BuildComponentRole.RISER, riser, reference, parent="m30-baseplate", process="laser cut and weld", thickness=10.0, rule_ids=("FXD-TAB-001", "FXD-PKY-001")),
+            _component("m30-gusset", "FXD-M30-051", "laser-cut riser gusset", BuildComponentRole.GUSSET, gusset, reference, parent="m30-riser", process="laser cut and weld", thickness=10.0, rule_ids=("FXD-TAB-001", "FXD-MFG-001")),
+        ))
+    tab_slots: tuple[TabSlotJoint, ...] = ()
+    poka_yokes: tuple[PokaYokeSpec, ...] = ()
+    if any(item.identity == "m30-riser" for item in components):
+        tab_slots = (TabSlotJoint("m30-riser-to-base", "m30-riser", "m30-baseplate", 10.0, 10.4, 10.0, 0.4,
+                                  Vec3(0.0, 0.0, -1.0), True, True, False, 1,
+                                  ("Slot-and-tab construction remains an assembly aid, not a precision datum.",)),)
+        poka_yokes = (PokaYokeSpec(
+            "m30-riser-key", "m30-riser", "asymmetric tab and keyed slot", True, True, True, True,
+            ("Asymmetric tab geometry prevents left-right reversal without creating a hidden seating condition.",),
+        ),)
+    clecos: tuple[ClecoSpec, ...] = ()
+    if requirements.cleco_strategy == ClecoStrategy.SEPARATE_FIXTURE_HOLES:
+        clecos = (ClecoSpec("m30-fixture-cleco", ClecoStrategy.SEPARATE_FIXTURE_HOLES, "m30-baseplate", 4.8, 5.0,
+                            5.0, 3.0, 6.5, 4, True, True, True, True, True, spacing_mm=80.0,
+                            evidence=("Separate fixture Cleco holes preserve immutable product CAD.",)),)
+    elif requirements.cleco_strategy == ClecoStrategy.PRODUCT_HOLES:
+        clecos = (ClecoSpec("m30-product-cleco", ClecoStrategy.PRODUCT_HOLES, "m30-baseplate", 4.8, 5.0,
+                            5.0, 3.0, 6.5, 4, True, True, True, True, True,
+                            product_hole_approved=requirements.product_hole_approved,
+                            post_use_process=HoleProcess.WELD_FILL_GRIND if requirements.product_hole_approved else None,
+                            spacing_mm=80.0,
+                            evidence=((requirements.product_hole_justification or "product-hole justification missing"),),
+                            assumptions=("Product holes are a proposed modification only; source CAD remains immutable.",)),)
+    identity_payload = json.dumps({"concept": concept.identity, "requirements": requirements.to_dict(),
+                                   "components": [item.identity for item in components]}, sort_keys=True, separators=(",", ":"))
+    identity = "m30-build-" + hashlib.sha256(identity_payload.encode("utf-8")).hexdigest()[:20]
+    tack_sequence = ("load loose components", "locate", "temporary hold", "tack", "release", "unload") if requirements.fixture_purpose == FixturePurpose.TACK_LOCATION else ()
+    return FixtureBuildPlan(
+        identity, concept.identity, requirements, tuple(components), tab_slots, clecos,
+        ("clean and open fixture", "load datum member", "load remaining members", "engage pins", "apply clamps", "verify contacts"),
+        tack_sequence, ("release clamps", "release removable or retractable locators"),
+        ("unload tacked or welded assembly",),
+        "Finish welding is outside the tack/location fixture and requires separately approved process evidence." if tack_sequence else "",
+        ("All dimensions are explicit millimetre proof geometry and remain editable.",
+         "No structural adequacy, safety certification, production approval, or final weld-distortion prediction is claimed."),
+        (f"source_sha256={product.source_sha256}", f"construction_method={method.value}"),
+        poka_yokes,
+    )
+
+
+def _component_by_id(plan: FixtureBuildPlan) -> dict[str, FixtureBuildComponent]:
+    return {item.identity: item for item in plan.components}
+
+
+def validate_fixture_build_plan(product: ProductModel, plan: FixtureBuildPlan) -> FixtureBuildValidation:
+    """Evaluate M30 construction evidence without inventing shop-specific policy."""
+    findings: list[FixtureBuildFinding] = []
+    req = plan.requirements
+    if product.source_sha256 != req.source_sha256:
+        findings.append(_finding("FXD-MFG-001", "error", "fixture build source identity does not match immutable product source"))
+    if req.production_quantity is None:
+        findings.append(_finding("FXD-COST-001", "warning", "production quantity is missing; lifecycle comparison is provisional"))
+    if not req.weld_process:
+        findings.append(_finding("FXD-WLD-001", "warning", "weld process is missing; access and distortion intent remain provisional"))
+    if req.lifecycle in {FixtureLifecycle.DISPOSABLE_RECUT, FixtureLifecycle.REUSABLE_TOOLING_ON_DISPOSABLE} and not req.job_revision:
+        findings.append(_finding("FXD-COST-001", "error", "disposable or recut fixture is not tied to an explicit job revision"))
+    if req.adjustment_state in {AdjustmentState.PROVISIONAL, AdjustmentState.PROVE_OUT, AdjustmentState.REVALIDATION_REQUIRED}:
+        findings.append(_finding("FXD-EXP-001", "warning", "fixture adjustment state is not a locked or doweled production position", evidence=(f"adjustment_state={req.adjustment_state.value}",)))
+    if req.fixture_purpose == FixturePurpose.TACK_LOCATION:
+        if req.tack_access_available is not True:
+            findings.append(_finding("FXD-TACK-001", "error", "tack/location fixture requires explicit tack-access evidence"))
+        if not plan.tack_sequence or not plan.release_sequence or not plan.unload_sequence:
+            findings.append(_finding("FXD-TACK-001", "error", "tack/location fixture requires tack, release, and unload sequences"))
+        if req.full_weld_access_available is None:
+            findings.append(_finding("FXD-ACC-001", "info", "full-weld access was not evaluated because this is a tack/location fixture", status="not_evaluated"))
+    elif req.full_weld_access_available is not True:
+        findings.append(_finding("FXD-ACC-001", "warning", "full-weld access is not evidenced for this fixture purpose"))
+    components = _component_by_id(plan)
+    roots = tuple(item for item in plan.components if item.parent_component_identity is None)
+    if len(roots) != 1:
+        findings.append(_finding("FXD-MFG-001", "error", "fixture build must have exactly one connected root component", components=tuple(item.identity for item in roots)))
+    for item in plan.components:
+        if item.geometry_authority not in {GeometryAuthority.AUTHORED_MANUFACTURING, GeometryAuthority.PURCHASED_COMPONENT}:
+            findings.append(_finding("FXD-MFG-001", "error", "provisional or source geometry cannot be labeled as manufacturing fixture geometry", components=(item.identity,)))
+        for reference in item.source_references:
+            if not _reference_valid(product, reference):
+                findings.append(_finding("FXD-MFG-001", "error", "fixture component has an invalid source geometry reference", components=(item.identity,), references=(reference,)))
+        if item.parent_component_identity:
+            parent = components.get(item.parent_component_identity)
+            if parent is None:
+                findings.append(_finding("FXD-MFG-001", "error", "fixture component has an unknown parent component", components=(item.identity,)))
+            elif parent.bounds.clearance_to(item.bounds) > 0.1:
+                findings.append(_finding("FXD-MFG-001", "error", "fixture component is physically disconnected from its parent", components=(parent.identity, item.identity)))
+        if item.role == BuildComponentRole.CLAMP_PLATE and not item.reaction_support_identity:
+            findings.append(_finding("FXD-SUP-001", "error", "clamp plate has no explicit reaction support", components=(item.identity,)))
+        if item.reaction_support_identity and item.reaction_support_identity not in components:
+            findings.append(_finding("FXD-SUP-001", "error", "clamp reaction references an unknown support", components=(item.identity,)))
+        if item.contact_condition in {"weld_seam", "tube_radius"}:
+            findings.append(_finding("FXD-LOC-001", "error", "locator contact is on an unsuitable weld seam or tube radius", components=(item.identity,), evidence=(f"contact_condition={item.contact_condition}",)))
+        for hole in item.holes:
+            if hole.precision_required and hole.process in {HoleProcess.LASER_CLEARANCE, HoleProcess.LASER_PILOT} and hole.final_operation is None:
+                findings.append(_finding("FXD-HOL-001", "error", "laser-cut hole is incorrectly used as a precision bore", components=(item.identity,), evidence=(f"hole={hole.identity}",)))
+            if hole.process == HoleProcess.TAPPED and (not hole.thread_pitch or hole.thread_engagement_mm is None):
+                findings.append(_finding("FXD-THR-001", "warning", "tapped hole lacks complete thread engagement evidence", components=(item.identity,), evidence=(f"hole={hole.identity}",)))
+        if item.role in {BuildComponentRole.SUPPORT_PAD, BuildComponentRole.HARD_STOP,
+                         BuildComponentRole.ROUND_PIN, BuildComponentRole.DIAMOND_PIN,
+                         BuildComponentRole.PIN_BUSHING, BuildComponentRole.WEAR_PLATE,
+                         BuildComponentRole.CLAMP_PLATE}:
+            if not item.replaceable:
+                findings.append(_finding("FXD-MNT-001", "warning", "service or contact item is not marked replaceable", components=(item.identity,)))
+            if item.maintenance_access is not True:
+                findings.append(_finding("FXD-MNT-001", "warning", "service or contact item lacks explicit maintenance-access evidence", components=(item.identity,)))
+    fixed_pads = tuple(item.identity for item in plan.components if item.role == BuildComponentRole.SUPPORT_PAD and item.fixed and item.locating_constraint)
+    if len(fixed_pads) > 3:
+        findings.append(_finding("FXD-DAT-001", "error", "four or more fixed primary support pads can overconstrain the datum", components=fixed_pads))
+    round_pins = tuple(item.identity for item in plan.components if item.role == BuildComponentRole.ROUND_PIN and item.fixed)
+    if len(round_pins) >= 2:
+        findings.append(_finding("FXD-PIN-001", "error", "two full round pins can bind under tolerance variation; use a relieved or diamond pin where supported", components=round_pins))
+    fixed_stops = tuple(item.identity for item in plan.components if item.role == BuildComponentRole.HARD_STOP and item.fixed)
+    if len(fixed_stops) > 1:
+        findings.append(_finding("FXD-LOC-001", "error", "opposing fixed hard stops can overconstrain loading", components=fixed_stops))
+    if req.unload_clearance_evaluated is not True and any(item.role == BuildComponentRole.ROUND_PIN and item.fixed for item in plan.components):
+        findings.append(_finding("FXD-DST-001", "error", "fixed locating pin has no welded-shape unloading clearance evidence", components=round_pins))
+    for joint in plan.tab_slots:
+        if joint.tab_component_identity not in components or joint.slot_component_identity not in components:
+            findings.append(_finding("FXD-TAB-001", "error", "tab-slot joint references an unknown component", components=(joint.tab_component_identity, joint.slot_component_identity)))
+        if joint.slot_width_mm < joint.tab_thickness_mm + joint.clearance_mm:
+            findings.append(_finding("FXD-TAB-001", "error", "slot width is smaller than tab thickness plus assembly clearance", evidence=(f"joint={joint.identity}",)))
+        if joint.bottoms_out:
+            findings.append(_finding("FXD-TAB-001", "error", "tab bottoms out before its intended seating condition", evidence=(f"joint={joint.identity}",)))
+        if not joint.weld_relief:
+            findings.append(_finding("FXD-TAB-001", "warning", "tab-slot joint has no explicit weld-relief evidence", evidence=(f"joint={joint.identity}",)))
+    for poka_yoke in plan.poka_yokes:
+        if poka_yoke.component_identity not in components:
+            findings.append(_finding("FXD-PKY-001", "error", "poka-yoke references an unknown fixture component", components=(poka_yoke.component_identity,)))
+            continue
+        if not poka_yoke.prevents_reversal:
+            findings.append(_finding("FXD-PKY-001", "error", "poka-yoke does not prevent the documented reversal risk", components=(poka_yoke.component_identity,)))
+        if not poka_yoke.avoids_pinch_point:
+            findings.append(_finding("FXD-PKY-001", "error", "poka-yoke introduces an unresolved operator pinch-point risk", components=(poka_yoke.component_identity,)))
+        if not poka_yoke.avoids_hidden_seating:
+            findings.append(_finding("FXD-PKY-001", "error", "poka-yoke can create hidden seating that cannot be deterministically reviewed", components=(poka_yoke.component_identity,)))
+        if not poka_yoke.supports_unloading:
+            findings.append(_finding("FXD-PKY-001", "error", "poka-yoke can trap the assembly during unloading", components=(poka_yoke.component_identity,)))
+    if not plan.poka_yokes:
+        findings.append(_finding("FXD-PKY-001", "warning", "fixture plan has no explicit poka-yoke or orientation evidence"))
+    for cleco in plan.clecos:
+        target = components.get(cleco.component_identity)
+        if target is None:
+            findings.append(_finding("FXD-CLE-001", "error", "Cleco references an unknown fixture component", components=(cleco.component_identity,)))
+            continue
+        if cleco.hole_diameter_mm < cleco.diameter_mm:
+            findings.append(_finding("FXD-CLE-001", "error", "Cleco hole diameter is smaller than the specified Cleco", components=(target.identity,)))
+        if not cleco.minimum_grip_mm <= cleco.material_stack_mm <= cleco.maximum_grip_mm:
+            findings.append(_finding("FXD-CLE-001", "error", "Cleco material stack is outside the stated grip range", components=(target.identity,)))
+        if not (cleco.installation_access and cleco.removal_access and cleco.plier_access):
+            findings.append(_finding("FXD-CLE-001", "error", "Cleco installation, removal, or plier access is blocked", components=(target.identity,)))
+        if cleco.strategy == ClecoStrategy.PRODUCT_HOLES:
+            if not cleco.product_hole_approved:
+                findings.append(_finding("FXD-CLE-001", "error", "product Cleco holes require explicit customer/process approval", components=(target.identity,)))
+            if not req.product_hole_justification:
+                findings.append(_finding("FXD-CLE-001", "warning", "product Cleco holes have no explicit cost, process, or customer justification", components=(target.identity,)))
+            if cleco.post_use_process is None:
+                findings.append(_finding("FXD-CLE-001", "warning", "product Cleco-hole finishing process is not documented", components=(target.identity,)))
+        if cleco.strategy == ClecoStrategy.SEPARATE_FIXTURE_HOLES:
+            findings.append(_finding("FXD-CLE-001", "info", "separate fixture Cleco holes preserve product CAD and are preferred unless product holes are justified", components=(target.identity,), status="valid"))
+        if cleco.retained_during_tack and not cleco.removed_before_welding:
+            findings.append(_finding("FXD-CLE-001", "warning", "Cleco retained during tack-up lacks explicit removal-before-weld evidence", components=(target.identity,)))
+    if req.lifecycle in {FixtureLifecycle.DISPOSABLE_RECUT, FixtureLifecycle.REUSABLE_TOOLING_ON_DISPOSABLE}:
+        mixed = tuple(item.identity for item in plan.components if item.nest_classification == NestClassification.PRODUCT)
+        if mixed:
+            findings.append(_finding("FXD-COST-001", "error", "disposable fixture parts are mixed with sellable product parts in nesting classification", components=mixed))
+    status = "invalid" if any(item.severity == "error" for item in findings) else ("provisional" if any(item.severity == "warning" for item in findings) else "valid")
+    encoded = json.dumps([item.to_dict() for item in sorted(findings, key=lambda item: item.identity)], sort_keys=True, separators=(",", ":"))
+    return FixtureBuildValidation(plan.identity, req.source_sha256, status, tuple(sorted(findings, key=lambda item: item.identity)), hashlib.sha256(encoded.encode("utf-8")).hexdigest())
+
+
+def compare_fixture_build_plans(plans: tuple[FixtureBuildPlan, ...], product: ProductModel) -> tuple[FixtureBuildComparison, ...]:
+    """Compare valid plans deterministically; invalid plans cannot be preferred."""
+    rows: list[FixtureBuildComparison] = []
+    method_weight = {
+        ConstructionMethod.TACK_LOCATION: (0.90, 0.75, 0.45, 0.95, 0.45),
+        ConstructionMethod.LASER_CUT_FABRICATED: (0.75, 0.70, 0.65, 0.80, 0.65),
+        ConstructionMethod.WELDED_TUBE_FRAME: (0.55, 0.85, 0.70, 0.55, 0.70),
+        ConstructionMethod.HYBRID: (0.45, 0.80, 0.85, 0.50, 0.80),
+        ConstructionMethod.CNC_MACHINED: (0.20, 0.65, 0.95, 0.35, 0.85),
+        ConstructionMethod.SHOP_STANDARD: (0.60, 0.70, 0.60, 0.70, 0.60),
+        ConstructionMethod.AUTO: (0.50, 0.50, 0.50, 0.50, 0.50),
+    }
+    for plan in plans:
+        validation = validate_fixture_build_plan(product, plan)
+        cost, access, precision, build_time, maintenance = method_weight[plan.requirements.construction_method]
+        score = access + precision + build_time + maintenance - cost
+        if plan.requirements.cleco_strategy == ClecoStrategy.SEPARATE_FIXTURE_HOLES:
+            score += 0.05
+        elif (plan.requirements.cleco_strategy == ClecoStrategy.PRODUCT_HOLES
+              and not plan.requirements.product_hole_justification):
+            score -= 0.05
+        if validation.blocked:
+            score = -1.0
+        rows.append(FixtureBuildComparison(plan.identity, plan.requirements.construction_method,
+                                           plan.requirements.lifecycle, validation.status, round(score, 6),
+                                           cost, access, precision, build_time, maintenance,
+                                           ("Cost and lifecycle scores are ranked engineering preferences, not quotes.",
+                                            "Deterministic invalid findings override comparison scoring.")))
+    return tuple(sorted(rows, key=lambda item: (item.status == "invalid", -item.score, item.plan_identity)))
+
+
+def _shape_for(component: FixtureBuildComponent, kernel: RealKernel) -> object:
+    low, high = component.bounds.minimum, component.bounds.maximum
+    if component.role in {BuildComponentRole.ROUND_PIN, BuildComponentRole.DIAMOND_PIN, BuildComponentRole.PIN_BUSHING}:
+        radius = min(high.x - low.x, high.y - low.y) / 2.0
+        shape = kernel.make_cylinder((low.x + radius, low.y + radius, low.z), radius, high.z - low.z)
+    else:
+        shape = kernel.make_box((low.x, low.y, low.z), (high.x, high.y, high.z))
+    if component.role in {BuildComponentRole.TUBE_FRAME, BuildComponentRole.CROSSMEMBER}:
+        wall = component.thickness_mm
+        dimensions = (high.x - low.x, high.y - low.y, high.z - low.z)
+        if wall is None or wall <= 0 or sum(value <= 2.0 * wall for value in dimensions) > 1:
+            raise KernelOperationError(f"fixture tube member {component.identity} has no viable wall-thickness evidence")
+        longitudinal_axis = max(range(3), key=lambda index: dimensions[index])
+        inner_low = [low.x, low.y, low.z]
+        inner_high = [high.x, high.y, high.z]
+        inner_low[longitudinal_axis] -= 1.0
+        inner_high[longitudinal_axis] += 1.0
+        for index in range(3):
+            if index != longitudinal_axis:
+                inner_low[index] += wall
+                inner_high[index] -= wall
+        shape = kernel.cut(shape, kernel.make_box(tuple(inner_low), tuple(inner_high)))
+    for hole in component.holes:
+        shape = kernel.cut(shape, kernel.make_hole((hole.center_mm.x, hole.center_mm.y, low.z - 1.0),
+                                                   hole.diameter_mm / 2.0, high.z - low.z + 2.0))
+    topology = kernel.topology_counts(shape)
+    if topology.solids < 1:
+        raise KernelOperationError(f"fixture build component {component.identity} did not author a real solid")
+    return shape
+
+
+def _dxf_for(component: FixtureBuildComponent) -> bytes | None:
+    if component.role in {BuildComponentRole.ROUND_PIN, BuildComponentRole.DIAMOND_PIN, BuildComponentRole.PIN_BUSHING,
+                          BuildComponentRole.TUBE_FRAME, BuildComponentRole.CROSSMEMBER}:
+        return None
+    low, high = component.bounds.minimum, component.bounds.maximum
+    value = lambda item: format(item, ".9g")
+    lines = ["0", "SECTION", "2", "HEADER", "9", "$INSUNITS", "70", "4", "0", "ENDSEC", "0", "SECTION", "2", "ENTITIES",
+             "0", "LWPOLYLINE", "8", "PROFILE", "90", "5", "70", "1"]
+    for x, y in ((low.x, low.y), (high.x, low.y), (high.x, high.y), (low.x, high.y), (low.x, low.y)):
+        lines.extend(("10", value(x), "20", value(y)))
+    for hole in component.holes:
+        lines.extend(("0", "CIRCLE", "8", hole.process.value, "10", value(hole.center_mm.x),
+                      "20", value(hole.center_mm.y), "40", value(hole.diameter_mm / 2.0)))
+    lines.extend(("0", "ENDSEC", "0", "EOF"))
+    return ("\n".join(lines) + "\n").encode("ascii")
+
+
+def author_fixture_build(plan: FixtureBuildPlan, product: ProductModel, kernel: RealKernel) -> AuthoredFixtureAssembly:
+    """Author real OCP B-Rep components after the deterministic build gate passes."""
+    validation = validate_fixture_build_plan(product, plan)
+    if validation.blocked:
+        raise FixtureBuildError("invalid fixture build plan cannot author manufacturing geometry")
+    if not kernel.capabilities.is_complete:
+        raise FixtureBuildError("complete reviewed OCP capabilities are required for manufacturing geometry")
+    authored: list[AuthoredFixtureComponent] = []
+    for component in sorted(plan.components, key=lambda item: item.identity):
+        if component.geometry_authority != GeometryAuthority.AUTHORED_MANUFACTURING:
+            if component.geometry_authority == GeometryAuthority.PURCHASED_COMPONENT:
+                continue
+            raise FixtureBuildError("provisional geometry cannot be authored or exported as manufacturing geometry")
+        shape = _shape_for(component, kernel)
+        authored.append(AuthoredFixtureComponent(component, shape, kernel.topology_counts(shape), kernel.export_step(shape), _dxf_for(component)))
+    if not authored:
+        raise FixtureBuildError("fixture build plan contains no authored manufacturing components")
+    return AuthoredFixtureAssembly(plan.identity, plan.requirements.source_sha256, "mm", tuple(authored),
+                                   kernel.compound(tuple(item.shape for item in authored)), validation)
+
+
+def build_fixture_build_package(assembly: AuthoredFixtureAssembly, plan: FixtureBuildPlan,
+                                *, project_validation: object | None = None) -> dict[str, bytes | str]:
+    """Create deterministic review-only manufacturing outputs behind all available gates."""
+    if assembly.plan_identity != plan.identity or assembly.source_sha256 != plan.requirements.source_sha256:
+        raise FixtureBuildError("authored fixture geometry does not match the construction plan")
+    if assembly.blocked or plan.requirements.adjustment_state in {
+            AdjustmentState.PROVISIONAL, AdjustmentState.PROVE_OUT, AdjustmentState.REVALIDATION_REQUIRED}:
+        raise FixtureBuildError("stale, provisional, or invalid fixture build evidence cannot be exported")
+    if project_validation is not None and getattr(project_validation, "blocked", True):
+        raise FixtureBuildError("invalid project validation cannot export fixture build geometry")
+    files: dict[str, bytes | str] = {}
+    for item in assembly.components:
+        stem = re.sub(r"[^A-Za-z0-9_.-]+", "_", item.component.part_number)
+        files[f"step/{stem}.step"] = item.step_bytes
+        if item.dxf_bytes is not None:
+            files[f"dxf/{stem}.dxf"] = item.dxf_bytes
+    bom = [{
+        "item_number": index, "part_number": component.part_number, "description": component.description,
+        "quantity": component.quantity, "material": component.material,
+        "thickness_or_stock_mm": component.stock_mm, "manufacturing_process": component.manufacturing_process,
+        "geometry_authority": component.geometry_authority.value,
+        "nest_classification": component.nest_classification.value, "reusable": component.reusable,
+        "disposable": component.disposable, "job_revision": plan.requirements.job_revision,
+    } for index, component in enumerate(sorted(plan.components, key=lambda item: item.part_number), 1)]
+    manifest = {
+        "format": "fxd-m30-review-manufacturing-package-v1", "plan": plan.to_dict(),
+        "source_sha256": assembly.source_sha256, "assembly_evidence_digest": assembly.evidence_digest,
+        "validation": {"status": assembly.validation.status, "evidence_digest": assembly.validation.evidence_digest,
+                       "findings": [item.to_dict() for item in assembly.validation.findings]},
+        "approval_boundary": "Engineering review only. Not production release, certification, structural adequacy, or safety approval.",
+    }
+    files["manifest.json"] = json.dumps(manifest, indent=2, sort_keys=True) + "\n"
+    files["bom.json"] = json.dumps(bom, indent=2, sort_keys=True) + "\n"
+    files["hole-process-table.json"] = json.dumps([
+        {"component": component.identity, **hole.to_dict()}
+        for component in sorted(plan.components, key=lambda item: item.identity)
+        for hole in sorted(component.holes, key=lambda item: item.identity)
+    ], indent=2, sort_keys=True) + "\n"
+    files["slot-and-tab-map.json"] = json.dumps([item.to_dict() for item in plan.tab_slots], indent=2, sort_keys=True) + "\n"
+    files["poka-yoke-map.json"] = json.dumps([item.to_dict() for item in plan.poka_yokes], indent=2, sort_keys=True) + "\n"
+    files["cleco-hole-map.json"] = json.dumps([item.to_dict() for item in plan.clecos], indent=2, sort_keys=True) + "\n"
+    files["nest-classification.json"] = json.dumps([
+        {"component": item.identity, "classification": item.nest_classification.value,
+         "job_revision": plan.requirements.job_revision, "prevent_shipment": item.nest_classification == NestClassification.FIXTURE}
+        for item in sorted(plan.components, key=lambda item: item.identity)
+    ], indent=2, sort_keys=True) + "\n"
+    files["assembly-sequence.json"] = json.dumps({"loading": plan.loading_sequence, "tack": plan.tack_sequence,
+                                                    "release": plan.release_sequence, "unload": plan.unload_sequence,
+                                                    "finish_weld_handoff": plan.finish_weld_handoff}, indent=2, sort_keys=True) + "\n"
+    return dict(sorted(files.items()))
+
+
+def write_fixture_build_package(assembly: AuthoredFixtureAssembly, plan: FixtureBuildPlan, destination: str | Path,
+                                *, project_validation: object | None = None) -> tuple[Path, ...]:
+    files = build_fixture_build_package(assembly, plan, project_validation=project_validation)
+    root = Path(destination)
+    root.mkdir(parents=True, exist_ok=True)
+    written: list[Path] = []
+    for name, payload in files.items():
+        target = root / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(payload if isinstance(payload, bytes) else payload.encode("utf-8"))
+        written.append(target)
+    return tuple(written)

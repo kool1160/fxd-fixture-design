@@ -72,6 +72,16 @@ from .interactive_workflow import (
     OperationTiming, ProcessSetup, analyze_engineering_workflow, compare_concepts,
     face_annotation, product_from_workbench_document, tooling_record_from_file,
 )
+from .fabrication_workflow import (
+    M30_SCHEMA, RULE_CATALOG, RULES_BY_ID, AdjustmentState, AuthoredFixtureAssembly,
+    AuthoredFixtureComponent, BuildComponentRole, ClecoSpec, ClecoStrategy,
+    ConstructionMethod, FixtureBuildComparison, FixtureBuildComponent, FixtureBuildError,
+    FixtureBuildFinding, FixtureBuildPlan, FixtureBuildRequirements, FixtureBuildValidation,
+    FixtureLifecycle, FixturePurpose, GeometryAuthority, HoleProcess, HoleProcessSpec,
+    M30Rule, NestClassification, PokaYokeSpec, TabSlotJoint, author_fixture_build,
+    build_fixture_build_package, compare_fixture_build_plans, generate_fixture_build_plan,
+    validate_fixture_build_plan, write_fixture_build_package,
+)
 
 
 def require_real_kernel() -> RealKernel:
@@ -121,3 +131,11 @@ __all__ += ["WORKFLOW_SCHEMA", "AnnotationRole", "ConceptComparison", "CustomerT
             "GeometryAnnotation", "InteractiveWorkflow", "InteractiveWorkflowError",
             "OperationTiming", "ProcessSetup", "analyze_engineering_workflow", "compare_concepts",
             "face_annotation", "product_from_workbench_document", "tooling_record_from_file"]
+__all__ += ["M30_SCHEMA", "RULE_CATALOG", "RULES_BY_ID", "AdjustmentState", "AuthoredFixtureAssembly",
+            "AuthoredFixtureComponent", "BuildComponentRole", "ClecoSpec", "ClecoStrategy",
+            "ConstructionMethod", "FixtureBuildComparison", "FixtureBuildComponent", "FixtureBuildError",
+            "FixtureBuildFinding", "FixtureBuildPlan", "FixtureBuildRequirements", "FixtureBuildValidation",
+            "FixtureLifecycle", "FixturePurpose", "GeometryAuthority", "HoleProcess", "HoleProcessSpec",
+            "M30Rule", "NestClassification", "PokaYokeSpec", "TabSlotJoint", "author_fixture_build",
+            "build_fixture_build_package", "compare_fixture_build_plans", "generate_fixture_build_plan",
+            "validate_fixture_build_plan", "write_fixture_build_package"]

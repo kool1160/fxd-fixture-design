@@ -67,6 +67,12 @@ class ProcessSetup:
     required_repeatability_mm: float | None = None
     required_clearance_mm: float | None = None
     tooling_preferences: tuple[str, ...] = ()
+    fixture_purpose: str | None = None
+    construction_method: str | None = None
+    fixture_lifecycle: str | None = None
+    repeat_frequency: str | None = None
+    job_revision: str | None = None
+    cleco_strategy: str | None = None
 
     def __post_init__(self) -> None:
         if not self.project_name.strip():
@@ -107,6 +113,12 @@ class ProcessSetup:
             "required_repeatability_mm": self.required_repeatability_mm,
             "required_clearance_mm": self.required_clearance_mm,
             "tooling_preferences": list(self.tooling_preferences),
+            "fixture_purpose": self.fixture_purpose,
+            "construction_method": self.construction_method,
+            "fixture_lifecycle": self.fixture_lifecycle,
+            "repeat_frequency": self.repeat_frequency,
+            "job_revision": self.job_revision,
+            "cleco_strategy": self.cleco_strategy,
         }
 
     @classmethod
@@ -132,6 +144,12 @@ class ProcessSetup:
             required_repeatability_mm=data.get("required_repeatability_mm"),
             required_clearance_mm=data.get("required_clearance_mm"),
             tooling_preferences=tuple(data.get("tooling_preferences", ())),
+            fixture_purpose=data.get("fixture_purpose"),
+            construction_method=data.get("construction_method"),
+            fixture_lifecycle=data.get("fixture_lifecycle"),
+            repeat_frequency=data.get("repeat_frequency"),
+            job_revision=data.get("job_revision"),
+            cleco_strategy=data.get("cleco_strategy"),
         )
 
 

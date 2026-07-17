@@ -13,6 +13,9 @@ This roadmap extends the product beyond the current Phase 3 backlog. It preserve
 7. Milestone 25 — Optimize cost, volume, and manufacturability
 8. Milestone 26 — Complete end-to-end engineering pilots
 9. Milestone 27 - Unified engineering workbench
+10. Milestone 28 - Interactive fixture engineering workflow
+11. Milestone 29 - Implement the desktop UI and branding system
+12. Milestone 30 - Real manufacturing geometry and tack/location fixtures
 
 ## Milestone 21 — Generate complete fixture structures
 
@@ -200,7 +203,11 @@ Acceptance criteria:
 
 ## Milestone 29 - Implement the desktop UI and branding system
 
-**Status:** Pending
+**Status:** Complete
+
+Independently visually accepted and squash-merged in PR #51 at
+`4b6691a`. The UI system preserves deterministic engineering authority and
+does not own fixture policy or project persistence.
 
 Apply the approved FXD UI & Branding Kit v1.1 to the unified PySide6 workbench
 without replacing engineering architecture or weakening evidence boundaries.
@@ -222,5 +229,19 @@ Acceptance criteria:
 - accessibility, focused Qt regressions, full repository validation, local
   Windows visual review, independent review, CI, and merge are required before
   completion
+
+**Recommended level:** Sol
+
+## Milestone 30 - Real manufacturing geometry and tack/location fixtures
+
+**Status:** Pending
+
+Extend the existing fixture architecture with editable, deterministic
+construction evidence for real OCP manufacturing geometry, laser-cut and
+tube-frame concepts, tack/location workflows, Cleco strategies, lifecycle and
+job-revision choices, manufacturing BOM and nest classification, and review
+only export packages. Completion still requires independent review, hosted
+kernel acceptance, Windows visual review, user engineering acceptance, and
+merge.
 
 **Recommended level:** Sol

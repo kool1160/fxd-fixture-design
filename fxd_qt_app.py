@@ -37,6 +37,7 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QPushButton,
+    QScrollArea,
     QSizePolicy,
     QSpinBox,
     QTabWidget,
@@ -60,7 +61,13 @@ from fxd_ui import (
 )
 from fxd_ui.theme.tokens import COLORS
 from fxd_geometry import (
+    AdjustmentState,
     AnnotationRole,
+    ConstructionMethod,
+    FixtureLifecycle,
+    FixturePurpose,
+    FixtureBuildRequirements,
+    FixtureBuildError,
     ExportError,
     GeometryReference,
     InteractiveWorkflow,
@@ -71,12 +78,14 @@ from fxd_geometry import (
     ProcessSetup,
     RenderDiagnostics,
     Vec3,
+    author_fixture_build,
     WorkbenchDocument,
     analyze_engineering_workflow,
     compare_concepts,
     face_annotation,
     load_step_for_workbench,
     product_from_workbench_document,
+    generate_fixture_build_plan as generate_m30_fixture_build_plan,
     tooling_record_from_file,
 )
 from fxd_geometry.operations import (
@@ -413,6 +422,7 @@ class FxdWorkbenchWindow(QMainWindow):
         self.document: WorkbenchDocument | None = None
         self.project: FxdProject | None = None
         self.workflow: InteractiveWorkflow | None = None
+        self.authored_fixture_build = None
         self.project_path: Path | None = None
         self.selected_identity: str | None = None
         self.selected_reference: GeometryReference | None = None
@@ -502,10 +512,18 @@ class FxdWorkbenchWindow(QMainWindow):
         product_layout.addStretch(1)
         self.workflow_tabs.addTab(product_page, "Product")
 
-        process_page = QWidget(self.workflow_tabs)
-        process_form = QFormLayout(process_page)
+        # M30 adds governed construction inputs; keep the complete review form
+        # reachable at the supported 1366 x 768 desktop size.
+        self.process_scroll = QScrollArea(self.workflow_tabs)
+        self.process_scroll.setWidgetResizable(True)
+        self.process_form_widget = QWidget(self.process_scroll)
+        process_form = QFormLayout(self.process_form_widget)
         self.process_project_name = QLineEdit()
-        self.process_fixture_type = self._combo(("Weld fixture", "Assembly fixture", "Inspection fixture"), editable=True)
+        self.process_fixture_type = self._combo((
+            "Weld fixture", "Tack or Location Fixture", "Assembly fixture",
+            "Inspection fixture", "Profile check fixture", "Go/no-go gauge",
+            "Rework fixture", "Robotic or cobot fixture", "Combined build-and-check fixture",
+        ), editable=True)
         self.process_method = self._combo(("MIG welding", "TIG welding", "Resistance welding", "Assembly"), editable=True)
         self.process_mode = self._combo(("Manual", "Cobot", "Robotic"))
         self.process_quantity = QSpinBox()
@@ -524,6 +542,28 @@ class FxdWorkbenchWindow(QMainWindow):
         self.process_material = QLineEdit()
         self.process_material.setPlaceholderText("Unknown, or product/process assumptions")
         self.process_base = self._combo(("Auto", "Baseplate", "Welded frame", "Unknown"))
+        self.process_construction = self._combo((
+            "Auto-select", "Laser-cut fabricated", "CNC-machined", "Hybrid",
+            "Welded tube-frame", "Shop-standard", "Tack or Location Fixture",
+        ))
+        self.process_lifecycle = self._combo((
+            "Store and reuse", "Disposable or job-run recut",
+            "Reusable tooling on disposable fixture", "Full permanent fixture",
+        ))
+        self.process_repeat_frequency = QLineEdit()
+        self.process_repeat_frequency.setPlaceholderText("Unknown, or repeat frequency")
+        self.process_job_revision = QLineEdit()
+        self.process_job_revision.setPlaceholderText("Required for disposable or recut fixture")
+        self.process_cleco_strategy = self._combo(("None", "Separate fixture Cleco holes", "Product Cleco holes"))
+        self.process_adjustment_state = self._combo((
+            "Provisional adjustment", "Prove-out setting", "Locked production position",
+            "Doweled production position", "Revalidation required",
+        ))
+        self.process_product_hole_approval = QCheckBox("Customer/process approval recorded")
+        self.process_product_hole_justification = QLineEdit()
+        self.process_product_hole_justification.setPlaceholderText("Cost, process, or customer justification")
+        self.process_tack_access = QCheckBox("Engineer has reviewed tack access")
+        self.process_unload_clearance = QCheckBox("Engineer has reviewed unload clearance")
         self.process_repeatability = QDoubleSpinBox()
         self.process_repeatability.setRange(0.0, 1000.0)
         self.process_repeatability.setDecimals(3)
@@ -540,6 +580,13 @@ class FxdWorkbenchWindow(QMainWindow):
             ("Unload direction", self.process_unload), ("Operator access", self.process_operator),
             ("Automation", self.process_automation), ("Shop capabilities", self.process_shop),
             ("Material/process", self.process_material), ("Base strategy", self.process_base),
+            ("Construction", self.process_construction), ("Lifecycle", self.process_lifecycle),
+            ("Repeat frequency", self.process_repeat_frequency), ("Job revision", self.process_job_revision),
+            ("Cleco strategy", self.process_cleco_strategy),
+            ("Adjustment state", self.process_adjustment_state),
+            ("Product-hole approval", self.process_product_hole_approval),
+            ("Product-hole justification", self.process_product_hole_justification),
+            ("Tack access", self.process_tack_access), ("Unload clearance", self.process_unload_clearance),
             ("Repeatability (mm)", self.process_repeatability),
             ("Clearance (mm)", self.process_clearance),
         ):
@@ -547,7 +594,8 @@ class FxdWorkbenchWindow(QMainWindow):
         self.analyze_button = QPushButton("Analyze Assembly")
         self.analyze_button.clicked.connect(self.analyze_assembly)
         process_form.addRow(self.analyze_button)
-        self.workflow_tabs.addTab(process_page, "Process")
+        self.process_scroll.setWidget(self.process_form_widget)
+        self.workflow_tabs.addTab(self.process_scroll, "Process")
 
         annotation_page = QWidget(self.workflow_tabs)
         annotation_layout = QVBoxLayout(annotation_page)
@@ -581,6 +629,23 @@ class FxdWorkbenchWindow(QMainWindow):
         concepts_layout.addWidget(self.generate_button)
         concepts_layout.addWidget(self.concept_table, 1)
         self.workflow_tabs.addTab(concepts_page, "Concepts")
+
+        fabrication_page = QWidget(self.workflow_tabs)
+        fabrication_layout = QVBoxLayout(fabrication_page)
+        self.fabrication_status = QLabel(
+            "Build a deterministic manufacturing plan after selecting an active fixture concept."
+        )
+        self.fabrication_status.setWordWrap(True)
+        self.fabrication_components = QListWidget(fabrication_page)
+        self.fabrication_plan_button = QPushButton("Generate Fixture Build Plan")
+        self.fabrication_plan_button.clicked.connect(self.generate_fixture_build_plan)
+        self.fabrication_author_button = QPushButton("Author Real Manufacturing Geometry")
+        self.fabrication_author_button.clicked.connect(self.author_real_fixture_geometry)
+        fabrication_layout.addWidget(self.fabrication_status)
+        fabrication_layout.addWidget(self.fabrication_components, 1)
+        fabrication_layout.addWidget(self.fabrication_plan_button)
+        fabrication_layout.addWidget(self.fabrication_author_button)
+        self.workflow_tabs.addTab(fabrication_page, "Manufacturing")
 
         tooling_page = QWidget(self.workflow_tabs)
         tooling_layout = QVBoxLayout(tooling_page)
@@ -1380,6 +1445,10 @@ class FxdWorkbenchWindow(QMainWindow):
         if destination:
             try:
                 paths = export_project_package(self.project, destination, kernel=self.kernel)
+                if self.project.fixture_build is not None:
+                    self.authored_fixture_build = self.authored_fixture_build or author_fixture_build(
+                        self.project.fixture_build, self.project.product, self.kernel,
+                    )
             except ExportError as exc:
                 self.log.record(
                     "export_blocked", revision=self.project.revision_id, reason=str(exc)
@@ -1388,6 +1457,11 @@ class FxdWorkbenchWindow(QMainWindow):
                 self.statusBar().showMessage(
                     "Export blocked by deterministic validation; no review package was written."
                 )
+                return
+            except (FixtureBuildError, KernelOperationError) as exc:
+                self.log.record("export_blocked", revision=self.project.revision_id, reason=str(exc))
+                QMessageBox.warning(self, "Manufacturing export blocked", str(exc))
+                self.statusBar().showMessage("Manufacturing export blocked; no M30 package was written.")
                 return
             self.statusBar().showMessage(
                 f"Exported {len(paths)} review artifacts; production approval is not implied."
@@ -1509,6 +1583,13 @@ class FxdWorkbenchWindow(QMainWindow):
                 for joint in self.project.annotations.weld_joints
             ]
             self._add_tree_category("Welds", welds)
+        if self.project and self.project.fixture_build:
+            authored = {item.component.identity for item in (self.authored_fixture_build.components if self.authored_fixture_build else ())}
+            self._add_tree_category("Manufacturing fixture components", [
+                (f"{item.part_number} | {item.role.value}", item.identity,
+                 "authored OCP B-Rep" if item.identity in authored else item.geometry_authority.value)
+                for item in self.project.fixture_build.components
+            ])
         self.tree.resizeColumnToContents(1)
 
     def _populate_properties(self) -> None:
@@ -1673,6 +1754,8 @@ class FxdWorkbenchWindow(QMainWindow):
         project_name = self.process_project_name.text().strip()
         if not project_name and self.document:
             project_name = Path(self.document.source_name).stem
+        if not project_name and self.project:
+            project_name = Path(self.project.product.source_name).stem
         setup = ProcessSetup(
             project_name=project_name,
             fixture_type=self.process_fixture_type.currentText().strip() or None,
@@ -1694,6 +1777,12 @@ class FxdWorkbenchWindow(QMainWindow):
             required_repeatability_mm=(self.process_repeatability.value()
                                        if self.process_repeatability.value() > 0 else None),
             required_clearance_mm=self.process_clearance.value(),
+            fixture_purpose=self.process_fixture_type.currentText().strip() or None,
+            construction_method=self.process_construction.currentText(),
+            fixture_lifecycle=self.process_lifecycle.currentText(),
+            repeat_frequency=self._optional_text(self.process_repeat_frequency),
+            job_revision=self._optional_text(self.process_job_revision),
+            cleco_strategy=self.process_cleco_strategy.currentText(),
         )
         if self.workflow is not None:
             self.workflow = replace(self.workflow, setup=setup)
@@ -1707,6 +1796,9 @@ class FxdWorkbenchWindow(QMainWindow):
             (self.process_mode, setup.operation_mode),
             (self.process_volume, setup.volume_category),
             (self.process_base, setup.preferred_base_strategy or "Auto"),
+            (self.process_construction, setup.construction_method or "Auto-select"),
+            (self.process_lifecycle, setup.fixture_lifecycle or "Store and reuse"),
+            (self.process_cleco_strategy, setup.cleco_strategy or "None"),
         ):
             if value:
                 combo.setCurrentText(value)
@@ -1719,6 +1811,8 @@ class FxdWorkbenchWindow(QMainWindow):
         self.process_automation.setText(setup.automation_assumptions or "")
         self.process_shop.setText(", ".join(setup.shop_capabilities))
         self.process_material.setText(setup.material_assumptions or "")
+        self.process_repeat_frequency.setText(setup.repeat_frequency or "")
+        self.process_job_revision.setText(setup.job_revision or "")
         self.process_repeatability.setValue(setup.required_repeatability_mm or 0.0)
         self.process_clearance.setValue(setup.required_clearance_mm or 0.0)
 
@@ -1737,9 +1831,14 @@ class FxdWorkbenchWindow(QMainWindow):
         if self.workflow is None:
             self.analyze_button.setEnabled(False)
             self.generate_button.setEnabled(False)
+            self.fabrication_plan_button.setEnabled(False)
+            self.fabrication_author_button.setEnabled(False)
+            self.fabrication_components.clear()
             return
         self.analyze_button.setEnabled(self.document is not None)
         self.generate_button.setEnabled(self.project is not None and self.workflow.analysis_completed)
+        self.fabrication_plan_button.setEnabled(self.project is not None and self.workflow.concepts_generated)
+        self.fabrication_author_button.setEnabled(self.project is not None and self.project.fixture_build is not None)
         self._set_process_setup(self.workflow.setup)
         for annotation in self.workflow.geometry_annotations:
             self.annotation_list.addItem(
@@ -1764,6 +1863,36 @@ class FxdWorkbenchWindow(QMainWindow):
                 )
                 item.setData(Qt.ItemDataRole.UserRole, revision.revision_id)
                 self.revision_list.addItem(item)
+        self.fabrication_components.clear()
+        if self.project and self.project.fixture_build:
+            build = self.project.fixture_build
+            validation = self.project.active_validation
+            self.fabrication_status.setText(
+                f"{build.requirements.fixture_purpose.value} | {build.requirements.construction_method.value}\n"
+                f"Geometry authority: authored manufacturing geometry only after OCP authoring.\n"
+                f"Validation: {validation.status.upper()} | job revision: {build.requirements.job_revision or 'missing'}"
+            )
+            authored = {item.component.identity for item in (self.authored_fixture_build.components if self.authored_fixture_build else ())}
+            for component in build.components:
+                state = "REAL OCP B-REP" if component.identity in authored else component.geometry_authority.value
+                self.fabrication_components.addItem(
+                    f"{component.part_number} | {component.role.value} | {state} | {component.nest_classification.value}"
+                )
+            self.process_tack_access.setChecked(build.requirements.tack_access_available is True)
+            self.process_unload_clearance.setChecked(build.requirements.unload_clearance_evaluated is True)
+            self.process_product_hole_approval.setChecked(build.requirements.product_hole_approved)
+            self.process_product_hole_justification.setText(build.requirements.product_hole_justification or "")
+            self.process_adjustment_state.setCurrentText({
+                AdjustmentState.PROVISIONAL: "Provisional adjustment",
+                AdjustmentState.PROVE_OUT: "Prove-out setting",
+                AdjustmentState.LOCKED: "Locked production position",
+                AdjustmentState.DOWELED: "Doweled production position",
+                AdjustmentState.REVALIDATION_REQUIRED: "Revalidation required",
+            }[build.requirements.adjustment_state])
+        else:
+            self.fabrication_status.setText(
+                "Build a deterministic manufacturing plan after selecting an active fixture concept."
+            )
         self._populate_concept_comparison()
 
     def assign_selected_annotation(self) -> None:
@@ -1864,6 +1993,111 @@ class FxdWorkbenchWindow(QMainWindow):
             "wireframe fixture geometry is provisional, not released fabrication geometry."
         )
 
+    @staticmethod
+    def _fixture_purpose_from_ui(value: str) -> FixturePurpose:
+        return {
+            "Tack or Location Fixture": FixturePurpose.TACK_LOCATION,
+            "Assembly fixture": FixturePurpose.ASSEMBLY,
+            "Inspection fixture": FixturePurpose.INSPECTION,
+            "Profile check fixture": FixturePurpose.PROFILE_CHECK,
+            "Go/no-go gauge": FixturePurpose.GO_NO_GO,
+            "Rework fixture": FixturePurpose.REWORK,
+            "Robotic or cobot fixture": FixturePurpose.ROBOTIC,
+            "Combined build-and-check fixture": FixturePurpose.COMBINED_BUILD_CHECK,
+        }.get(value, FixturePurpose.FULL_WELD)
+
+    @staticmethod
+    def _construction_from_ui(value: str) -> ConstructionMethod:
+        return {
+            "Auto-select": ConstructionMethod.AUTO,
+            "Laser-cut fabricated": ConstructionMethod.LASER_CUT_FABRICATED,
+            "CNC-machined": ConstructionMethod.CNC_MACHINED,
+            "Hybrid": ConstructionMethod.HYBRID,
+            "Welded tube-frame": ConstructionMethod.WELDED_TUBE_FRAME,
+            "Shop-standard": ConstructionMethod.SHOP_STANDARD,
+            "Tack or Location Fixture": ConstructionMethod.TACK_LOCATION,
+        }[value]
+
+    @staticmethod
+    def _lifecycle_from_ui(value: str) -> FixtureLifecycle:
+        return {
+            "Store and reuse": FixtureLifecycle.STORE_AND_REUSE,
+            "Disposable or job-run recut": FixtureLifecycle.DISPOSABLE_RECUT,
+            "Reusable tooling on disposable fixture": FixtureLifecycle.REUSABLE_TOOLING_ON_DISPOSABLE,
+            "Full permanent fixture": FixtureLifecycle.PERMANENT,
+        }[value]
+
+    @staticmethod
+    def _adjustment_state_from_ui(value: str) -> AdjustmentState:
+        return {
+            "Provisional adjustment": AdjustmentState.PROVISIONAL,
+            "Prove-out setting": AdjustmentState.PROVE_OUT,
+            "Locked production position": AdjustmentState.LOCKED,
+            "Doweled production position": AdjustmentState.DOWELED,
+            "Revalidation required": AdjustmentState.REVALIDATION_REQUIRED,
+        }[value]
+
+    @staticmethod
+    def _cleco_strategy_from_ui(value: str):
+        from fxd_geometry import ClecoStrategy
+        return {
+            "None": ClecoStrategy.NONE,
+            "Separate fixture Cleco holes": ClecoStrategy.SEPARATE_FIXTURE_HOLES,
+            "Product Cleco holes": ClecoStrategy.PRODUCT_HOLES,
+        }[value]
+
+    def _fixture_build_requirements(self) -> FixtureBuildRequirements:
+        if self.project is None:
+            raise ProjectFormatError("generate a fixture concept before creating manufacturing build evidence")
+        setup = self._capture_process_setup()
+        purpose = self._fixture_purpose_from_ui(self.process_fixture_type.currentText())
+        return FixtureBuildRequirements(
+            self.project.product.source_sha256, purpose,
+            self._construction_from_ui(self.process_construction.currentText()),
+            self._lifecycle_from_ui(self.process_lifecycle.currentText()),
+            self._optional_text(self.process_job_revision), "A", setup.production_quantity,
+            self._optional_text(self.process_repeat_frequency), setup.manufacturing_process,
+            setup.shop_capabilities, self.process_tack_access.isChecked() if purpose == FixturePurpose.TACK_LOCATION else None,
+            None if purpose == FixturePurpose.TACK_LOCATION else None,
+            self.process_unload_clearance.isChecked(), self._adjustment_state_from_ui(self.process_adjustment_state.currentText()),
+            ("All M30 selections are engineer-editable review inputs.",),
+            ("Generated through the local FXD workbench from immutable source identity.",),
+            self._cleco_strategy_from_ui(self.process_cleco_strategy.currentText()),
+            self.process_product_hole_approval.isChecked(),
+            self._optional_text(self.process_product_hole_justification),
+        )
+
+    def generate_fixture_build_plan(self) -> None:
+        if self.project is None or self.workflow is None or not self.workflow.concepts_generated:
+            self.statusBar().showMessage("Generate and select a fixture concept before creating a build plan.")
+            return
+        try:
+            plan = generate_m30_fixture_build_plan(self.project.product, self.project.active, self._fixture_build_requirements())
+            self.project = self.project.with_fixture_build(plan)
+            self.authored_fixture_build = None
+            self._refresh_all()
+            self.statusBar().showMessage(
+                f"Fixture build plan {plan.identity} generated; deterministic findings remain authoritative."
+            )
+        except (FixtureBuildError, ProjectFormatError) as exc:
+            QMessageBox.warning(self, "Fixture build blocked", str(exc))
+
+    def author_real_fixture_geometry(self) -> None:
+        if self.project is None or self.project.fixture_build is None:
+            self.statusBar().showMessage("Generate a valid fixture build plan before OCP authoring.")
+            return
+        try:
+            self.authored_fixture_build = author_fixture_build(
+                self.project.fixture_build, self.project.product, self.kernel,
+            )
+            self._show_active_concept_geometry()
+            self._refresh_all()
+            self.statusBar().showMessage(
+                f"Authored {len(self.authored_fixture_build.components)} real OCP manufacturing components; engineering review remains required."
+            )
+        except (FixtureBuildError, KernelOperationError) as exc:
+            QMessageBox.warning(self, "Manufacturing geometry blocked", str(exc))
+
     def _review_geometry_items(self) -> list[dict[str, object]]:
         if self.project is None or self.workflow is None or not self.workflow.concepts_generated:
             return []
@@ -1873,7 +2107,7 @@ class FxdWorkbenchWindow(QMainWindow):
             "hard_stop": "stops", "stop": "stops", "round_pin": "locators",
             "relieved_locator": "locators", "clamp_mount": "clamps", "clamp": "clamps",
         }
-        return [{
+        items = [{
             "identity": feature.identity,
             "kind": feature.kind,
             "minimum": list(feature.bounds.minimum.__dict__.values()),
@@ -1884,6 +2118,18 @@ class FxdWorkbenchWindow(QMainWindow):
                 if feature.identity not in self.project.suppressed_features
                 and layers.get(feature.kind, "fixture") not in self.project.hidden_layers
                 and "provisional" not in self.project.hidden_layers]
+        if self.authored_fixture_build is not None:
+            for authored in self.authored_fixture_build.components:
+                bounds = authored.component.bounds
+                items.append({
+                    "identity": "manufacturing:" + authored.component.identity,
+                    "kind": "authored_manufacturing_component",
+                    "minimum": list(bounds.minimum.__dict__.values()),
+                    "maximum": list(bounds.maximum.__dict__.values()),
+                    "status": self.project.active_validation.status,
+                    "evidence": "authored manufacturing OCP B-Rep review proxy; never source CAD",
+                })
+        return items
 
     def _show_active_concept_geometry(self) -> None:
         scene = self._scene()

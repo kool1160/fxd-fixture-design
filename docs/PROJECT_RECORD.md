@@ -435,5 +435,37 @@ real geometry, exercised orbit, pan, zoom, fit, standard view, wireframe, and
 transparency, and closed cleanly. Its source SHA-256 remained
 `D33C0464216D0F38124CBB64D0E64D8183C52A15A1D62BEC18B72899A3E33AAA`.
 
-Milestone 29 remains Pending until independent review, hosted CI, visual
-acceptance, and merge. No production approval or physical prove-out is claimed.
+Milestone 29 was independently visually accepted and squash-merged through
+PR #51 at `4b6691a`. No production approval or physical prove-out is claimed.
+
+## 2026-07-17 - Milestone 30 local implementation evidence
+
+Milestone 30 adds the CAD-neutral fixture-build contract and review-only
+construction workflow. It persists fixture purpose, construction method,
+lifecycle and job revision, Cleco strategy, product-hole approval, hole-process
+authority, adjustment state, authored component evidence, BOM, nest
+classification, and the optional build plan in schema-v4 projects while reading
+v1 through v3 projects unchanged. The contract covers full weld, tack/location,
+assembly, inspection, profile check, go/no-go, rework, robotic, and combined
+build-and-check purposes. Tack/location plans require tack access, release, and
+unload evidence but deliberately do not require finish-weld access or claim
+finish-weld distortion control.
+
+The deterministic M30 rule catalog emits traceable findings for datum/support,
+pin, clamp, access, weld/distortion, manufacturing, tabs, holes/threads,
+poka-yoke, Cleco, tack, cost/lifecycle, maintenance, and export gates. A valid
+plan authors OCP B-Rep plate, tube-frame, riser, gusset, locator, pin, clamp,
+tab/slot, and hole geometry; individual STEP and eligible planar DXF outputs,
+the BOM, hole-process table, slot-and-tab map, Cleco-hole map, poka-yoke map,
+nest classification, and workflow sequences remain engineering-review-only.
+Source CAD bytes and SHA-256 are read-only input evidence throughout.
+
+Local evidence: Python 3.12.10 with OCP 7.9.3.1; 16 focused Milestone 30 and
+workbench tests and 223 full-suite tests pass with zero failures, errors, or
+skips. A locally generated, nonconfidential OCP STEP source was loaded in the
+persistent VTK workbench, verified as real source geometry, navigated with
+orbit, pan, zoom, fit, and standard views, then closed cleanly without changing
+the source SHA-256. Milestone 30 remains Pending until hosted kernel acceptance,
+independent review, full Windows visual acceptance, user engineering acceptance,
+and merge. It does not claim released fabrication detail, thermal or robot
+simulation, structural adequacy, safety certification, or production approval.

@@ -23,7 +23,9 @@ from fxd_geometry import (
     EngineeringAnnotations,
     ExportError,
     KernelOperationError,
+    InteractiveWorkflow,
     OcpKernel,
+    ProcessSetup,
     RenderDiagnostics,
     Vec3,
     import_step,
@@ -184,6 +186,49 @@ class QtWorkbenchTests(unittest.TestCase):
         self.assertEqual(self.window.status_validation.text_label.text(), "NOT EVALUATED")
         self.assertEqual(self.window.minimumWidth(), 1180)
         self.assertEqual(self.window.minimumHeight(), 720)
+
+    def test_m30_tack_location_controls_create_and_author_a_fixture_build(self):
+        self.window.project = self._project()
+        self.window.workflow = InteractiveWorkflow(
+            self.window.project.product.source_sha256, ProcessSetup("M30 workbench"),
+            concepts_generated=True,
+        )
+        self.window.process_fixture_type.setCurrentText("Tack or Location Fixture")
+        self.window.process_construction.setCurrentText("Tack or Location Fixture")
+        self.window.process_lifecycle.setCurrentText("Disposable or job-run recut")
+        self.window.process_job_revision.setText("JOB-REV-A")
+        self.window.process_tack_access.setChecked(True)
+        self.window.process_unload_clearance.setChecked(True)
+        self.window.process_adjustment_state.setCurrentText("Locked production position")
+        self.window.generate_fixture_build_plan()
+        self.assertIsNotNone(self.window.project.fixture_build)
+        self.assertEqual(self.window.project.fixture_build.requirements.fixture_purpose.value, "tack_location_fixture")
+        self.window.author_real_fixture_geometry()
+        self.assertIsNotNone(self.window.authored_fixture_build)
+        self.assertGreater(self.window.fabrication_components.count(), 0)
+        self.assertIn("REAL OCP B-REP", self.window.fabrication_components.item(0).text())
+
+    def test_m30_process_controls_scroll_at_supported_desktop_size(self):
+        self.window.resize(1366, 768)
+        self.window.workflow_tabs.setCurrentWidget(self.window.process_scroll)
+        self.window.show()
+        self.application.processEvents()
+
+        self.assertIs(self.window.process_scroll.widget(), self.window.process_form_widget)
+        self.assertGreater(self.window.process_scroll.verticalScrollBar().maximum(), 0)
+        self.assertTrue(self.window.process_tack_access.isVisible())
+        self.assertTrue(self.window.process_unload_clearance.isVisible())
+
+    def test_m30_process_selector_exposes_all_fixture_purposes(self):
+        choices = {
+            self.window.process_fixture_type.itemText(index)
+            for index in range(self.window.process_fixture_type.count())
+        }
+        self.assertEqual(choices, {
+            "Weld fixture", "Tack or Location Fixture", "Assembly fixture",
+            "Inspection fixture", "Profile check fixture", "Go/no-go gauge",
+            "Rework fixture", "Robotic or cobot fixture", "Combined build-and-check fixture",
+        })
 
     def test_real_source_identity_badge_is_verified_without_mutating_step(self):
         with tempfile.TemporaryDirectory() as directory:

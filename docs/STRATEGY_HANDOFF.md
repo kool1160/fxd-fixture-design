@@ -12,14 +12,17 @@ This is the short-form cross-task repository handoff. It does not override
   no detached user-facing viewer.
 - Milestone 28 was independently reviewed, accepted by hosted Kernel validation,
   and squash-merged through PR #50 at `1313922`.
-- Milestone 29 is active on `milestone-29-desktop-ui-branding-system`.
+- Milestone 29 was independently visually accepted and squash-merged through
+  PR #51 at `4b6691a`.
 
 ## Active milestone
 
-Milestone 29 applies the approved FXD UI & Branding Kit v1.1 to the existing
-PySide6 workbench. The new `fxd_ui` presentation package centralizes tokens,
-QSS, approved assets, source identity, semantic status, workflow navigation,
-and approval-gate widgets. It does not own engineering policy or persistence.
+Milestone 30 is active on
+`milestone-30-real-manufacturing-geometry-and-tack-location-fixtures`. It adds
+typed fixture-construction and lifecycle evidence, purpose-specific tack/location
+validation, Cleco strategy checks, real OCP authored manufacturing components,
+and review-only package outputs. It composes existing structure, placement,
+manufacturing, validation, and workbench contracts.
 
 The application preserves ordinary vendor STEP import, source bytes and
 SHA-256, XCAF color evidence, zero-based tessellation, and fail-closed behavior.
@@ -28,10 +31,10 @@ geometry and cannot be represented as source or final manufacturing geometry.
 
 ## Review boundary
 
-Milestone 29 remains Pending until automated validation, local Windows visual
-acceptance, independent review, CI, and merge. The workbench and all exports
-remain engineering-review-only and never imply production, structural,
-weld-process, or safety approval.
+Milestone 30 remains Pending until automated validation, local Windows visual
+acceptance, independent review, CI, user engineering acceptance, and merge.
+The workbench and all exports remain engineering-review-only and never imply
+production, structural, weld-process, or safety approval.
 
 ## Governing principles
 

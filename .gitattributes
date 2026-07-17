@@ -1,0 +1,8 @@
+# Approved branding-kit bytes are provenance-controlled by the imported manifest.
+# Keep their line endings byte-stable when a Windows checkout uses core.autocrlf.
+/assets/icons/toolbar/* -text
+/assets/branding/app-icons/* -text
+/assets/branding/logos/* -text
+/fxd_ui/theme/fxd.base.qss -text
+/fxd_ui/theme/fxd.tokens.json -text
+/docs/ui-branding/* -text
