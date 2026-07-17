@@ -172,6 +172,23 @@ class QtWorkbenchTests(unittest.TestCase):
             self.assertFalse(warning.called, warning.call_args)
         return source
 
+    def _author_m30_tack_build(self):
+        self.window._replace_project(self._project())
+        self.window.workflow = InteractiveWorkflow(
+            self.window.project.product.source_sha256, ProcessSetup("M30 workbench"),
+            concepts_generated=True,
+        )
+        self.window.process_fixture_type.setCurrentText("Tack or Location Fixture")
+        self.window.process_construction.setCurrentText("Tack or Location Fixture")
+        self.window.process_lifecycle.setCurrentText("Disposable or job-run recut")
+        self.window.process_job_revision.setText("JOB-REV-A")
+        self.window.process_tack_access.setChecked(True)
+        self.window.process_unload_clearance.setChecked(True)
+        self.window.process_adjustment_state.setCurrentText("Locked production position")
+        self.window.generate_fixture_build_plan()
+        self.window.author_real_fixture_geometry()
+        return self.window.project.fixture_build, self.window.authored_fixture_build
+
     def test_shell_creation_has_one_embedded_viewport_and_no_side_effects(self):
         self.assertIs(self.window.centralWidget().findChild(FakeViewport), self.window.viewport)
         self.assertFalse(self.window.viewport.separate_window_created)
@@ -188,7 +205,7 @@ class QtWorkbenchTests(unittest.TestCase):
         self.assertEqual(self.window.minimumHeight(), 720)
 
     def test_m30_tack_location_controls_create_and_author_a_fixture_build(self):
-        self.window.project = self._project()
+        self.window._replace_project(self._project())
         self.window.workflow = InteractiveWorkflow(
             self.window.project.product.source_sha256, ProcessSetup("M30 workbench"),
             concepts_generated=True,
@@ -207,6 +224,83 @@ class QtWorkbenchTests(unittest.TestCase):
         self.assertIsNotNone(self.window.authored_fixture_build)
         self.assertGreater(self.window.fabrication_components.count(), 0)
         self.assertIn("REAL OCP B-REP", self.window.fabrication_components.item(0).text())
+
+    def test_m30_authored_geometry_cache_is_cleared_and_identity_gated(self):
+        plan, authored = self._author_m30_tack_build()
+        self.assertIs(self.window._active_authored_fixture_build(), authored)
+
+        with tempfile.TemporaryDirectory() as directory:
+            other_path = Path(directory) / "other.fxd.json"
+            self._project().save(other_path)
+            self.window.load_project_path(other_path)
+            self.assertIsNone(self.window.authored_fixture_build)
+            self.assertFalse(any(
+                item["identity"].startswith("manufacturing:")
+                for item in self.window._review_geometry_items()
+            ))
+
+        plan, authored = self._author_m30_tack_build()
+        with tempfile.TemporaryDirectory() as directory:
+            project_path = Path(directory) / "recover.fxd.json"
+            self.window.save_project_path(project_path)
+            self.window.recover_autosave()
+            self.assertIsNone(self.window.authored_fixture_build)
+
+        plan, authored = self._author_m30_tack_build()
+        self.window.process_job_revision.setText("JOB-REV-B")
+        self.window.generate_fixture_build_plan()
+        self.assertIsNone(self.window.authored_fixture_build)
+        self.assertNotEqual(self.window.project.fixture_build.identity, plan.identity)
+
+        plan, authored = self._author_m30_tack_build()
+        alternate = next(
+            concept.identity for concept in self.window.project.concepts
+            if concept.identity != self.window.project.active_concept
+        )
+        self.window.select_concept(alternate)
+        self.assertIsNone(self.window.authored_fixture_build)
+
+        self.window.authored_fixture_build = authored
+        self.window.project = SimpleNamespace(
+            fixture_build=plan,
+            product=SimpleNamespace(source_sha256="0" * 64),
+        )
+        self.assertIsNone(self.window._active_authored_fixture_build())
+
+    def test_m30_provisional_build_blocks_desktop_export_and_approval(self):
+        clean_validation = SimpleNamespace(
+            blocked=False, status="valid", findings=(), evidence_digest="evidence"
+        )
+        with patch.object(
+            FxdProject, "active_validation", new_callable=PropertyMock,
+            return_value=clean_validation,
+        ):
+            self.window._replace_project(self._project())
+            self.window.workflow = InteractiveWorkflow(
+                self.window.project.product.source_sha256, ProcessSetup("M30 workbench"),
+                concepts_generated=True,
+            )
+            self.window.process_fixture_type.setCurrentText("Weld fixture")
+            self.window.process_construction.setCurrentText("Welded tube-frame")
+            self.window.process_lifecycle.setCurrentText("Full permanent fixture")
+            self.window.process_job_revision.setText("JOB-REV-A")
+            self.window.process_unload_clearance.setChecked(True)
+            self.window.process_adjustment_state.setCurrentText("Locked production position")
+            self.window.generate_fixture_build_plan()
+            self.assertEqual(
+                self.window.project.fixture_build.requirements.fixture_purpose.value,
+                "full_weld_fixture",
+            )
+            self.assertFalse(self.window._actions["export"].isEnabled())
+            self.assertFalse(self.window._actions["approve"].isEnabled())
+            self.assertEqual(self.window._workflow_states()["Export"], "blocked")
+            with patch("fxd_qt_app.QFileDialog.getExistingDirectory") as chooser, patch(
+                "fxd_qt_app.export_project_package"
+            ) as export, patch("fxd_qt_app.QMessageBox.warning") as warning:
+                self.window.export_package()
+            chooser.assert_not_called()
+            export.assert_not_called()
+            warning.assert_called_once()
 
     def test_m30_process_controls_scroll_at_supported_desktop_size(self):
         self.window.resize(1366, 768)

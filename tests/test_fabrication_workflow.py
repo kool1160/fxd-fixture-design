@@ -90,6 +90,30 @@ class FabricationWorkflowTests(unittest.TestCase):
         bad = replace(plan, components=plan.components + (second_round,))
         self.assertIn("FXD-PIN-001", self.codes(bad))
 
+    def test_diamond_pin_is_relieved_and_step_export_preserves_the_clearance(self):
+        kernel = OcpKernel()
+        assembly = author_fixture_build(self.plan(), self.product, kernel)
+        round_pin = next(item for item in assembly.components if item.component.role == BuildComponentRole.ROUND_PIN)
+        diamond_pin = next(item for item in assembly.components if item.component.role == BuildComponentRole.DIAMOND_PIN)
+
+        def spans(shape):
+            vertices = [vertex for mesh in kernel.tessellate(shape) for vertex in mesh.vertices_mm]
+            return tuple(max(vertex[index] for vertex in vertices) - min(vertex[index] for vertex in vertices)
+                         for index in (0, 1, 2))
+
+        round_spans = spans(round_pin.shape)
+        diamond_spans = spans(diamond_pin.shape)
+        self.assertGreater(diamond_pin.topology.faces, round_pin.topology.faces)
+        self.assertLess(diamond_spans[0], round_spans[0])
+        self.assertGreater(diamond_spans[1], diamond_spans[0])
+        self.assertLess(abs(diamond_spans[1] - round_spans[1]), 0.2)
+        self.assertIn("relief_axis=fixture_x", diamond_pin.component.evidence)
+        self.assertIn("locating_axis=fixture_y", diamond_pin.component.evidence)
+
+        exported_spans = spans(kernel.import_step(diamond_pin.step_bytes))
+        self.assertLess(exported_spans[0], exported_spans[1])
+        self.assertAlmostEqual(exported_spans[1], diamond_spans[1], places=4)
+
     def test_unload_and_clamp_reaction_fail_closed(self):
         plan = self.plan()
         unloaded = replace(plan, requirements=replace(plan.requirements, unload_clearance_evaluated=False))
@@ -209,6 +233,22 @@ class FabricationWorkflowTests(unittest.TestCase):
             build_fixture_build_package(assembly, replace(plan, requirements=provisional))
         self.assertEqual(FIXTURE.read_bytes(), self.source)
 
+    def test_provisional_access_or_missing_poka_yoke_cannot_export_m30_package(self):
+        frame = self.plan(
+            purpose=FixturePurpose.FULL_WELD,
+            method=ConstructionMethod.WELDED_TUBE_FRAME,
+            lifecycle=FixtureLifecycle.PERMANENT,
+        )
+        missing_poka_yoke = replace(frame, poka_yokes=())
+        for plan in (
+                missing_poka_yoke,
+                replace(frame, requirements=replace(frame.requirements, full_weld_access_available=None))):
+            with self.subTest(plan=plan.identity):
+                assembly = author_fixture_build(plan, self.product, OcpKernel())
+                self.assertEqual(assembly.validation.status, "provisional")
+                with self.assertRaisesRegex(FixtureBuildError, "validation result can be exported"):
+                    build_fixture_build_package(assembly, plan)
+
     def test_provisional_geometry_is_never_authored_as_manufacturing(self):
         plan = self.plan()
         base = next(item for item in plan.components if item.identity == "m30-baseplate")
@@ -227,8 +267,16 @@ class FabricationWorkflowTests(unittest.TestCase):
             suppressed_features=frozenset(), fixture_build=plan, workflow=None, revision_id="rev-m30-test",
         )
         self.assertIsNone(project_export_block_reason(project))
+        provisional_evidence = self.plan(
+            purpose=FixturePurpose.FULL_WELD,
+            method=ConstructionMethod.WELDED_TUBE_FRAME,
+            lifecycle=FixtureLifecycle.PERMANENT,
+        )
+        self.assertIn("status must be valid", project_export_block_reason(
+            SimpleNamespace(**(project.__dict__ | {"fixture_build": provisional_evidence}))
+        ))
         provisional = replace(plan, requirements=replace(plan.requirements, adjustment_state=AdjustmentState.PROVISIONAL))
-        self.assertIn("provisional fixture-build", project_export_block_reason(
+        self.assertIn("status must be valid", project_export_block_reason(
             SimpleNamespace(**(project.__dict__ | {"fixture_build": provisional}))
         ))
         with tempfile.TemporaryDirectory() as directory:

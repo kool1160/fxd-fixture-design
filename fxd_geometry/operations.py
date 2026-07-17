@@ -118,6 +118,8 @@ def project_export_block_reason(project: FxdProject) -> str | None:
         build_validation = validate_fixture_build_plan(project.product, project.fixture_build)
         if build_validation.blocked:
             return "invalid deterministic fixture-build validation result cannot be exported"
+        if build_validation.status != "valid":
+            return "fixture-build validation status must be valid before export"
         if project.fixture_build.requirements.adjustment_state in {
                 AdjustmentState.PROVISIONAL, AdjustmentState.PROVE_OUT,
                 AdjustmentState.REVALIDATION_REQUIRED}:

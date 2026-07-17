@@ -831,7 +831,9 @@ def generate_fixture_build_plan(product: ProductModel, concept: CompleteFixtureC
     components.append(_component("m30-diamond-pin", "FXD-M30-021", "relieved diamond locating pin cartridge", BuildComponentRole.DIAMOND_PIN,
                                  diamond_bounds, reference, parent="m30-baseplate", process="machined", thickness=12.0,
                                  rule_ids=("FXD-PIN-001", "FXD-DST-001"), fixed=False, locating=True,
-                                 contact_condition="functional_hole", assumptions=("Diamond relief remains an engineer-selected tolerance strategy.",),
+                                 contact_condition="functional_hole",
+                                 assumptions=("Diamond-pin clearance remains an engineer-selected tolerance strategy.",),
+                                 evidence=("relief_axis=fixture_x", "locating_axis=fixture_y", "relief_style=opposed_flats"),
                                  replaceable=True, maintenance_access=True))
     stop_bounds = Aabb(Vec3(product_box.maximum.x + 10.0, product_box.minimum.y + 15.0, base.maximum.z),
                        Vec3(product_box.maximum.x + 22.0, product_box.minimum.y + 35.0, support_top))
@@ -1062,9 +1064,24 @@ def compare_fixture_build_plans(plans: tuple[FixtureBuildPlan, ...], product: Pr
 
 def _shape_for(component: FixtureBuildComponent, kernel: RealKernel) -> object:
     low, high = component.bounds.minimum, component.bounds.maximum
-    if component.role in {BuildComponentRole.ROUND_PIN, BuildComponentRole.DIAMOND_PIN, BuildComponentRole.PIN_BUSHING}:
+    if component.role in {BuildComponentRole.ROUND_PIN, BuildComponentRole.PIN_BUSHING}:
         radius = min(high.x - low.x, high.y - low.y) / 2.0
         shape = kernel.make_cylinder((low.x + radius, low.y + radius, low.z), radius, high.z - low.z)
+    elif component.role == BuildComponentRole.DIAMOND_PIN:
+        radius = min(high.x - low.x, high.y - low.y) / 2.0
+        center_x = low.x + radius
+        center_y = low.y + radius
+        shape = kernel.make_cylinder((center_x, center_y, low.z), radius, high.z - low.z)
+        # Two opposed flats provide X clearance while the remaining Y contacts locate the part.
+        relief_half_width = radius * 0.60
+        relief_height = high.z - low.z + 2.0
+        for minimum_x, maximum_x in (
+                (low.x - 1.0, center_x - relief_half_width),
+                (center_x + relief_half_width, high.x + 1.0)):
+            shape = kernel.cut(shape, kernel.make_box(
+                (minimum_x, low.y - 1.0, low.z - 1.0),
+                (maximum_x, high.y + 1.0, low.z - 1.0 + relief_height),
+            ))
     else:
         shape = kernel.make_box((low.x, low.y, low.z), (high.x, high.y, high.z))
     if component.role in {BuildComponentRole.TUBE_FRAME, BuildComponentRole.CROSSMEMBER}:
@@ -1134,6 +1151,8 @@ def build_fixture_build_package(assembly: AuthoredFixtureAssembly, plan: Fixture
     """Create deterministic review-only manufacturing outputs behind all available gates."""
     if assembly.plan_identity != plan.identity or assembly.source_sha256 != plan.requirements.source_sha256:
         raise FixtureBuildError("authored fixture geometry does not match the construction plan")
+    if assembly.validation.status != "valid":
+        raise FixtureBuildError("only a valid fixture build validation result can be exported")
     if assembly.blocked or plan.requirements.adjustment_state in {
             AdjustmentState.PROVISIONAL, AdjustmentState.PROVE_OUT, AdjustmentState.REVALIDATION_REQUIRED}:
         raise FixtureBuildError("stale, provisional, or invalid fixture build evidence cannot be exported")

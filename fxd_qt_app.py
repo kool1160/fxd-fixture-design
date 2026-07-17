@@ -470,6 +470,26 @@ class FxdWorkbenchWindow(QMainWindow):
         self._set_property("Evidence", EVIDENCE_PROVISIONAL)
         self._refresh_shell_state()
 
+    def _replace_project(self, project: FxdProject | None) -> None:
+        """Replace project state and invalidate geometry authored for the old revision."""
+        self.project = project
+        self.authored_fixture_build = None
+
+    def _active_authored_fixture_build(self):
+        """Return cache only when it belongs to the active source and build plan."""
+        authored = self.authored_fixture_build
+        if authored is None:
+            return None
+        if self.project is None or self.project.fixture_build is None:
+            self.authored_fixture_build = None
+            return None
+        plan = self.project.fixture_build
+        if (authored.plan_identity != plan.identity
+                or authored.source_sha256 != self.project.product.source_sha256):
+            self.authored_fixture_build = None
+            return None
+        return authored
+
     def _build_tree_dock(self) -> None:
         dock = QDockWidget("Engineering Explorer", self)
         dock.setObjectName("engineeringExplorerDock")
@@ -1194,6 +1214,7 @@ class FxdWorkbenchWindow(QMainWindow):
                     self.project.active_validation.blocked
                     or self.project.suppressed_features
                     or self.project.active.corrections
+                    or project_export_block_reason(self.project) is not None
                 ) else "available"
             )
             states["Export"] = (
@@ -1201,6 +1222,7 @@ class FxdWorkbenchWindow(QMainWindow):
                     self.project.active_validation.blocked
                     or self.project.suppressed_features
                     or self.project.active.corrections
+                    or project_export_block_reason(self.project) is not None
                 ) else "available"
             )
             states["Project History"] = "complete" if self.project.revisions else "available"
@@ -1247,6 +1269,9 @@ class FxdWorkbenchWindow(QMainWindow):
         else:
             self.renderer_health.set_status("notEvaluated", "VTK")
 
+        export_block_reason = (
+            project_export_block_reason(self.project) if self.project is not None else None
+        )
         if self.project is None:
             status = "not evaluated"
             failures = warnings = 0
@@ -1263,6 +1288,7 @@ class FxdWorkbenchWindow(QMainWindow):
                 not self.project.active_validation.blocked
                 and not self.project.suppressed_features
                 and not self.project.active.corrections
+                and export_block_reason is None
             )
             approved = self.project.approved_revision == self.project.revision_id
         self.status_validation.set_status(status, status.upper())
@@ -1271,9 +1297,6 @@ class FxdWorkbenchWindow(QMainWindow):
         )
         self.status_selection.setText(f"Selection: {self.selected_identity or '-'}")
 
-        export_block_reason = (
-            project_export_block_reason(self.project) if self.project is not None else None
-        )
         action_state = {
             "save_project": self.project is not None,
             "export": self.project is not None and export_block_reason is None,
@@ -1343,7 +1366,7 @@ class FxdWorkbenchWindow(QMainWindow):
                 raise RuntimeError("source STEP identity changed during import")
             self.viewport.load_document(document)
             self.document = document
-            self.project = None
+            self._replace_project(None)
             self.workflow = InteractiveWorkflow(
                 document.source_sha256,
                 ProcessSetup(project_name=source.stem),
@@ -1365,7 +1388,7 @@ class FxdWorkbenchWindow(QMainWindow):
             logger.exception("STEP import failed for %s", source)
             self.viewport.clear()
             self.document = None
-            self.project = None
+            self._replace_project(None)
             self.workflow = None
             self.project_path = None
             self.selected_identity = None
@@ -1384,7 +1407,7 @@ class FxdWorkbenchWindow(QMainWindow):
             self.load_project_path(Path(name))
 
     def load_project_path(self, source: Path) -> None:
-        self.project = FxdProject.load(source)
+        self._replace_project(FxdProject.load(source))
         self.workflow = self.project.workflow
         self.project_path = source
         self.document = None
@@ -1446,9 +1469,12 @@ class FxdWorkbenchWindow(QMainWindow):
             try:
                 paths = export_project_package(self.project, destination, kernel=self.kernel)
                 if self.project.fixture_build is not None:
-                    self.authored_fixture_build = self.authored_fixture_build or author_fixture_build(
-                        self.project.fixture_build, self.project.product, self.kernel,
-                    )
+                    authored = self._active_authored_fixture_build()
+                    if authored is None:
+                        authored = author_fixture_build(
+                            self.project.fixture_build, self.project.product, self.kernel,
+                        )
+                    self.authored_fixture_build = authored
             except ExportError as exc:
                 self.log.record(
                     "export_blocked", revision=self.project.revision_id, reason=str(exc)
@@ -1471,7 +1497,7 @@ class FxdWorkbenchWindow(QMainWindow):
         if self.project_path is None:
             self.statusBar().showMessage("Open or save a project before recovering autosave.")
             return
-        self.project = ProjectRecovery(self.project_path).recover()
+        self._replace_project(ProjectRecovery(self.project_path).recover())
         self.workflow = self.project.workflow
         self._refresh_all()
         self.statusBar().showMessage("Autosave recovered; deterministic revalidation remains required.")
@@ -1584,7 +1610,8 @@ class FxdWorkbenchWindow(QMainWindow):
             ]
             self._add_tree_category("Welds", welds)
         if self.project and self.project.fixture_build:
-            authored = {item.component.identity for item in (self.authored_fixture_build.components if self.authored_fixture_build else ())}
+            active_authored = self._active_authored_fixture_build()
+            authored = {item.component.identity for item in (active_authored.components if active_authored else ())}
             self._add_tree_category("Manufacturing fixture components", [
                 (f"{item.part_number} | {item.role.value}", item.identity,
                  "authored OCP B-Rep" if item.identity in authored else item.geometry_authority.value)
@@ -1701,7 +1728,7 @@ class FxdWorkbenchWindow(QMainWindow):
             return
         self.workflow = self.workflow.mark_finding_reviewed(str(identity))
         if self.project is not None:
-            self.project = self.project.with_workflow(self.workflow)
+            self._replace_project(self.project.with_workflow(self.workflow))
         self._refresh_all()
         self.statusBar().showMessage("Finding marked reviewed; validation status was not changed.")
 
@@ -1872,7 +1899,8 @@ class FxdWorkbenchWindow(QMainWindow):
                 f"Geometry authority: authored manufacturing geometry only after OCP authoring.\n"
                 f"Validation: {validation.status.upper()} | job revision: {build.requirements.job_revision or 'missing'}"
             )
-            authored = {item.component.identity for item in (self.authored_fixture_build.components if self.authored_fixture_build else ())}
+            active_authored = self._active_authored_fixture_build()
+            authored = {item.component.identity for item in (active_authored.components if active_authored else ())}
             for component in build.components:
                 state = "REAL OCP B-REP" if component.identity in authored else component.geometry_authority.value
                 self.fabrication_components.addItem(
@@ -1905,7 +1933,7 @@ class FxdWorkbenchWindow(QMainWindow):
             role = tuple(AnnotationRole)[self.annotation_role.currentIndex()]
             annotation = face_annotation(self.document, self.selected_reference, role)
             self.workflow = self.workflow.with_annotation(annotation)
-            self.project = None
+            self._replace_project(None)
             self._refresh_all()
             self.statusBar().showMessage(
                 f"Assigned {role.value}; prior analysis is now stale and must be rerun."
@@ -1967,7 +1995,7 @@ class FxdWorkbenchWindow(QMainWindow):
             raise RuntimeError("source STEP identity changed during engineering analysis")
         if self.document.source_path and self.document.source_path.read_bytes() != source_bytes:
             raise RuntimeError("source STEP file changed during engineering analysis")
-        self.project = project
+        self._replace_project(project)
         self.workflow = project.workflow
         self.project_path = None
         self._refresh_all()
@@ -1985,7 +2013,7 @@ class FxdWorkbenchWindow(QMainWindow):
             self.statusBar().showMessage("Run deterministic assembly analysis first.")
             return
         self.workflow = replace(self.workflow, concepts_generated=True, active_stage="Concepts")
-        self.project = self.project.with_workflow(self.workflow)
+        self._replace_project(self.project.with_workflow(self.workflow))
         self._show_active_concept_geometry()
         self._refresh_all()
         self.statusBar().showMessage(
@@ -2073,8 +2101,7 @@ class FxdWorkbenchWindow(QMainWindow):
             return
         try:
             plan = generate_m30_fixture_build_plan(self.project.product, self.project.active, self._fixture_build_requirements())
-            self.project = self.project.with_fixture_build(plan)
-            self.authored_fixture_build = None
+            self._replace_project(self.project.with_fixture_build(plan))
             self._refresh_all()
             self.statusBar().showMessage(
                 f"Fixture build plan {plan.identity} generated; deterministic findings remain authoritative."
@@ -2118,8 +2145,9 @@ class FxdWorkbenchWindow(QMainWindow):
                 if feature.identity not in self.project.suppressed_features
                 and layers.get(feature.kind, "fixture") not in self.project.hidden_layers
                 and "provisional" not in self.project.hidden_layers]
-        if self.authored_fixture_build is not None:
-            for authored in self.authored_fixture_build.components:
+        active_authored = self._active_authored_fixture_build()
+        if active_authored is not None:
+            for authored in active_authored.components:
                 bounds = authored.component.bounds
                 items.append({
                     "identity": "manufacturing:" + authored.component.identity,
@@ -2168,10 +2196,10 @@ class FxdWorkbenchWindow(QMainWindow):
     def select_concept(self, identity: str) -> None:
         if self.project is None or identity not in {item.identity for item in self.project.concepts}:
             return
-        self.project = self.project.with_concept(identity)
+        self._replace_project(self.project.with_concept(identity))
         if self.workflow is not None:
             self.workflow = replace(self.workflow, active_stage="Concepts")
-            self.project = self.project.with_workflow(self.workflow)
+            self._replace_project(self.project.with_workflow(self.workflow))
         self._show_active_concept_geometry()
         self._refresh_all()
         self.statusBar().showMessage(
@@ -2213,7 +2241,7 @@ class FxdWorkbenchWindow(QMainWindow):
             )
             self.workflow = self.workflow.with_tooling(record)
             if self.project is not None:
-                self.project = self.project.with_workflow(self.workflow)
+                self._replace_project(self.project.with_workflow(self.workflow))
             self._refresh_all()
             state = "VERIFIED" if record.verified else "UNVERIFIED"
             self.statusBar().showMessage(
@@ -2234,28 +2262,28 @@ class FxdWorkbenchWindow(QMainWindow):
             target = self.edit_target.currentText().strip()
             regeneration_started = perf_counter()
             if operation == "Set parameter":
-                self.project = self.project.edit_parameter(
+                self._replace_project(self.project.edit_parameter(
                     self.edit_parameter_name.currentText(), self.edit_parameter_value.value(), reason,
-                )
+                ))
             elif operation == "Move feature":
-                self.project = self.project.edit_feature(
+                self._replace_project(self.project.edit_feature(
                     target, "move",
                     Vec3(self.edit_move_x.value(), self.edit_move_y.value(), self.edit_move_z.value()),
                     reason,
-                )
+                ))
             elif operation == "Resize feature":
-                self.project = self.project.edit_feature(
+                self._replace_project(self.project.edit_feature(
                     target, "resize",
                     {"x": self.edit_size_x.value(), "y": self.edit_size_y.value(),
                      "z": self.edit_size_z.value()},
                     reason,
-                )
+                ))
             elif operation == "Replace feature":
-                self.project = self.project.edit_feature(
+                self._replace_project(self.project.edit_feature(
                     target, "replace", self.edit_replacement.currentText(), reason,
-                )
+                ))
             elif operation == "Suppress or restore feature":
-                self.project = self.project.suppress(target, reason)
+                self._replace_project(self.project.suppress(target, reason))
             else:
                 raise ProjectFormatError(f"unsupported workbench edit {operation!r}")
             regeneration_elapsed_ms = round(
@@ -2268,7 +2296,7 @@ class FxdWorkbenchWindow(QMainWindow):
                 self.workflow, active_stage="Validation", concepts_generated=True,
                 timings=timings,
             )
-            self.project = self.project.with_workflow(self.workflow)
+            self._replace_project(self.project.with_workflow(self.workflow))
             self._show_active_concept_geometry()
             self._refresh_all()
             self.statusBar().showMessage(
@@ -2295,9 +2323,9 @@ class FxdWorkbenchWindow(QMainWindow):
         revision_id = str(selected.data(Qt.ItemDataRole.UserRole))
         try:
             old_revision = self.project.revision_id
-            self.project = self.project.restore(revision_id)
+            self._replace_project(self.project.restore(revision_id))
             self.workflow = replace(self.workflow, active_stage="Validation", concepts_generated=True)
-            self.project = self.project.with_workflow(self.workflow)
+            self._replace_project(self.project.with_workflow(self.workflow))
             self._show_active_concept_geometry()
             self._refresh_all()
             self.statusBar().showMessage(
@@ -2349,7 +2377,7 @@ class FxdWorkbenchWindow(QMainWindow):
         visible = action.isChecked()
         currently_visible = layer not in self.project.hidden_layers
         if visible != currently_visible:
-            self.project = self.project.toggle_layer(layer)
+            self._replace_project(self.project.toggle_layer(layer))
         if layer == "product" and self._scene() is not None:
             self._scene().set_visible(visible)
         elif self._scene() is not None:
@@ -2364,7 +2392,7 @@ class FxdWorkbenchWindow(QMainWindow):
             self.statusBar().showMessage("Open an FXD project before recording a review decision.")
             return
         try:
-            self.project = self.project.decide(action, "Human review action recorded locally.")
+            self._replace_project(self.project.decide(action, "Human review action recorded locally."))
             self._refresh_all()
             self.statusBar().showMessage(f"Recorded {action}; this is not production approval.")
         except ProjectFormatError as exc:
