@@ -13,7 +13,7 @@ from queue import Empty, Queue
 import subprocess
 import tempfile
 from threading import Thread
-from time import monotonic
+from time import monotonic, perf_counter
 from typing import Callable
 
 from PySide6.QtCore import QObject, QRunnable, QThreadPool, QTimer, Qt, Signal
@@ -835,9 +835,9 @@ class FxdWorkbenchWindow(QMainWindow):
         try:
             before = source.read_bytes()
             before_digest = sha256(before).hexdigest()
-            import_started = monotonic()
+            import_started = perf_counter()
             document = load_step_for_workbench(source)
-            import_elapsed_ms = round((monotonic() - import_started) * 1000.0, 3)
+            import_elapsed_ms = round((perf_counter() - import_started) * 1000.0, 3)
             after_digest = sha256(source.read_bytes()).hexdigest()
             if before_digest != after_digest or before != document.source_bytes:
                 raise RuntimeError("source STEP identity changed during import")
@@ -1538,7 +1538,7 @@ class FxdWorkbenchWindow(QMainWindow):
             reason = self.edit_reason.text().strip() or "Engineer fixture correction"
             operation = self.edit_operation.currentText()
             target = self.edit_target.currentText().strip()
-            regeneration_started = monotonic()
+            regeneration_started = perf_counter()
             if operation == "Set parameter":
                 self.project = self.project.edit_parameter(
                     self.edit_parameter_name.currentText(), self.edit_parameter_value.value(), reason,
@@ -1565,7 +1565,7 @@ class FxdWorkbenchWindow(QMainWindow):
             else:
                 raise ProjectFormatError(f"unsupported workbench edit {operation!r}")
             regeneration_elapsed_ms = round(
-                (monotonic() - regeneration_started) * 1000.0, 3
+                (perf_counter() - regeneration_started) * 1000.0, 3
             )
             timings = tuple(
                 item for item in self.workflow.timings if item.operation != "regeneration"
