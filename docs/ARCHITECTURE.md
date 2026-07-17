@@ -50,6 +50,16 @@ Owns topology queries, spatial indexing, contact calculations, collision, cleara
 
 Consumes compact structured context. It proposes restricted commands, asks for missing engineering intent, compares valid concepts, and explains tradeoffs. It does not directly mutate kernel geometry or silently override failed checks.
 
+### Interactive workflow orchestration
+
+`fxd_geometry.interactive_workflow` is a CAD-neutral application contract. It
+records process setup, exact OCP-derived face annotations, private tooling
+metadata state, finding review state, and operation timings. It translates
+those inputs into the existing annotations, placement, concepts, project, and
+validation APIs. It does not own geometry rules and may not convert unknown
+evidence into a pass. The PySide6 shell invokes this boundary; it does not
+duplicate engineering policy.
+
 ### Connectors
 
 Thin adapters import or export data through STEP and vendor APIs. The standalone application must work without a vendor connector.

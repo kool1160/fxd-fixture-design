@@ -6,26 +6,28 @@ This is the short-form cross-task repository handoff. It does not override
 ## Current repository state
 
 - Repository: `kool1160/fxd-fixture-design`
-- Milestone 26 was squash-merged through PR #48 at `c8f831d`.
-- PR #48 passed Kernel acceptance and independent Windows visual review.
-- The accepted Milestone 26 limitation was a detached VTK viewer window.
-- Milestone 27 is active on `milestone-27-unified-engineering-workbench`.
+- Milestone 27 was independently visually accepted and squash-merged through
+  PR #49 at `7a8076a`.
+- The unified PySide6 workbench uses one embedded supervised VTK viewport with
+  no detached user-facing viewer.
+- Milestone 28 is active on
+  `milestone-28-interactive-fixture-engineering-workflow`.
 
 ## Active milestone
 
-Milestone 27 replaces the launched Tk shell with one PySide6 main window and
-an embedded persistent VTK viewport. The deterministic engineering, geometry,
-project, validation, manufacturing, and export contracts remain UI-framework
-independent and must not be rewritten to suit Qt.
+Milestone 28 exposes the existing deterministic annotations, placement,
+concept, tooling, validation, edit, revision, and export contracts through the
+unified workbench. Workflow orchestration remains CAD-neutral and Qt does not
+own engineering rules.
 
-The application must preserve ordinary vendor STEP import, source bytes and
-SHA-256, XCAF color evidence, validated zero-based tessellation, project
-workflows, and fail-closed behavior. Metadata-only or malformed input may not
-be displayed as real source geometry, and no generated substitute is allowed.
+The application preserves ordinary vendor STEP import, source bytes and
+SHA-256, XCAF color evidence, zero-based tessellation, and fail-closed behavior.
+Generated AABB fixture evidence is explicitly provisional wireframe review
+geometry and cannot be represented as source or final manufacturing geometry.
 
 ## Review boundary
 
-Milestone 27 remains Pending until automated validation, Kernel acceptance,
+Milestone 28 remains Pending until automated validation, Kernel acceptance,
 local Windows screenshots, independent visual acceptance, review, and merge.
 The workbench and all exports remain engineering-review-only and never imply
 production, structural, weld-process, or safety approval.

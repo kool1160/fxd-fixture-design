@@ -68,5 +68,37 @@ provisional project evidence is never labeled as real OCP source geometry.
   OCP or OpenGL objects across UI-process boundaries, so initial load performs
   two validated imports. Camera movement never reimports or retessellates.
 
-Milestone 27 remains Pending until local visual acceptance, CI, independent
-review, and merge.
+Milestone 27 was independently visually accepted and merged in PR #49.
+
+## Interactive engineering workflow
+
+The Fixture Engineering Workflow dock organizes Product, Process, Datums and
+intent, Concepts, Tooling, and Edit and revisions. A real OCP assembly can be
+normalized into the CAD-neutral product model using only immutable source
+bytes, stable component and face identities, normals, areas, and tessellation
+vertices. Annotations remain separate from source CAD.
+
+`Analyze Assembly` runs the existing placement, concept, access, weld, and
+validation contracts on a bounded background thread. Unknown process inputs
+and missing access envelopes remain visible findings. `Generate Fixture
+Concepts` exposes deterministic alternatives and comparison evidence for
+validity, relative cost, loading and unloading, repeatability, feature counts,
+operator/weld/automation access, manufacturability, maintainability, unresolved
+assumptions, and ranking rationale. Relative evidence is not a quotation.
+Generated AABB feature evidence is shown only as translucent wireframe
+provisional review geometry; it is never labeled `REAL OCP`, final B-Rep, or
+released fabrication geometry.
+
+Supported parameter, move, resize, replacement, suppression/restore, and saved
+revision restoration operations create deterministic project revisions, revoke
+prior review approval, regenerate concepts, and rerun validation. Private local
+tooling records can retain supplied manufacturer, part number, revision,
+directions, stroke, reach, force, and explicit verified/unverified state after
+the selected CAD passes the real OCP import path. Project schema v3
+persists process setup, exact annotations, tooling verification state, finding
+reviews, active concept, visibility, revisions, and timing evidence. V1 and v2
+projects remain readable. Invalid concepts remain blocked from review export;
+provisional output retains the engineering-review-only boundary.
+
+Milestone 28 remains Pending until local fixture-engineer visual review,
+hosted validation, independent review, and merge.
