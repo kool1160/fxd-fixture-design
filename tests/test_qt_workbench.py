@@ -150,7 +150,9 @@ class QtWorkbenchTests(unittest.TestCase):
         self.assertEqual(self.window._property_values["Evidence"].text(), EVIDENCE_PROVISIONAL)
 
     def test_user32_loader_enables_reliable_last_error_capture(self):
-        with patch("fxd_qt_app.ctypes.WinDLL", return_value=object()) as loader:
+        with patch(
+            "fxd_qt_app.ctypes.WinDLL", return_value=object(), create=True
+        ) as loader:
             self.assertIsNotNone(_load_user32())
         loader.assert_called_once_with("user32", use_last_error=True)
 
