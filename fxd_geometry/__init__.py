@@ -54,6 +54,7 @@ from .component_geometry import (ComponentClassification, ComponentExport, Compo
                                  generate_manufacturing_assembly, generate_manufacturing_assembly_for_product,
                                  validate_manufacturing_assembly, write_manufacturing_export_package)
 from .workbench import WorkbenchDocument, load_step_for_workbench
+from .vtk_viewer import VtkViewerUnavailable, VtkWorkbenchViewer
 from .drawings import (APPROVAL_TEXT, NOT_RELEASED_TEXT, BomEntry, DrawingAnnotation,
                        DrawingDimension, DrawingFinding, DrawingPackage, DrawingPackageError,
                        DrawingSheet, DrawingView, HoleTableRow, RevisionBlock,
@@ -96,6 +97,7 @@ __all__ += ["ComponentClassification", "ComponentExport", "ComponentGeometryErro
             "generate_manufacturing_assembly_for_product", "validate_manufacturing_assembly",
             "write_manufacturing_export_package"]
 __all__ += ["WorkbenchDocument", "load_step_for_workbench"]
+__all__ += ["VtkViewerUnavailable", "VtkWorkbenchViewer"]
 __all__ += ["APPROVAL_TEXT", "NOT_RELEASED_TEXT", "BomEntry", "DrawingAnnotation", "DrawingDimension",
             "DrawingFinding", "DrawingPackage", "DrawingPackageError", "DrawingSheet", "DrawingView",
             "HoleTableRow", "RevisionBlock", "generate_drawing_package", "validate_drawing_package",

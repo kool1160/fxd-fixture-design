@@ -15,6 +15,8 @@ from fxd_geometry import (
     ReviewGeometry,
     Vec3,
     VisualEdge,
+    VtkViewerUnavailable,
+    VtkWorkbenchViewer,
     WorkbenchDocument,
     build_review_geometry,
     generate_manufacturing_geometry,
@@ -46,13 +48,17 @@ class FxdApp:
         self.hidden_review_layers: set[str] = set()
         self.project_path: Path | None = None
         self.workbench_document: WorkbenchDocument | None = None
+        self.vtk_viewer: VtkWorkbenchViewer | None = None
+        self.orbit_enabled = True
         self.log = StructuredLog(Path.home() / ".fxd" / "diagnostics.jsonl")
 
         root.title("FXD — Engineering Review (not production approval)")
         root.geometry("1180x760")
         self.status = tk.StringVar(value="Open a legally shareable STEP assembly to begin.")
-        self.canvas = tk.Canvas(root, background="#18212b", highlightthickness=0)
-        self.canvas.pack(side="left", fill="both", expand=True)
+        self.viewport = ttk.Frame(root)
+        self.viewport.pack(side="left", fill="both", expand=True)
+        self.canvas = tk.Canvas(self.viewport, background="#18212b", highlightthickness=0)
+        self.canvas.pack(fill="both", expand=True)
         side = ttk.Frame(root, padding=10, width=330)
         side.pack(side="right", fill="y")
         ttk.Button(side, text="Import STEP", command=self.import_step).pack(fill="x")
@@ -88,6 +94,8 @@ class FxdApp:
                    command=lambda: self.set_display("wireframe")).pack(fill="x", pady=1)
         ttk.Button(side, text="Toggle transparency",
                    command=lambda: self.set_display("transparent")).pack(fill="x", pady=1)
+        self.orbit_label = tk.StringVar(value="Orbit: On")
+        ttk.Button(side, textvariable=self.orbit_label, command=self.toggle_orbit).pack(fill="x", pady=1)
         ttk.Button(side, text="Toggle kernel section", command=self.toggle_section).pack(fill="x", pady=1)
 
         self.findings = tk.Text(side, width=42, height=12, wrap="word", state="disabled")
@@ -119,6 +127,7 @@ class FxdApp:
                 process_type="manual MIG", production_quantity=1)
             self.project = FxdProject.from_product(product, annotations)
             self.workbench_document = None
+            self._hide_vtk_viewer()
             self.project_path = None
             self._restore_kernel_geometry()
             self.root.title(f"FXD — {source.name} · OCP engineering review")
@@ -133,6 +142,7 @@ class FxdApp:
                 self.project = None
                 self.project_path = None
                 self.kernel = OcpKernel()
+                self._show_vtk_viewer(self.workbench_document)
                 self.root.title(f"FXD — {source.name} · OCP engineering review")
                 self.status.set(
                     f"Loaded {self.workbench_document.source_name}: OCP B-Rep, "
@@ -153,6 +163,8 @@ class FxdApp:
             return
         try:
             self.project = FxdProject.load(name)
+            self.workbench_document = None
+            self._hide_vtk_viewer()
             self.project_path = Path(name)
             self.log.record("project_opened", source_sha256=self.project.product.source_sha256,
                             revision=self.project.revision_id)
@@ -223,6 +235,28 @@ class FxdApp:
         except Exception as exc:
             logger.exception("complete workbench geometry traceback for %s", self.project.product.source_name)
             self.status.set(f"Real-kernel evidence unavailable; provisional view only ({exc}).")
+
+    def _show_vtk_viewer(self, document: WorkbenchDocument) -> None:
+        self._hide_vtk_viewer()
+        try:
+            self.vtk_viewer = VtkWorkbenchViewer(self.viewport, document)
+            if not self.vtk_viewer.visible:
+                self.vtk_viewer.destroy()
+                raise VtkViewerUnavailable("VTK render window could not map on this host")
+        except VtkViewerUnavailable as exc:
+            logger.exception("VTK viewer unavailable")
+            self.vtk_viewer = None
+            self.status.set(f"Native GPU viewport unavailable; using real-geometry CPU fallback ({exc}).")
+            self.canvas.pack(fill="both", expand=True)
+        else:
+            self.canvas.pack_forget()
+
+    def _hide_vtk_viewer(self) -> None:
+        if self.vtk_viewer is not None:
+            self.vtk_viewer.destroy()
+            self.vtk_viewer = None
+        if not self.canvas.winfo_ismapped():
+            self.canvas.pack(fill="both", expand=True)
 
     def _rebuild_review_geometry(self) -> None:
         self.review_geometry = None
@@ -369,6 +403,9 @@ class FxdApp:
         self.drag = None
 
     def render(self) -> None:
+        if self.vtk_viewer and not self.project:
+            self.vtk_viewer.render()
+            return
         self.canvas.delete("all")
         if not self.project:
             if self.workbench_document:
@@ -415,7 +452,9 @@ class FxdApp:
                                  [self.project_point(point, center, span) for point in points]))
         for _depth, projected in sorted(polygons):
             flat = [coordinate for point in projected for coordinate in point]
-            self.canvas.create_polygon(*flat, fill="#24445c", outline="#66c2ff")
+            outline = "#66c2ff" if self.display_mode == "wireframe" else ""
+            fill = "" if self.display_mode == "wireframe" else "#24445c"
+            self.canvas.create_polygon(*flat, fill=fill, outline=outline)
 
     def _visible_items(self):
         assert self.review_geometry and self.project
@@ -472,6 +511,19 @@ class FxdApp:
 
     def set_display(self, mode: str) -> None:
         self.display_mode = "solid" if self.display_mode == mode else mode
+        if self.vtk_viewer:
+            if mode == "wireframe":
+                self.vtk_viewer.set_wireframe(self.display_mode == "wireframe")
+            elif mode == "transparent":
+                self.vtk_viewer.set_transparent(self.display_mode == "transparent")
+        self.render()
+
+    def toggle_orbit(self) -> None:
+        self.orbit_enabled = not self.orbit_enabled
+        self.orbit_label.set(f"Orbit: {'On' if self.orbit_enabled else 'Off'}")
+        if self.vtk_viewer:
+            self.vtk_viewer.set_orbit(self.orbit_enabled)
+        self.status.set(f"Orbit mode {'enabled' if self.orbit_enabled else 'disabled'}.")
         self.render()
 
     def toggle_section(self) -> None:
@@ -482,10 +534,17 @@ class FxdApp:
     def fit_view(self) -> None:
         self.yaw, self.pitch = 35.0, 22.0
         self.pan_x, self.pan_y, self.zoom = 0.0, 0.0, 1.0
+        if self.vtk_viewer:
+            self.vtk_viewer.fit()
+            return
         self.status.set("Fit all: isometric view")
         self.render()
 
     def set_standard_view(self, view: str) -> None:
+        if self.vtk_viewer:
+            self.vtk_viewer.standard_view(view)
+            self.status.set(f"Standard view: {view}")
+            return
         views = {"front": (0.0, 0.0), "top": (0.0, 90.0), "right": (90.0, 0.0)}
         if view not in views:
             raise ValueError(f"unsupported standard view {view!r}")

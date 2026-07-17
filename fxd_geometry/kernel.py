@@ -94,6 +94,11 @@ class KernelAssembly:
     units: str
     assembly_references: tuple[str, ...]
     components: tuple[KernelComponent, ...]
+    component_colors: tuple[tuple[str, tuple[float, float, float]], ...] = ()
+
+    @property
+    def colors_available(self) -> bool:
+        return bool(self.component_colors)
 
 
 class RealKernel(Protocol):
@@ -190,7 +195,9 @@ class OcpKernel:
         from OCP.TDocStd import TDocStd_Document
         from OCP.TopLoc import TopLoc_Location
         from OCP.XCAFApp import XCAFApp_Application
-        from OCP.XCAFDoc import XCAFDoc_DocumentTool, XCAFDoc_ShapeTool
+        from OCP.XCAFDoc import (XCAFDoc_ColorType, XCAFDoc_DocumentTool,
+                                 XCAFDoc_ShapeTool)
+        from OCP.Quantity import Quantity_Color
 
         data = self._source_bytes(source)
         self._validate_step_bytes(data)
@@ -210,6 +217,7 @@ class OcpKernel:
             if not reader.Transfer(document):
                 raise KernelOperationError("OCCT could not transfer STEP assembly")
             shape_tool = XCAFDoc_DocumentTool.ShapeTool_s(document.Main())
+            color_tool = XCAFDoc_DocumentTool.ColorTool_s(document.Main())
             roots = TDF_LabelSequence()
             shape_tool.GetFreeShapes(roots)
             if roots.Length() == 0:
@@ -217,6 +225,7 @@ class OcpKernel:
 
             components: list[KernelComponent] = []
             assemblies: list[str] = ["assembly:root"]
+            component_colors: list[tuple[str, tuple[float, float, float]]] = []
 
             def add_component(label: object, parent_reference: str,
                               location: object, path: tuple[int, ...]) -> None:
@@ -236,6 +245,16 @@ class OcpKernel:
                 reference = "component:" + hashlib.sha256(payload).hexdigest()[:24]
                 components.append(KernelComponent(reference, parent_reference, name,
                                                   transform, topology, faces))
+                try:
+                    color = Quantity_Color()
+                    for color_type in (XCAFDoc_ColorType.XCAFDoc_ColorGen,
+                                       XCAFDoc_ColorType.XCAFDoc_ColorSurf,
+                                       XCAFDoc_ColorType.XCAFDoc_ColorCurv):
+                        if color_tool.GetColor_s(label, color_type, color):
+                            component_colors.append((reference, (color.Red(), color.Green(), color.Blue())))
+                            break
+                except Exception as exc:
+                    logger.warning("STEP color metadata unavailable for %s: %s", reference, exc)
 
             def visit(label: object, parent_reference: str,
                       parent_location: object, path: tuple[int, ...]) -> None:
@@ -277,6 +296,7 @@ class OcpKernel:
                 "mm",
                 tuple(sorted(assemblies)),
                 tuple(sorted(components, key=lambda item: item.reference)),
+                tuple(sorted(component_colors, key=lambda item: item[0])),
             )
         finally:
             Path(temporary.name).unlink(missing_ok=True)

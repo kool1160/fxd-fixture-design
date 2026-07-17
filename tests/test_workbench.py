@@ -1,8 +1,11 @@
 import unittest
 import tempfile
 from pathlib import Path
+from importlib.util import find_spec
+import tkinter as tk
 
-from fxd_geometry import KernelOperationError, OcpKernel, StepImportError, import_step, load_step_for_workbench
+from fxd_geometry import (KernelOperationError, OcpKernel, StepImportError, VtkWorkbenchViewer,
+                          import_step, load_step_for_workbench)
 from fxd_app import FxdApp
 
 
@@ -54,6 +57,7 @@ class WorkbenchTests(unittest.TestCase):
         app = FxdApp.__new__(FxdApp)
         app.yaw, app.pitch = 35.0, 22.0
         app.pan_x, app.pan_y, app.zoom = 20.0, -10.0, 2.0
+        app.vtk_viewer = None
         app.status = type("Status", (), {"set": lambda self, value: setattr(self, "value", value)})()
         app.render = lambda: None
         app.set_standard_view("front")
@@ -62,6 +66,36 @@ class WorkbenchTests(unittest.TestCase):
         self.assertEqual((app.yaw, app.pitch), (0.0, 90.0))
         app.fit_view()
         self.assertEqual((app.yaw, app.pitch, app.pan_x, app.pan_y, app.zoom), (35.0, 22.0, 0.0, 0.0, 1.0))
+
+    @unittest.skipUnless(find_spec("vtk"), "VTK is unavailable")
+    def test_persistent_vtk_scene_defaults_and_camera_controls(self):
+        kernel = OcpKernel()
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "real_box.step"
+            source.write_bytes(kernel.export_step(kernel.make_box((0, 0, 0), (40, 30, 20))))
+            document = load_step_for_workbench(source, kernel=kernel)
+        root = tk.Tk()
+        root.withdraw()
+        try:
+            viewer = VtkWorkbenchViewer(root, document)
+            mapper_input = viewer.actor.GetMapper().GetInput()
+            self.assertFalse(viewer.wireframe)
+            self.assertFalse(viewer.transparent)
+            self.assertEqual(viewer.actor.GetProperty().GetRepresentation(), 2)
+            self.assertEqual(viewer.actor.GetProperty().GetOpacity(), 1.0)
+            self.assertEqual(mapper_input.GetNumberOfPolys(), sum(len(mesh.triangles) for mesh in document.meshes))
+            viewer.set_wireframe(True)
+            viewer.set_transparent(True)
+            viewer.set_orbit(False)
+            self.assertTrue(viewer.wireframe)
+            self.assertTrue(viewer.transparent)
+            self.assertFalse(viewer.orbit_enabled)
+            self.assertIs(viewer.actor.GetMapper().GetInput(), mapper_input)
+            viewer.standard_view("isometric")
+            viewer.fit()
+            viewer.destroy()
+        finally:
+            root.destroy()
 
 
 if __name__ == "__main__":
