@@ -101,6 +101,33 @@ logger = logging.getLogger("fxd.qt_app")
 EVIDENCE_REAL = "REAL OCP source geometry"
 EVIDENCE_PROVISIONAL = "Provisional - real-kernel evidence unavailable"
 
+FIXTURE_TYPE_OPTIONS = (
+    "Full weld fixture", "Tack or Location Fixture", "Assembly fixture",
+    "Inspection fixture", "Profile check fixture", "Go/no-go gauge",
+    "Rework fixture", "Robotic or cobot fixture", "Combined build-and-check fixture",
+)
+PROCESS_OPTIONS = (
+    "MIG welding", "TIG welding", "Resistance welding", "Manual assembly",
+    "Laser cutting", "Machining", "Unknown",
+)
+OPERATION_MODE_OPTIONS = ("Manual", "Cobot", "Robotic", "Unknown")
+VOLUME_OPTIONS = ("Low", "Medium", "High", "Unknown")
+DIRECTION_OPTIONS = ("+X", "-X", "+Y", "-Y", "+Z", "-Z", "Unknown")
+BASE_STRATEGY_OPTIONS = ("Auto", "Baseplate", "Welded frame", "Hybrid", "CNC-machined", "Unknown")
+CONSTRUCTION_OPTIONS = (
+    "Auto-select", "Laser-cut fabricated", "CNC-machined", "Hybrid",
+    "Welded tube-frame", "Shop-standard", "Tack or Location Fixture",
+)
+LIFECYCLE_OPTIONS = (
+    "Store and reuse", "Disposable or job-run recut",
+    "Reusable tooling on disposable fixture", "Full permanent fixture",
+)
+CLECO_STRATEGY_OPTIONS = ("None", "Separate fixture Cleco holes", "Product Cleco holes")
+ADJUSTMENT_STATE_OPTIONS = (
+    "Provisional adjustment", "Prove-out setting", "Locked production position",
+    "Doweled production position", "Revalidation required",
+)
+
 
 def _load_user32():
     """Load User32 with reliable thread-local Win32 error propagation."""
@@ -494,8 +521,8 @@ class FxdWorkbenchWindow(QMainWindow):
         dock = QDockWidget("Engineering Explorer", self)
         dock.setObjectName("engineeringExplorerDock")
         dock.setAllowedAreas(Qt.DockWidgetArea.LeftDockWidgetArea)
-        dock.setMinimumWidth(230)
-        dock.setMaximumWidth(340)
+        dock.setMinimumWidth(380)
+        dock.setMaximumWidth(560)
         self.tree = QTreeWidget(dock)
         self.tree.setObjectName("engineeringTree")
         self.tree.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Expanding)
@@ -510,19 +537,28 @@ class FxdWorkbenchWindow(QMainWindow):
         combo = QComboBox()
         combo.addItems(values)
         combo.setEditable(editable)
+        combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        combo.setMinimumContentsLength(18)
+        combo.setSizeAdjustPolicy(
+            QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
+        )
+        for index, value in enumerate(values):
+            combo.setItemData(index, value, Qt.ItemDataRole.ToolTipRole)
         return combo
 
     def _build_workflow_dock(self) -> None:
         dock = QDockWidget("Fixture Engineering Workflow", self)
         dock.setObjectName("workflowDock")
         dock.setAllowedAreas(Qt.DockWidgetArea.LeftDockWidgetArea)
-        dock.setMinimumWidth(230)
-        dock.setMaximumWidth(340)
+        dock.setMinimumWidth(380)
+        dock.setMaximumWidth(560)
+        self.workflow_dock = dock
         self.workflow_tabs = QTabWidget(dock)
         self.workflow_tabs.setObjectName("workflowTabs")
         self.workflow_tabs.setSizePolicy(
             QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Expanding
         )
+        self.workflow_tabs.setMinimumWidth(0)
 
         product_page = QWidget(self.workflow_tabs)
         product_layout = QVBoxLayout(product_page)
@@ -536,23 +572,33 @@ class FxdWorkbenchWindow(QMainWindow):
         # reachable at the supported 1366 x 768 desktop size.
         self.process_scroll = QScrollArea(self.workflow_tabs)
         self.process_scroll.setWidgetResizable(True)
+        self.process_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.process_scroll.setMinimumWidth(0)
         self.process_form_widget = QWidget(self.process_scroll)
+        self.process_form_widget.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum
+        )
+        self.process_form_widget.setMinimumWidth(0)
         process_form = QFormLayout(self.process_form_widget)
+        process_form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
+        process_form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapAllRows)
+        process_form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        process_form.setContentsMargins(12, 12, 12, 12)
+        process_form.setHorizontalSpacing(10)
+        process_form.setVerticalSpacing(8)
         self.process_project_name = QLineEdit()
-        self.process_fixture_type = self._combo((
-            "Weld fixture", "Tack or Location Fixture", "Assembly fixture",
-            "Inspection fixture", "Profile check fixture", "Go/no-go gauge",
-            "Rework fixture", "Robotic or cobot fixture", "Combined build-and-check fixture",
-        ), editable=True)
-        self.process_method = self._combo(("MIG welding", "TIG welding", "Resistance welding", "Assembly"), editable=True)
-        self.process_mode = self._combo(("Manual", "Cobot", "Robotic"))
+        self.process_fixture_type = self._combo(FIXTURE_TYPE_OPTIONS)
+        self.process_method = self._combo(PROCESS_OPTIONS)
+        self.process_mode = self._combo(OPERATION_MODE_OPTIONS)
         self.process_quantity = QSpinBox()
         self.process_quantity.setRange(1, 10_000_000)
         self.process_quantity.setValue(10)
-        self.process_volume = self._combo(("Low", "Medium", "High", "Unknown"))
-        self.process_build = self._combo(("+Z", "-Z", "+X", "-X", "+Y", "-Y", "Unknown"))
-        self.process_load = self._combo(("+X", "-X", "+Y", "-Y", "+Z", "-Z", "Unknown"))
-        self.process_unload = self._combo(("-X", "+X", "+Y", "-Y", "+Z", "-Z", "Unknown"))
+        self.process_volume = self._combo(VOLUME_OPTIONS)
+        self.process_build = self._combo(DIRECTION_OPTIONS)
+        self.process_load = self._combo(DIRECTION_OPTIONS)
+        self.process_unload = self._combo(DIRECTION_OPTIONS)
+        self.process_build.setCurrentText("+Z")
+        self.process_unload.setCurrentText("-X")
         self.process_operator = QLineEdit()
         self.process_operator.setPlaceholderText("Unknown, or explicit hand/helmet access")
         self.process_automation = QLineEdit()
@@ -561,29 +607,20 @@ class FxdWorkbenchWindow(QMainWindow):
         self.process_shop.setPlaceholderText("laser cutting, welding, machining")
         self.process_material = QLineEdit()
         self.process_material.setPlaceholderText("Unknown, or product/process assumptions")
-        self.process_base = self._combo(("Auto", "Baseplate", "Welded frame", "Unknown"))
-        self.process_construction = self._combo((
-            "Auto-select", "Laser-cut fabricated", "CNC-machined", "Hybrid",
-            "Welded tube-frame", "Shop-standard", "Tack or Location Fixture",
-        ))
-        self.process_lifecycle = self._combo((
-            "Store and reuse", "Disposable or job-run recut",
-            "Reusable tooling on disposable fixture", "Full permanent fixture",
-        ))
+        self.process_base = self._combo(BASE_STRATEGY_OPTIONS)
+        self.process_construction = self._combo(CONSTRUCTION_OPTIONS)
+        self.process_lifecycle = self._combo(LIFECYCLE_OPTIONS)
         self.process_repeat_frequency = QLineEdit()
         self.process_repeat_frequency.setPlaceholderText("Unknown, or repeat frequency")
         self.process_job_revision = QLineEdit()
         self.process_job_revision.setPlaceholderText("Required for disposable or recut fixture")
-        self.process_cleco_strategy = self._combo(("None", "Separate fixture Cleco holes", "Product Cleco holes"))
-        self.process_adjustment_state = self._combo((
-            "Provisional adjustment", "Prove-out setting", "Locked production position",
-            "Doweled production position", "Revalidation required",
-        ))
-        self.process_product_hole_approval = QCheckBox("Customer/process approval recorded")
+        self.process_cleco_strategy = self._combo(CLECO_STRATEGY_OPTIONS)
+        self.process_adjustment_state = self._combo(ADJUSTMENT_STATE_OPTIONS)
+        self.process_product_hole_approval = QCheckBox("Recorded")
         self.process_product_hole_justification = QLineEdit()
         self.process_product_hole_justification.setPlaceholderText("Cost, process, or customer justification")
-        self.process_tack_access = QCheckBox("Engineer has reviewed tack access")
-        self.process_unload_clearance = QCheckBox("Engineer has reviewed unload clearance")
+        self.process_tack_access = QCheckBox("Reviewed")
+        self.process_unload_clearance = QCheckBox("Reviewed")
         self.process_repeatability = QDoubleSpinBox()
         self.process_repeatability.setRange(0.0, 1000.0)
         self.process_repeatability.setDecimals(3)
@@ -610,7 +647,19 @@ class FxdWorkbenchWindow(QMainWindow):
             ("Repeatability (mm)", self.process_repeatability),
             ("Clearance (mm)", self.process_clearance),
         ):
+            widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+            widget.setMinimumWidth(220)
+            widget.setToolTip(f"{label}: select a supported value or record explicit engineer evidence.")
             process_form.addRow(label + ":", widget)
+        self.process_product_hole_approval.setToolTip(
+            "Customer or process approval is recorded for Cleco holes in the production part."
+        )
+        self.process_tack_access.setToolTip(
+            "Engineer-reviewed evidence that tack access is available; full-weld access is not implied."
+        )
+        self.process_unload_clearance.setToolTip(
+            "Engineer-reviewed welded-shape unload clearance evidence."
+        )
         self.analyze_button = QPushButton("Analyze Assembly")
         self.analyze_button.clicked.connect(self.analyze_assembly)
         process_form.addRow(self.analyze_button)
@@ -1818,8 +1867,12 @@ class FxdWorkbenchWindow(QMainWindow):
     def _set_process_setup(self, setup: ProcessSetup) -> None:
         self.process_project_name.setText(setup.project_name)
         for combo, value in (
-            (self.process_fixture_type, setup.fixture_type),
-            (self.process_method, setup.manufacturing_process),
+            (self.process_fixture_type, {
+                "Weld fixture": "Full weld fixture",
+            }.get(setup.fixture_type, setup.fixture_type)),
+            (self.process_method, {
+                "Assembly": "Manual assembly",
+            }.get(setup.manufacturing_process, setup.manufacturing_process)),
             (self.process_mode, setup.operation_mode),
             (self.process_volume, setup.volume_category),
             (self.process_base, setup.preferred_base_strategy or "Auto"),
@@ -2024,6 +2077,8 @@ class FxdWorkbenchWindow(QMainWindow):
     @staticmethod
     def _fixture_purpose_from_ui(value: str) -> FixturePurpose:
         return {
+            "Full weld fixture": FixturePurpose.FULL_WELD,
+            "Weld fixture": FixturePurpose.FULL_WELD,
             "Tack or Location Fixture": FixturePurpose.TACK_LOCATION,
             "Assembly fixture": FixturePurpose.ASSEMBLY,
             "Inspection fixture": FixturePurpose.INSPECTION,
@@ -2101,7 +2156,10 @@ class FxdWorkbenchWindow(QMainWindow):
             return
         try:
             plan = generate_m30_fixture_build_plan(self.project.product, self.project.active, self._fixture_build_requirements())
-            self._replace_project(self.project.with_fixture_build(plan))
+            self._replace_project(
+                self.project.with_workflow(self.workflow).with_fixture_build(plan)
+            )
+            self.workflow = self.project.workflow
             self._refresh_all()
             self.statusBar().showMessage(
                 f"Fixture build plan {plan.identity} generated; deterministic findings remain authoritative."

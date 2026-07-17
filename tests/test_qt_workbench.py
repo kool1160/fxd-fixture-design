@@ -17,7 +17,7 @@ if find_spec("PySide6") is None:
     raise unittest.SkipTest("PySide6 desktop runtime is not installed")
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QWidget
+from PySide6.QtWidgets import QComboBox, QWidget
 
 from fxd_geometry import (
     EngineeringAnnotations,
@@ -29,13 +29,25 @@ from fxd_geometry import (
     RenderDiagnostics,
     Vec3,
     import_step,
+    load_step_for_workbench,
+    product_from_workbench_document,
 )
 from fxd_geometry.project import FxdProject
 from fxd_qt_app import (
     EVIDENCE_PROVISIONAL,
     EVIDENCE_REAL,
     EmbeddedVtkViewport,
+    ADJUSTMENT_STATE_OPTIONS,
+    BASE_STRATEGY_OPTIONS,
+    CLECO_STRATEGY_OPTIONS,
+    CONSTRUCTION_OPTIONS,
+    DIRECTION_OPTIONS,
     FxdWorkbenchWindow,
+    FIXTURE_TYPE_OPTIONS,
+    LIFECYCLE_OPTIONS,
+    OPERATION_MODE_OPTIONS,
+    PROCESS_OPTIONS,
+    VOLUME_OPTIONS,
     _load_user32,
     create_application,
 )
@@ -140,8 +152,11 @@ class QtWorkbenchTests(unittest.TestCase):
         source.write_bytes(self.kernel.export_step(shape))
         return source
 
-    def _project(self) -> FxdProject:
-        product = import_step(FIXTURE)
+    def _project(self, source: Path = FIXTURE) -> FxdProject:
+        product = (
+            import_step(source) if source == FIXTURE
+            else product_from_workbench_document(load_step_for_workbench(source))
+        )
         annotations = EngineeringAnnotations.for_product(
             product,
             build_orientation=Vec3(0, 0, 1),
@@ -172,8 +187,8 @@ class QtWorkbenchTests(unittest.TestCase):
             self.assertFalse(warning.called, warning.call_args)
         return source
 
-    def _author_m30_tack_build(self):
-        self.window._replace_project(self._project())
+    def _author_m30_tack_build(self, *, source: Path = FIXTURE):
+        self.window._replace_project(self._project(source))
         self.window.workflow = InteractiveWorkflow(
             self.window.project.product.source_sha256, ProcessSetup("M30 workbench"),
             concepts_generated=True,
@@ -181,6 +196,7 @@ class QtWorkbenchTests(unittest.TestCase):
         self.window.process_fixture_type.setCurrentText("Tack or Location Fixture")
         self.window.process_construction.setCurrentText("Tack or Location Fixture")
         self.window.process_lifecycle.setCurrentText("Disposable or job-run recut")
+        self.window.process_cleco_strategy.setCurrentText("Separate fixture Cleco holes")
         self.window.process_job_revision.setText("JOB-REV-A")
         self.window.process_tack_access.setChecked(True)
         self.window.process_unload_clearance.setChecked(True)
@@ -239,8 +255,9 @@ class QtWorkbenchTests(unittest.TestCase):
                 for item in self.window._review_geometry_items()
             ))
 
-        plan, authored = self._author_m30_tack_build()
         with tempfile.TemporaryDirectory() as directory:
+            source = self._real_step(directory)
+            plan, authored = self._author_m30_tack_build(source=source)
             project_path = Path(directory) / "recover.fxd.json"
             self.window.save_project_path(project_path)
             self.window.recover_autosave()
@@ -280,7 +297,7 @@ class QtWorkbenchTests(unittest.TestCase):
                 self.window.project.product.source_sha256, ProcessSetup("M30 workbench"),
                 concepts_generated=True,
             )
-            self.window.process_fixture_type.setCurrentText("Weld fixture")
+            self.window.process_fixture_type.setCurrentText("Full weld fixture")
             self.window.process_construction.setCurrentText("Welded tube-frame")
             self.window.process_lifecycle.setCurrentText("Full permanent fixture")
             self.window.process_job_revision.setText("JOB-REV-A")
@@ -318,11 +335,79 @@ class QtWorkbenchTests(unittest.TestCase):
             self.window.process_fixture_type.itemText(index)
             for index in range(self.window.process_fixture_type.count())
         }
-        self.assertEqual(choices, {
-            "Weld fixture", "Tack or Location Fixture", "Assembly fixture",
-            "Inspection fixture", "Profile check fixture", "Go/no-go gauge",
-            "Rework fixture", "Robotic or cobot fixture", "Combined build-and-check fixture",
-        })
+        self.assertEqual(choices, set(FIXTURE_TYPE_OPTIONS))
+        self.assertIn("Full weld fixture", choices)
+        self.assertIn("Tack or Location Fixture", choices)
+
+    def test_m30_process_controls_use_locked_deterministic_dropdowns(self):
+        expected = {
+            self.window.process_fixture_type: FIXTURE_TYPE_OPTIONS,
+            self.window.process_method: PROCESS_OPTIONS,
+            self.window.process_mode: OPERATION_MODE_OPTIONS,
+            self.window.process_volume: VOLUME_OPTIONS,
+            self.window.process_build: DIRECTION_OPTIONS,
+            self.window.process_load: DIRECTION_OPTIONS,
+            self.window.process_unload: DIRECTION_OPTIONS,
+            self.window.process_base: BASE_STRATEGY_OPTIONS,
+            self.window.process_construction: CONSTRUCTION_OPTIONS,
+            self.window.process_lifecycle: LIFECYCLE_OPTIONS,
+            self.window.process_cleco_strategy: CLECO_STRATEGY_OPTIONS,
+            self.window.process_adjustment_state: ADJUSTMENT_STATE_OPTIONS,
+        }
+        for control, options in expected.items():
+            with self.subTest(control=control.objectName() or type(control).__name__):
+                self.assertIsInstance(control, QComboBox)
+                self.assertFalse(control.isEditable())
+                self.assertEqual(
+                    tuple(control.itemText(index) for index in range(control.count())), options
+                )
+        self.window.process_fixture_type.setCurrentText("Tack or Location Fixture")
+        self.window.process_construction.setCurrentText("Tack or Location Fixture")
+        self.window.process_lifecycle.setCurrentText("Disposable or job-run recut")
+        self.window.process_cleco_strategy.setCurrentText("Separate fixture Cleco holes")
+        self.assertEqual(self.window.process_fixture_type.currentText(), "Tack or Location Fixture")
+        self.assertEqual(self.window.process_construction.currentText(), "Tack or Location Fixture")
+        self.assertEqual(self.window.process_lifecycle.currentText(), "Disposable or job-run recut")
+        self.assertEqual(self.window.process_cleco_strategy.currentText(), "Separate fixture Cleco holes")
+
+    def test_m30_process_form_grows_without_horizontal_clipping(self):
+        self.window.resize(1366, 768)
+        self.window.workflow_dock.raise_()
+        self.window.workflow_tabs.setCurrentWidget(self.window.process_scroll)
+        self.window.show()
+        self.application.processEvents()
+        self.window.resizeDocks(
+            [self.window.workflow_dock], [400], Qt.Orientation.Horizontal
+        )
+        self.application.processEvents()
+        narrow_width = self.window.process_fixture_type.width()
+        self.assertEqual(self.window.process_scroll.horizontalScrollBar().maximum(), 0)
+        self.window.resizeDocks(
+            [self.window.workflow_dock], [520], Qt.Orientation.Horizontal
+        )
+        self.application.processEvents()
+        self.assertGreater(self.window.process_fixture_type.width(), narrow_width)
+        self.assertGreater(self.window.process_construction.width(), narrow_width)
+        self.assertEqual(self.window.process_scroll.horizontalScrollBar().maximum(), 0)
+
+        self.window.resize(1920, 1080)
+        self.application.processEvents()
+        self.assertGreaterEqual(self.window.process_fixture_type.width(), 480)
+        self.assertEqual(self.window.process_scroll.horizontalScrollBar().maximum(), 0)
+
+    def test_m30_process_selection_persists_after_save_and_reopen(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = self._real_step(directory)
+            self._author_m30_tack_build(source=source)
+            destination = Path(directory) / "m30-process.fxd.json"
+            self.window.save_project_path(destination)
+            self.window.load_project_path(destination)
+        self.assertEqual(self.window.process_fixture_type.currentText(), "Tack or Location Fixture")
+        self.assertEqual(self.window.process_construction.currentText(), "Tack or Location Fixture")
+        self.assertEqual(self.window.process_lifecycle.currentText(), "Disposable or job-run recut")
+        self.assertEqual(self.window.process_cleco_strategy.currentText(), "Separate fixture Cleco holes")
+        self.assertEqual(self.window.process_adjustment_state.currentText(), "Locked production position")
+        self.assertEqual(self.window.process_job_revision.text(), "JOB-REV-A")
 
     def test_real_source_identity_badge_is_verified_without_mutating_step(self):
         with tempfile.TemporaryDirectory() as directory:
