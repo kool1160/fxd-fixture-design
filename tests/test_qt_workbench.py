@@ -273,6 +273,19 @@ print(json.dumps(result, sort_keys=True))
         self.assertIsNone(self.window.document)
         self.assertEqual(self.window._property_values["Evidence"].text(), EVIDENCE_PROVISIONAL)
 
+    def test_failed_replacement_clears_previous_real_source_evidence(self):
+        with tempfile.TemporaryDirectory() as directory:
+            self.window.load_step_path(self._real_step(directory))
+        self.assertEqual(self.window._property_values["Evidence"].text(), EVIDENCE_REAL)
+        with patch("fxd_qt_app.QMessageBox.critical"):
+            with self.assertRaises(KernelOperationError):
+                self.window.load_step_path(FIXTURE)
+        self.assertIsNone(self.window.document)
+        self.assertIsNone(self.window.viewport.document)
+        self.assertEqual(self.window.tree.topLevelItemCount(), 0)
+        self.assertEqual(self.window._property_values["Evidence"].text(), EVIDENCE_PROVISIONAL)
+        self.assertEqual(self.window._property_values["Source SHA-256"].text(), "-")
+
     def test_project_open_save_and_provisional_evidence_remain_functional(self):
         with tempfile.TemporaryDirectory() as directory:
             source = Path(directory) / "project.fxd.json"

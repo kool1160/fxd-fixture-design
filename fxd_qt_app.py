@@ -564,6 +564,13 @@ class FxdWorkbenchWindow(QMainWindow):
                             component_count=document.component_count)
         except Exception as exc:
             logger.exception("STEP import failed for %s", source)
+            self.viewport.clear()
+            self.document = None
+            self.project = None
+            self.project_path = None
+            self.selected_identity = None
+            self._refresh_all()
+            self.setWindowTitle("FXD - Engineering Workbench - review only")
             self.statusBar().showMessage(f"STEP import failed closed: {exc}")
             QMessageBox.critical(self, "STEP import failed", str(exc))
             raise
