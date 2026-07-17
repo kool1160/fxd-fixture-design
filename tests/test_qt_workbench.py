@@ -31,6 +31,7 @@ from fxd_qt_app import (
     EVIDENCE_REAL,
     EmbeddedVtkViewport,
     FxdWorkbenchWindow,
+    _load_user32,
     create_application,
 )
 
@@ -147,6 +148,11 @@ class QtWorkbenchTests(unittest.TestCase):
         self.assertFalse(self.window.viewport.separate_window_created)
         self.assertEqual(self.window.tree.topLevelItemCount(), 0)
         self.assertEqual(self.window._property_values["Evidence"].text(), EVIDENCE_PROVISIONAL)
+
+    def test_user32_loader_enables_reliable_last_error_capture(self):
+        with patch("fxd_qt_app.ctypes.WinDLL", return_value=object()) as loader:
+            self.assertIsNotNone(_load_user32())
+        loader.assert_called_once_with("user32", use_last_error=True)
 
     @unittest.skipUnless(os.name == "nt", "native embedded VTK is Windows-only")
     def test_real_vtk_host_is_a_child_not_a_separate_window(self):

@@ -52,6 +52,11 @@ EVIDENCE_REAL = "REAL OCP source geometry"
 EVIDENCE_PROVISIONAL = "Provisional - real-kernel evidence unavailable"
 
 
+def _load_user32():
+    """Load User32 with reliable thread-local Win32 error propagation."""
+    return ctypes.WinDLL("user32", use_last_error=True)
+
+
 class VtkWorkerSceneProxy:
     """Control proxy for the isolated native renderer process."""
 
@@ -150,6 +155,7 @@ class EmbeddedVtkViewport(QFrame):
         super().__init__(parent)
         if os.name != "nt":
             raise RuntimeError("the embedded native VTK viewport requires Windows")
+        self.user32 = _load_user32()
         self.setObjectName("embeddedVtkViewport")
         self.setFrameShape(QFrame.Shape.NoFrame)
         self.render_host = QWidget(self)
@@ -257,7 +263,7 @@ class EmbeddedVtkViewport(QFrame):
         self.clear()
 
     def _embed_native_window(self) -> None:
-        user32 = ctypes.windll.user32
+        user32 = self.user32
         user32.FindWindowW.argtypes = [ctypes.c_wchar_p, ctypes.c_wchar_p]
         user32.FindWindowW.restype = ctypes.c_void_p
         user32.SetParent.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
@@ -312,7 +318,7 @@ class EmbeddedVtkViewport(QFrame):
         ratio = self.render_host.devicePixelRatioF()
         width = max(1, round(self.render_host.width() * ratio))
         height = max(1, round(self.render_host.height() * ratio))
-        ctypes.windll.user32.MoveWindow(
+        self.user32.MoveWindow(
             self.native_window_id, 0, 0, width, height, True
         )
 
