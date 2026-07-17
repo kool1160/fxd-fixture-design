@@ -1,0 +1,748 @@
+{
+  "package": "FXD_UI_Branding_Kit_v1.1",
+  "version": "1.1.0",
+  "generated_utc": "2026-07-17T10:50:36Z",
+  "file_count": 150,
+  "files": [
+    {
+      "path": "CHANGELOG.md",
+      "bytes": 1511,
+      "sha256": "136b3d29c007ae3b5c0bbb23a39e754f8c7f3c9f4136ab8e49976823e060d9f6"
+    },
+    {
+      "path": "LICENSE_AND_USAGE.md",
+      "bytes": 1079,
+      "sha256": "9aa0d9f82b14e9e281502cdbd1e9e7d43cefa2f56f32f79910acfb77a989abda"
+    },
+    {
+      "path": "README.md",
+      "bytes": 3091,
+      "sha256": "cac72038add53b7871bc8a44bd2f75574b1e075a6c717bcd6fa6a3fdccc98119"
+    },
+    {
+      "path": "assets/app-icons/favicon.ico",
+      "bytes": 53914,
+      "sha256": "d7d78806f717b9238ad4f4eb793e956dd079b1ff6694f7084bb20026c858812f"
+    },
+    {
+      "path": "assets/app-icons/fxd-app-icon-1024.png",
+      "bytes": 135054,
+      "sha256": "5ebf0c305e2b43912b7be7eb74bd2581f2ed542e45614de54a12fed0c7e29e50"
+    },
+    {
+      "path": "assets/app-icons/fxd-app-icon-128.png",
+      "bytes": 12247,
+      "sha256": "d5b7751011dfa5fcd336a5689115acb79daecf79357ac9307abb8c35a4bc44f1"
+    },
+    {
+      "path": "assets/app-icons/fxd-app-icon-16.png",
+      "bytes": 763,
+      "sha256": "e2c8c8eabadb8a11d917cad43717796eb442c0f11726e0d186159b7a9aa7c21b"
+    },
+    {
+      "path": "assets/app-icons/fxd-app-icon-180.png",
+      "bytes": 20550,
+      "sha256": "ec5bee57567914a0bf24883170f385b00f1267bda51c6c36aff88e83ab0393f5"
+    },
+    {
+      "path": "assets/app-icons/fxd-app-icon-192.png",
+      "bytes": 20714,
+      "sha256": "5a4be33f47539bbc202ff95b6eb1c224ace934aff6d3f65583798dd208fcc0b4"
+    },
+    {
+      "path": "assets/app-icons/fxd-app-icon-256.png",
+      "bytes": 29579,
+      "sha256": "1bb83ef281fd31ca5f179c06fbfa277b02d9dd55b7f7d142136259abcd75327c"
+    },
+    {
+      "path": "assets/app-icons/fxd-app-icon-32.png",
+      "bytes": 1832,
+      "sha256": "98c89bee9867b152884b2f98732db14cc437b9aa0a60b35746949025fc8d70f0"
+    },
+    {
+      "path": "assets/app-icons/fxd-app-icon-48.png",
+      "bytes": 3548,
+      "sha256": "d4b19febbd7e1a2c510c7ffd440867a11bae49193b31a1082731cb8d48edd3e0"
+    },
+    {
+      "path": "assets/app-icons/fxd-app-icon-512.png",
+      "bytes": 70064,
+      "sha256": "dea83339b6ab318d1e256b63182a247093b1083201a018a8051d89f91635ea2f"
+    },
+    {
+      "path": "assets/app-icons/fxd-app-icon-64.png",
+      "bytes": 5054,
+      "sha256": "6a86e795aa0c98fa01e273d1e1ab738f06f9ed0b79d63998c63c9868d132022b"
+    },
+    {
+      "path": "assets/icons/fxd-ui-icon-sprite.svg",
+      "bytes": 2164,
+      "sha256": "5dcc421d301fee3f30ca003603ebdcfa48774d29d7542223d5f7e5dd44198647"
+    },
+    {
+      "path": "assets/icons/qt/ICON_MAP.json",
+      "bytes": 5228,
+      "sha256": "b389190ad511f0751aa7f73b247152e0dd3940a5750f6047b629676dbb5904a5"
+    },
+    {
+      "path": "assets/icons/qt/analyze-assembly.svg",
+      "bytes": 287,
+      "sha256": "a43ea838654633e7db5d23eae15e31cb43b3766469b72d1750273058b4b26425"
+    },
+    {
+      "path": "assets/icons/qt/annotate-geometry.svg",
+      "bytes": 231,
+      "sha256": "8006927f99f26ce661fbd1ed42233b003a1ef0d0096d38e35d43ff60d75c119e"
+    },
+    {
+      "path": "assets/icons/qt/approve.svg",
+      "bytes": 217,
+      "sha256": "84834eb45c78aacfdb31256b5ba0df977f455abc4d0369142069d4c4e66bae32"
+    },
+    {
+      "path": "assets/icons/qt/assumption.svg",
+      "bytes": 257,
+      "sha256": "51db8b682cbe84df0c60111422c71048267d71c0e8adf0e3cc642e74a84d5f21"
+    },
+    {
+      "path": "assets/icons/qt/back.svg",
+      "bytes": 259,
+      "sha256": "fdde2d6438b1f04de1363dbff848023733c06e5a29583a120608c949a89cae65"
+    },
+    {
+      "path": "assets/icons/qt/bottom.svg",
+      "bytes": 259,
+      "sha256": "fdde2d6438b1f04de1363dbff848023733c06e5a29583a120608c949a89cae65"
+    },
+    {
+      "path": "assets/icons/qt/compare-concepts.svg",
+      "bytes": 284,
+      "sha256": "66c8b2156b63f77bcbcc039fa8c89e9eda90ee27b34c3b3ed1a10a5a5cfd9db1"
+    },
+    {
+      "path": "assets/icons/qt/edit-feature.svg",
+      "bytes": 227,
+      "sha256": "a536e732c0faefb347dd1de09ceddf243c77dbf8508a886ce61ac44472f9abc3"
+    },
+    {
+      "path": "assets/icons/qt/export-review.svg",
+      "bytes": 223,
+      "sha256": "85c6921c5019cd6675b68fdf048f51481a5d47865ba3f6d71f4eb1671a8995b4"
+    },
+    {
+      "path": "assets/icons/qt/external-link.svg",
+      "bytes": 220,
+      "sha256": "066fdb77fdfb3a0ba5da308690225c390add48b6299e82ad4ac52777f1b7c245"
+    },
+    {
+      "path": "assets/icons/qt/fail.svg",
+      "bytes": 232,
+      "sha256": "997d15eca5538363fca1c17c78bcc79c95c40b85c89a4dfffd33f0626e52809e"
+    },
+    {
+      "path": "assets/icons/qt/fit-view.svg",
+      "bytes": 251,
+      "sha256": "250f83b1182339ffd606c89ac0a7c1c8749e44622fb1c4a992d1cab1aabbd96d"
+    },
+    {
+      "path": "assets/icons/qt/focus-geometry.svg",
+      "bytes": 242,
+      "sha256": "2788ad403c1f1538c94e0296b17bc729bf1c126256ca25a1c1f7c9c519a946ca"
+    },
+    {
+      "path": "assets/icons/qt/front.svg",
+      "bytes": 231,
+      "sha256": "462d6ad1e72fa490487128a83e3c2b386ea1160a10398a5758e078533f2ad223"
+    },
+    {
+      "path": "assets/icons/qt/generate-concepts.svg",
+      "bytes": 255,
+      "sha256": "e3d7d27f3c5e4e0d0ba173abb2360a6f9474e5baaa798a6f15e321c058e4c7de"
+    },
+    {
+      "path": "assets/icons/qt/import-step.svg",
+      "bytes": 222,
+      "sha256": "4b49968eb6a71041b2234dd381eeaae65c56239a7f2e85bfe501fc210bfb639e"
+    },
+    {
+      "path": "assets/icons/qt/isometric.svg",
+      "bytes": 230,
+      "sha256": "958ebec1895e08b513bb3c03d80f8d055b1e00ec6ff1df1b4698fb146297497a"
+    },
+    {
+      "path": "assets/icons/qt/left.svg",
+      "bytes": 226,
+      "sha256": "286d8de867f5cc5e22ff3f506c66952efc3da3f55fa993ea5b012708298f8915"
+    },
+    {
+      "path": "assets/icons/qt/lock-decision.svg",
+      "bytes": 254,
+      "sha256": "7be24ab3e2f96463b86f4003d22eb913b955b635c1814d3cc085df513664f47c"
+    },
+    {
+      "path": "assets/icons/qt/manufacturing-intent.svg",
+      "bytes": 228,
+      "sha256": "a8e9932deb6504baa727afda29fa2ae63167b311d6115fed5160dfd1970c9282"
+    },
+    {
+      "path": "assets/icons/qt/new-project.svg",
+      "bytes": 241,
+      "sha256": "f20896a049b51ceafc42b985bcea7c6e35b947774df25fbbd8092f37a7d5be8a"
+    },
+    {
+      "path": "assets/icons/qt/not-evaluated.svg",
+      "bytes": 211,
+      "sha256": "ca913dfb958ed0b4343814ee0e81e1a0dc7ae97c561a2488f2eef7f04685dba8"
+    },
+    {
+      "path": "assets/icons/qt/open-project.svg",
+      "bytes": 218,
+      "sha256": "dcfea0d6bc12e1f8c16d52bde640f37f8128f497ea1f3e3edf347258fbadd086"
+    },
+    {
+      "path": "assets/icons/qt/orbit.svg",
+      "bytes": 284,
+      "sha256": "982d9a71deac8c94d7da31c0f9e0db420aefe018a2bb58f9becf0ccf5cda3d21"
+    },
+    {
+      "path": "assets/icons/qt/override.svg",
+      "bytes": 222,
+      "sha256": "f46fd1c03cba6965d8f2e33373b906576930d6dab8351041cbd6b41de2f79794"
+    },
+    {
+      "path": "assets/icons/qt/pan.svg",
+      "bytes": 280,
+      "sha256": "b8be7e1007e3b379cbc574b20aa4476987f7c5817796f2b821efaf877a9fc312"
+    },
+    {
+      "path": "assets/icons/qt/pass.svg",
+      "bytes": 217,
+      "sha256": "fdaff6119a5a66ad8068554df477ac1b01e45e5148ce4b49ff0f5f7b15be1ad2"
+    },
+    {
+      "path": "assets/icons/qt/recover-autosave.svg",
+      "bytes": 232,
+      "sha256": "e3a64728d60107ef7a173a57a2903a6a8780dc8820054858f8151bb63b39e8ff"
+    },
+    {
+      "path": "assets/icons/qt/regenerate.svg",
+      "bytes": 263,
+      "sha256": "b17cc4ed82f8395adf2a0b8db5308cf5998a9e6e4943b50835bfec551f594f3a"
+    },
+    {
+      "path": "assets/icons/qt/reject.svg",
+      "bytes": 227,
+      "sha256": "ed54e1f284337c4df4d90cd8111311ed26d03a8fdf7951fa5743eff51b3648f4"
+    },
+    {
+      "path": "assets/icons/qt/review-findings.svg",
+      "bytes": 248,
+      "sha256": "b0a2d89763356cc519b2f918dbe23e6bb580c164e2d431a149c9d169c53d132e"
+    },
+    {
+      "path": "assets/icons/qt/right.svg",
+      "bytes": 250,
+      "sha256": "fb871a4ece6cb62fae7afef88d75500cf0a45d7dc7440068189cc29db5b27ce6"
+    },
+    {
+      "path": "assets/icons/qt/save-as.svg",
+      "bytes": 251,
+      "sha256": "5073c104724c239cbebc146307b33cc6e12c9d794ea00ffc12c6579d0985eeef"
+    },
+    {
+      "path": "assets/icons/qt/save.svg",
+      "bytes": 224,
+      "sha256": "4171a90fa829ff540868c4227d9682fb1e7824d4441ddda189cd0cb135174008"
+    },
+    {
+      "path": "assets/icons/qt/section-view.svg",
+      "bytes": 218,
+      "sha256": "714197cf8c38bb05497494449443d52a26e16563f5e52fa17d38d2d2047f93d4"
+    },
+    {
+      "path": "assets/icons/qt/select.svg",
+      "bytes": 213,
+      "sha256": "3eaf71545d2140f8a1d75dfdd15872979084f66ec3722befae3675d290aa8723"
+    },
+    {
+      "path": "assets/icons/qt/shaded-edges.svg",
+      "bytes": 227,
+      "sha256": "f4d89fbf27cece2f2748e41bbfdc16cf5086387278359753323d80c8adc8481b"
+    },
+    {
+      "path": "assets/icons/qt/shaded.svg",
+      "bytes": 239,
+      "sha256": "5ddbef00cfdb5df11bda8d11e80458ccc664c02c715b2bb6316df29357142662"
+    },
+    {
+      "path": "assets/icons/qt/stale.svg",
+      "bytes": 223,
+      "sha256": "4a2ebe4e310f62472b05564f2b41abe4b5ce90c0983a970a0de0305cfc466f49"
+    },
+    {
+      "path": "assets/icons/qt/top.svg",
+      "bytes": 228,
+      "sha256": "03e7f09c7f7f8c3364edd7acdbe219a7e9a417f3e0625eb2ec5739d8abd9f84f"
+    },
+    {
+      "path": "assets/icons/qt/transparency.svg",
+      "bytes": 222,
+      "sha256": "37e857f795ed35fb2e14f3946c5cc01652c4affde4a993492c80e62af2ee81cb"
+    },
+    {
+      "path": "assets/icons/qt/validate-concept.svg",
+      "bytes": 238,
+      "sha256": "f5735dfc5327626d84b646b0c1cbc51e02f521d20a2f0ac6e0e4f3943f670928"
+    },
+    {
+      "path": "assets/icons/qt/warning.svg",
+      "bytes": 216,
+      "sha256": "73ebe5a011d61136161339d69907c15e25b4496493305e7ff99a9e0165588039"
+    },
+    {
+      "path": "assets/icons/qt/wireframe.svg",
+      "bytes": 218,
+      "sha256": "87148e32e1920db7b2823af5d86fc4f1519a1bbfb85d2d6e2d93817c619e9bf2"
+    },
+    {
+      "path": "assets/icons/qt/zoom.svg",
+      "bytes": 234,
+      "sha256": "0cf5db6963d019ed2612c730f2e07b2d2bcd6a19e3fc5e487d681efff107102c"
+    },
+    {
+      "path": "assets/logos/raster/fxd-icon-metallic-transparent.png",
+      "bytes": 214063,
+      "sha256": "3eda7cfb115ab4489707db07e8d56366858b352c0a32580762afa1858660d3a1"
+    },
+    {
+      "path": "assets/logos/raster/fxd-logo-approved-dark-1600x900.png",
+      "bytes": 1165560,
+      "sha256": "3ba818a13fa398cbd0fa88cdc531c9b141f521d113421cee80d608520270d9d4"
+    },
+    {
+      "path": "assets/logos/raster/fxd-logo-checkerboard-preview.png",
+      "bytes": 371657,
+      "sha256": "c3f0cc8c0bfb58619d7d66f54156fca32f1b09fcef3ded24033ff310a7f74cf8"
+    },
+    {
+      "path": "assets/logos/raster/fxd-logo-light-preview.png",
+      "bytes": 390075,
+      "sha256": "1202eb527f65517f889016480fa75ff326fa5fd9aaa2365657d185484083e07d"
+    },
+    {
+      "path": "assets/logos/raster/fxd-logo-primary-transparent.png",
+      "bytes": 455764,
+      "sha256": "428ab73e1c45f6c884a1f98e100b044e09581b1f617aade453226b78519e8abb"
+    },
+    {
+      "path": "assets/logos/raster/fxd-logo-transparent-1280w.png",
+      "bytes": 380403,
+      "sha256": "c4cb81d7b73fb2d34bff258dae4b8ae3cd2887ee6c6bc13af3cab78a2db93588"
+    },
+    {
+      "path": "assets/logos/raster/fxd-logo-transparent-320w.png",
+      "bytes": 39340,
+      "sha256": "15fade5940116b03146eeb83e8c469c6241aee7757077213f780bb94543d9104"
+    },
+    {
+      "path": "assets/logos/raster/fxd-logo-transparent-640w.png",
+      "bytes": 115738,
+      "sha256": "258d74d608d336bd7ab9461f7c22ad775ac5baf815df2cd7b9f3e967d4d17c45"
+    },
+    {
+      "path": "assets/logos/raster/fxd-logo-transparent-960w.png",
+      "bytes": 230972,
+      "sha256": "80e7793e2f41b17646de8ab01eb378136b45ae57dfd3ed2a91020f1e4fe0c67b"
+    },
+    {
+      "path": "assets/logos/raster/fxd-wordmark-transparent.png",
+      "bytes": 251683,
+      "sha256": "d9db67a441cf1f1bb33ea35b5653a8eab7513f79d883100fa36e3e976f174d82"
+    },
+    {
+      "path": "assets/logos/vector/README.md",
+      "bytes": 495,
+      "sha256": "7fc168eab6465435f898bd72663d88d1972cde763ab04886995ecbb406b70d1f"
+    },
+    {
+      "path": "assets/logos/vector/fxd-icon-flat-color.svg",
+      "bytes": 1847,
+      "sha256": "42822c256adcc981f592a86801fb476dfb8586181d0b8c3671158bb576615ccb"
+    },
+    {
+      "path": "assets/logos/vector/fxd-icon-mono-black.svg",
+      "bytes": 548,
+      "sha256": "df4522dfd4ef62aea10d0c5aadf76e8e8e038746f6721e1f5916281d24c296e2"
+    },
+    {
+      "path": "assets/logos/vector/fxd-icon-mono-white.svg",
+      "bytes": 548,
+      "sha256": "720b2b659d435affbca17a0fc5b85cc7c3e2ad19a42d2f3440ce615cda3be662"
+    },
+    {
+      "path": "assets/logos/vector/fxd-logo-approved-artwork-wrapper.svg",
+      "bytes": 204,
+      "sha256": "6d0985bdbffe82c55b29ece2fbc87680c2fe0bc8e7c65aa2a7409dbe0a79ca24"
+    },
+    {
+      "path": "assets/logos/vector/fxd-logo-flat-color.svg",
+      "bytes": 2571,
+      "sha256": "5d64af1dc8e3adfaa7384f1fb10e0ac97e61fad2f472787d4fbf2713f7fc717c"
+    },
+    {
+      "path": "assets/logos/vector/fxd-logo-mono-black.svg",
+      "bytes": 887,
+      "sha256": "93572117242d1e1c7faf4ee7aac9945f3eb6976c33ff598199c7123f713d2e29"
+    },
+    {
+      "path": "assets/logos/vector/fxd-logo-mono-white.svg",
+      "bytes": 887,
+      "sha256": "d2d6b54b78f56b70b223acb840fdfdb8386f42a9a8d27492aa9dffa8f8e8daa9"
+    },
+    {
+      "path": "assets/patterns/fxd-checkerboard-dark.png",
+      "bytes": 5790,
+      "sha256": "a6eca72a8d7800c8b57b25463bcd4709b39ae2d3180c0427d8988d28966b960a"
+    },
+    {
+      "path": "assets/patterns/fxd-engineering-grid.svg",
+      "bytes": 202,
+      "sha256": "01757cf8586ec8b6372f661bc304169f8534ad91aa27e54752ad85eb4109e536"
+    },
+    {
+      "path": "assets/social/fxd-github-banner-1280x640.png",
+      "bytes": 193231,
+      "sha256": "456252da5ad2e782ac63b18a18b7c3ed108cb76476f61b3fa06d16f7ae0552e0"
+    },
+    {
+      "path": "assets/social/fxd-open-graph-1200x630.png",
+      "bytes": 183127,
+      "sha256": "e9efbdedc5bcb4a538754fa82122706b29e05d179059ca8ea229d1870ca78cae"
+    },
+    {
+      "path": "assets/social/fxd-square-brand-1080.png",
+      "bytes": 221727,
+      "sha256": "e8efa3c3a2f5bf2146f1c8edfe38ca863019ea9311887660044f3165b9d625d3"
+    },
+    {
+      "path": "brand/FXD_BRAND_GUIDE.html",
+      "bytes": 3902,
+      "sha256": "7481af685843e8fa4bb543e45bad213bd20869570403d36078dd0305d639adf4"
+    },
+    {
+      "path": "brand/FXD_BRAND_GUIDE.md",
+      "bytes": 3709,
+      "sha256": "ab086918f837332a9bfd89d8746c2a646330a8a982397c6f2867379e60027842"
+    },
+    {
+      "path": "brand/LOGO_USAGE.md",
+      "bytes": 1029,
+      "sha256": "7bf7f943741e42d23182920b4cd73ed29db212ef36cb43e9b371ecadeea68ef4"
+    },
+    {
+      "path": "brand/MESSAGING.md",
+      "bytes": 1079,
+      "sha256": "282cef1277b4a81d8c4eacbe924e21d287a558e49a65addb30e049e36bf60a65"
+    },
+    {
+      "path": "design-system/COPY_PATTERNS.md",
+      "bytes": 1524,
+      "sha256": "70418d01a0693ca527a07857a2ae748289f77e102d92f2e5a8c99ebd6522dc80"
+    },
+    {
+      "path": "design-system/ICONOGRAPHY.md",
+      "bytes": 649,
+      "sha256": "ee361de5910a19a5c793e5ee773a6db5120fd49df273483d0207ef2d151141d6"
+    },
+    {
+      "path": "design-system/INTERACTION_STATES.md",
+      "bytes": 1338,
+      "sha256": "f1f198ba1a62d4932281d9eec1ec55111a129d3ba99fc1bfd7455e052e630420"
+    },
+    {
+      "path": "design-system/tokens/TOKEN_REFERENCE.md",
+      "bytes": 452,
+      "sha256": "24451c714aa2ddad6ce39b24b551be1ada7042db5fbe54324cd513ecf14130ce"
+    },
+    {
+      "path": "design-system/tokens/fxd.qss",
+      "bytes": 5465,
+      "sha256": "ec2d610a7f8e035479ee5a2634ffec4dea0c1098f03affb91cb73bec870f9f6b"
+    },
+    {
+      "path": "design-system/tokens/fxd.tokens.json",
+      "bytes": 1648,
+      "sha256": "b12b3036c6db1a492169008494f66a5205ebc36ee710684b7545c27601c2de54"
+    },
+    {
+      "path": "desktop/CUSTOMER_TOOLING_PATTERN.md",
+      "bytes": 1601,
+      "sha256": "50fbf542ffbdb807ebda0074948ede2275c0a5df5062f4b9db94c73831de6584"
+    },
+    {
+      "path": "desktop/DESKTOP_APPLICATION_SHELL.md",
+      "bytes": 3259,
+      "sha256": "be7a7af32c2f1a1dbfdd6e95e95387cce83658c80a3b32e697dbd206e3e3be3d"
+    },
+    {
+      "path": "desktop/DESKTOP_UX_PRINCIPLES.md",
+      "bytes": 1840,
+      "sha256": "c037a4bc1283b2c4b7004c04feadf7d2a1ba200a082ffd77959f47a81eb6a824"
+    },
+    {
+      "path": "desktop/ENGINEERING_STATUS_SYSTEM.md",
+      "bytes": 2004,
+      "sha256": "0159114db34ccf44ae1ecbf13a04318aee6fc8635687498702523b447d4a3319"
+    },
+    {
+      "path": "desktop/FINDINGS_WORKFLOW.md",
+      "bytes": 1484,
+      "sha256": "72ee492c448c6cf02de265a3bd282400cbcefa26a0ea398ef41ddc8f2cf7476e"
+    },
+    {
+      "path": "desktop/INSPECTOR_AND_EVIDENCE.md",
+      "bytes": 1853,
+      "sha256": "3cd2eb74d3bdd2e369960a49f28a20d2af4b68cda3b0948989d9efaefde1a147"
+    },
+    {
+      "path": "desktop/MILESTONE_28_SCREENS.md",
+      "bytes": 664,
+      "sha256": "5f18e0f672371bf5cd7b558aa4adc596b56a556339f62f3a8e4306cc3179b029"
+    },
+    {
+      "path": "desktop/PRODUCT_NAVIGATION.md",
+      "bytes": 1035,
+      "sha256": "2961ec51160164babadba27938f956bbc38930b3f0144f9bc24c6770ee766007"
+    },
+    {
+      "path": "desktop/RUNTIME_AI_BOUNDARY.md",
+      "bytes": 1208,
+      "sha256": "b9f3d7124a9e791fc1aa8ace8f7fe7cee34f2ba4d30fdb0975e36b5273765c93"
+    },
+    {
+      "path": "desktop/SOURCE_CAD_PROTECTION.md",
+      "bytes": 1679,
+      "sha256": "ec2a53dcdc8384181f81290f174dbbff222dedf9ebcb66002d482be6f172d78c"
+    },
+    {
+      "path": "desktop/TOOLBAR_AND_ICONOGRAPHY.md",
+      "bytes": 2918,
+      "sha256": "ab1c0c0682f5b75556375dc0ae7c3ad8db907786b94dbf15f854f2a6b3dd825f"
+    },
+    {
+      "path": "desktop/WORKFLOW_NAVIGATION.md",
+      "bytes": 2234,
+      "sha256": "c0048d792766c66650d8280125e9b9bb58e21cdf6b293ed30cc4d017e64d8097"
+    },
+    {
+      "path": "implementation/ACCESSIBILITY_CHECKLIST.md",
+      "bytes": 1603,
+      "sha256": "88c6b6ea8fde05668db29ff951d8ff507a877577f74041059438d2b478c48281"
+    },
+    {
+      "path": "implementation/CODEX_IMPLEMENTATION_PROMPT.md",
+      "bytes": 4503,
+      "sha256": "b55f99a453fbbf07f4e84e49bf081c49a6e47f0904786b030ba652b22deeed17"
+    },
+    {
+      "path": "implementation/MILESTONE_28_IMPLEMENTATION_CHECKLIST.md",
+      "bytes": 1269,
+      "sha256": "7a65b189fee33436ac5e9f6eb416b3b8ff02758158b3c8a76e998816a28f7793"
+    },
+    {
+      "path": "implementation/SCREENSHOT_REVIEW_GUIDE.md",
+      "bytes": 951,
+      "sha256": "7d3d205adc1c2621b3316c610675c851842c4b256a8caadc433187015faa6bad"
+    },
+    {
+      "path": "mockups/00-brand-board.png",
+      "bytes": 274592,
+      "sha256": "a93b9ae808364e73b4d2c37ff5c159711871998d583d440789184fd0652baec0"
+    },
+    {
+      "path": "mockups/01-empty-workbench.png",
+      "bytes": 84210,
+      "sha256": "1b82cea8f5f4abcb51fdf414691111c8e8ba72a349a9f71a5e20602f1e4d97db"
+    },
+    {
+      "path": "mockups/02-step-assembly-imported.png",
+      "bytes": 74258,
+      "sha256": "796ed5e29e74e9278c1b6e6b14555f17904ec0156a1880849d9af55a763f4a51"
+    },
+    {
+      "path": "mockups/03-manufacturing-intent.png",
+      "bytes": 96919,
+      "sha256": "e9920d5673846560f6c407fcecc15a50ea817239a5a599b43bff596364b9914a"
+    },
+    {
+      "path": "mockups/04-geometry-annotation.png",
+      "bytes": 81198,
+      "sha256": "3ab3fa7bb94a662817fa62956f31bfe6fabb88658e30f4ee493e8c0b75bd4448"
+    },
+    {
+      "path": "mockups/05-assembly-analysis.png",
+      "bytes": 82591,
+      "sha256": "caa8ec47b6565af40bb12da67d38dfc1d2787ad3f0901e89da05ca75496ce194"
+    },
+    {
+      "path": "mockups/06-fixture-concept-viewport.png",
+      "bytes": 82043,
+      "sha256": "a5f6214d10e418b72a616bef2c6eb2923a085a7ff03cc47e9086ea0966d46bf4"
+    },
+    {
+      "path": "mockups/07-concept-comparison.png",
+      "bytes": 97294,
+      "sha256": "4f1c6625e17cc5b4ff54497d096751dd31df5723bf7d8d64af4200a69c7b7b1b"
+    },
+    {
+      "path": "mockups/08-validation-failure.png",
+      "bytes": 82573,
+      "sha256": "699148d223a58c88a7404d1455eff3184f625661c169284c85a5a3f4e678ae98"
+    },
+    {
+      "path": "mockups/09-provisional-concept.png",
+      "bytes": 80836,
+      "sha256": "30e93ad9314ed719110516b86c5c74fe21c25655a2248a830fc74b1a82d5ada4"
+    },
+    {
+      "path": "mockups/10-edit-regenerate-revalidate.png",
+      "bytes": 81457,
+      "sha256": "57ace4da27e84cc089890c9b5c079d7c51a8f08a8ad0f6031f1c8e5739ced3d5"
+    },
+    {
+      "path": "mockups/11-customer-tooling-import.png",
+      "bytes": 94287,
+      "sha256": "23ce9c2dfa5416e2d3c3d1a81c6244a7393576e8aca3e3f8e6796153e779ff36"
+    },
+    {
+      "path": "mockups/12-review-and-export.png",
+      "bytes": 101282,
+      "sha256": "a3eef8c0dd855839941facef565ff65b70b4d703bc686421fe0835de310ed8e9"
+    },
+    {
+      "path": "mockups/13-ai-proposal-boundary.png",
+      "bytes": 97394,
+      "sha256": "321a9da18a750b5246e0cdfac7049fb46cffff896e1d4346366def8e0071c471"
+    },
+    {
+      "path": "mockups/14-shell-1366x768.png",
+      "bytes": 64213,
+      "sha256": "23077ab871efc7eb4780c60377819ef232c69c4756f78d55e068c73ae0b6692d"
+    },
+    {
+      "path": "mockups/15-shell-2560x1440.png",
+      "bytes": 74848,
+      "sha256": "7df860bb122b5a20cda7aa3099031eade1289b96bd0d8f134d52c3c6632543d1"
+    },
+    {
+      "path": "mockups/16-shell-nonmaximized-1280x800.png",
+      "bytes": 63868,
+      "sha256": "de36a439508c92f034d6a208b9359db1d25e4a8768f249c5169406ffef2c8cf8"
+    },
+    {
+      "path": "mockups/17-findings-workflow.png",
+      "bytes": 100670,
+      "sha256": "60ce62fbf9f88d3534dc2a10c770cd2cbedc771bd75c782a199c053aee3c174b"
+    },
+    {
+      "path": "mockups/18-inspector-evidence.png",
+      "bytes": 85461,
+      "sha256": "dd193804fe64beeb928ffd50c2a4f6a7071d91169aea35963d9c4b4312f36503"
+    },
+    {
+      "path": "mockups/19-toolbar-control-states.png",
+      "bytes": 63360,
+      "sha256": "8a57c55c46dc1164599dd407c5ea847c5dc16d0cce60fe7dfac1901267dbc664"
+    },
+    {
+      "path": "mockups/20-engineering-status-system.png",
+      "bytes": 67304,
+      "sha256": "cf7686d4581f370ba1038770e54f0b5587eeb493f2c74a3e454249f9232d61b7"
+    },
+    {
+      "path": "mockups/21-source-identity-details.png",
+      "bytes": 81462,
+      "sha256": "e9fbd2b37aa169722e72d0b969fecb98e2d79d3a11a043518683397c5711bc22"
+    },
+    {
+      "path": "mockups/MOCKUP_INDEX.md",
+      "bytes": 919,
+      "sha256": "72e7d447b5a638d47cf548e54a20d32051d34110c1a146a26561ef63ca483828"
+    },
+    {
+      "path": "mockups/index.png",
+      "bytes": 483447,
+      "sha256": "c32fec7d175a631cb627ee16448f8855245f6a19f683f333e12ef87eccd843b2"
+    },
+    {
+      "path": "qt/PYSIDE6_COMPONENT_MAP.md",
+      "bytes": 2297,
+      "sha256": "440d489bac4a5f41809c64eac46886a5f9e88115d0dea4cd73df641cc3338582"
+    },
+    {
+      "path": "qt/QT_COMPONENT_SPECIFICATION.md",
+      "bytes": 1970,
+      "sha256": "47d109141dd63cf534f8a06e0f12011fbfb6ae67ce97806c112707905c446fbe"
+    },
+    {
+      "path": "qt/QT_THEME_SPECIFICATION.md",
+      "bytes": 2565,
+      "sha256": "09fb4eada0648ad50748cf2d168604608c65c02f193f4a9821d8b8e9e2f55bdc"
+    },
+    {
+      "path": "reference-only/html-prototype-v1.0/README.md",
+      "bytes": 321,
+      "sha256": "e22a612dc78c51d96766b2e10ab2f7a40cf9ff9f5b9a87fe6e71217d7cb8d9a3"
+    },
+    {
+      "path": "reference-only/html-prototype-v1.0/REFERENCE_ONLY.md",
+      "bytes": 347,
+      "sha256": "1a75e40fe6b5a2eacf141a27facab885105d8b0ab57bb35c37e68b9ea8731ab4"
+    },
+    {
+      "path": "reference-only/html-prototype-v1.0/app.js",
+      "bytes": 871,
+      "sha256": "727ed9f3f6e146f78a496300aa493af61f7163be661865f9b26143f09b3d4d52"
+    },
+    {
+      "path": "reference-only/html-prototype-v1.0/assets/fxd-icon.png",
+      "bytes": 20714,
+      "sha256": "5a4be33f47539bbc202ff95b6eb1c224ace934aff6d3f65583798dd208fcc0b4"
+    },
+    {
+      "path": "reference-only/html-prototype-v1.0/assets/fxd-logo.png",
+      "bytes": 455764,
+      "sha256": "428ab73e1c45f6c884a1f98e100b044e09581b1f617aade453226b78519e8abb"
+    },
+    {
+      "path": "reference-only/html-prototype-v1.0/components.html",
+      "bytes": 3911,
+      "sha256": "25e5bf3b2fbdf4ca59b649eb4f28da4acb08e5418e2c2c439096f57eb4c290da"
+    },
+    {
+      "path": "reference-only/html-prototype-v1.0/concepts.html",
+      "bytes": 6298,
+      "sha256": "e722c41df2e0751c11cad7a0787b8663c4cf7e0dd76a174863b6596dc0b37114"
+    },
+    {
+      "path": "reference-only/html-prototype-v1.0/dashboard.html",
+      "bytes": 5395,
+      "sha256": "d39e53ea6779be1504cb7f9698209ca7afd3d7f5e74464978eb7006a24c6b6dc"
+    },
+    {
+      "path": "reference-only/html-prototype-v1.0/index.html",
+      "bytes": 6987,
+      "sha256": "f7c350c66fecaef3be8cee839f63d377ca4b15653b6637444911fea14be9cac3"
+    },
+    {
+      "path": "reference-only/html-prototype-v1.0/styles.css",
+      "bytes": 9903,
+      "sha256": "a12931d4d6f5bb7656a32b017d266ea454c8b60eaa156eeaa16f1ba7e8d0e917"
+    },
+    {
+      "path": "reference-only/html-prototype-v1.0/validation.html",
+      "bytes": 5309,
+      "sha256": "0e095861af5914586a5bed786e9161ffbf39a07afb0cf190da4a526705d5eaa0"
+    }
+  ]
+}

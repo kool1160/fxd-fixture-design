@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640" role="img" aria-label="FXD fixture icon">
+<defs>
+ <linearGradient id="steel" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#F3F5F7"/><stop offset=".45" stop-color="#BFC5CC"/><stop offset="1" stop-color="#59616B"/></linearGradient>
+ <linearGradient id="blue" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#19A8EF"/><stop offset=".55" stop-color="#087CC5"/><stop offset="1" stop-color="#064D86"/></linearGradient>
+ <linearGradient id="orange" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#FFAA24"/><stop offset=".55" stop-color="#FF7600"/><stop offset="1" stop-color="#C94900"/></linearGradient>
+</defs>
+<!-- split hex frame -->
+<path d="M320 62 92 194v264l228 132" fill="none" stroke="url(#steel)" stroke-width="30" stroke-linejoin="miter"/>
+<path d="M320 62 548 194v264L320 590" fill="none" stroke="url(#blue)" stroke-width="30" stroke-linejoin="miter"/>
+<!-- fixture stops -->
+<path d="M150 258 260 194l35 20-110 64v142l-35 20z" fill="url(#steel)"/>
+<path d="M384 214 490 276v164l-38-22V300l-68-39z" fill="url(#blue)"/>
+<!-- base plate -->
+<path d="m168 410 152-88 152 88-152 89z" fill="url(#steel)"/>
+<path d="m168 410 152 89v58l-152-88z" fill="#424A54"/>
+<path d="m320 499 152-89v59l-152 88z" fill="#20262C"/>
+<circle cx="205" cy="426" r="11" fill="#111418"/><circle cx="435" cy="426" r="11" fill="#111418"/><circle cx="320" cy="520" r="11" fill="#111418"/>
+<!-- locator pin -->
+<ellipse cx="320" cy="421" rx="64" ry="25" fill="#A63B00"/>
+<ellipse cx="320" cy="409" rx="64" ry="25" fill="url(#orange)"/>
+<rect x="281" y="285" width="78" height="118" rx="17" fill="url(#orange)"/>
+<ellipse cx="320" cy="285" rx="44" ry="19" fill="#FFAA24"/>
+<rect x="274" y="270" width="92" height="31" rx="15" fill="url(#orange)"/>
+<ellipse cx="320" cy="270" rx="46" ry="19" fill="#FFB23B"/>
+</svg>

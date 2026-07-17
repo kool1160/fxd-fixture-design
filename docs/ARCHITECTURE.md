@@ -60,6 +60,17 @@ validation APIs. It does not own geometry rules and may not convert unknown
 evidence into a pass. The PySide6 shell invokes this boundary; it does not
 duplicate engineering policy.
 
+### Desktop presentation system
+
+`fxd_ui` owns the approved FXD desktop tokens, application palette, QSS,
+production icons, and reusable semantic Qt widgets. It consumes stable domain
+identities and validation results but owns no geometry, engineering rules,
+approval policy, project revisions, or persistence. `fxd_qt_app.py` composes
+that presentation layer with the existing persistent VTK viewport and
+CAD-neutral interactive workflow. A theme or layout change therefore cannot
+turn provisional evidence into authoritative source geometry or bypass a
+deterministic gate.
+
 ### Connectors
 
 Thin adapters import or export data through STEP and vendor APIs. The standalone application must work without a vendor connector.

@@ -175,7 +175,10 @@ Acceptance criteria:
 
 ## Milestone 28 - Interactive fixture engineering workflow
 
-**Status:** Pending
+**Status:** Complete
+
+Implemented, independently reviewed, accepted by hosted Kernel validation, and
+squash-merged in PR #50 at `1313922`.
 
 Expose the existing deterministic product, annotation, placement, concept,
 tooling, validation, edit, revision, and export systems through the unified
@@ -192,5 +195,32 @@ Acceptance criteria:
 - customer-owned tooling metadata remains private and visibly verified or unverified; no supplier scraping or redistribution is added
 - the complete workflow, revision history, validation evidence, visibility, and review boundary survive save and reload
 - local Windows visual review, hosted Kernel acceptance, independent review, and merge are required before completion
+
+**Recommended level:** Sol
+
+## Milestone 29 - Implement the desktop UI and branding system
+
+**Status:** Pending
+
+Apply the approved FXD UI & Branding Kit v1.1 to the unified PySide6 workbench
+without replacing engineering architecture or weakening evidence boundaries.
+
+Acceptance criteria:
+
+- the approved shared palette, typography, application icon, logos, Qt icons,
+  and QSS are centralized and checksum traceable
+- the workbench presents compact product identity, source-CAD read-only
+  evidence, renderer health, workflow state, engineering status, findings, and
+  approval gates without illustrative domain values
+- the VTK viewport remains persistent and visually dominant at supported desktop
+  sizes
+- invalid, provisional, stale, incomplete, and engineer-modified states remain
+  explicit through icon, text, and semantic color
+- layout state is user-persistent but engineering decisions remain in the project
+- source STEP bytes, SHA-256 identity, project schema, deterministic validation,
+  renderer performance, and clean shutdown remain unchanged
+- accessibility, focused Qt regressions, full repository validation, local
+  Windows visual review, independent review, CI, and merge are required before
+  completion
 
 **Recommended level:** Sol

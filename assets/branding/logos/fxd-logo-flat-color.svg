@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 640" role="img" aria-label="FXD Intelligent Fixture Design">
+<defs>
+ <linearGradient id="steel" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#F3F5F7"/><stop offset=".5" stop-color="#C8CDD2"/><stop offset="1" stop-color="#747C85"/></linearGradient>
+ <linearGradient id="blue" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#16A2EA"/><stop offset=".55" stop-color="#087CC5"/><stop offset="1" stop-color="#064B85"/></linearGradient>
+ <linearGradient id="orange" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#FFAB28"/><stop offset=".55" stop-color="#FF7700"/><stop offset="1" stop-color="#CF4C00"/></linearGradient>
+</defs>
+<g transform="translate(12,8) scale(.88)">
+ <path d="M320 62 92 194v264l228 132" fill="none" stroke="url(#steel)" stroke-width="30"/>
+ <path d="M320 62 548 194v264L320 590" fill="none" stroke="url(#blue)" stroke-width="30"/>
+ <path d="M150 258 260 194l35 20-110 64v142l-35 20z" fill="url(#steel)"/>
+ <path d="M384 214 490 276v164l-38-22V300l-68-39z" fill="url(#blue)"/>
+ <path d="m168 410 152-88 152 88-152 89z" fill="url(#steel)"/><path d="m168 410 152 89v58l-152-88z" fill="#424A54"/><path d="m320 499 152-89v59l-152 88z" fill="#20262C"/>
+ <circle cx="205" cy="426" r="11" fill="#111418"/><circle cx="435" cy="426" r="11" fill="#111418"/><circle cx="320" cy="520" r="11" fill="#111418"/>
+ <ellipse cx="320" cy="421" rx="64" ry="25" fill="#A63B00"/><ellipse cx="320" cy="409" rx="64" ry="25" fill="url(#orange)"/><rect x="281" y="285" width="78" height="118" rx="17" fill="url(#orange)"/><ellipse cx="320" cy="285" rx="44" ry="19" fill="#FFAA24"/><rect x="274" y="270" width="92" height="31" rx="15" fill="url(#orange)"/><ellipse cx="320" cy="270" rx="46" ry="19" fill="#FFB23B"/>
+</g>
+<g transform="translate(535,135)">
+ <!-- F --> <path d="M0 0h305l42 61H88v75h220l-39 59H88v188H0z" fill="url(#steel)"/>
+ <!-- orange chevron behind, blue chevron above: approved split-X geometry -->
+ <path d="M650 0h-108L390 191l152 192h108L498 191z" fill="url(#orange)"/>
+ <path d="M318 0h108l152 191-152 192H318l152-192z" fill="url(#blue)"/>
+ <!-- D with cutout -->
+ <path fill="url(#steel)" fill-rule="evenodd" d="M680 0h244l100 82v219l-100 82H680V160h91v151h120l42-35V107l-42-35H680z"/>
+</g>
+<g transform="translate(520,563)"><rect width="110" height="5" fill="#087CC5"/><text x="140" y="18" fill="#D8DCE0" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="34" font-weight="600" letter-spacing="8">INTELLIGENT FIXTURE DESIGN</text><rect x="980" width="90" height="5" fill="#FF7700"/></g>
+</svg>

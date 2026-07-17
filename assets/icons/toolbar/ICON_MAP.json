@@ -1,0 +1,227 @@
+{
+  "new-project": {
+    "file": "assets/icons/qt/new-project.svg",
+    "viewBox": "0 0 24 24",
+    "defaultPx": 20
+  },
+  "import-step": {
+    "file": "assets/icons/qt/import-step.svg",
+    "viewBox": "0 0 24 24",
+    "defaultPx": 20
+  },
+  "open-project": {
+    "file": "assets/icons/qt/open-project.svg",
+    "viewBox": "0 0 24 24",
+    "defaultPx": 20
+  },
+  "save": {
+    "file": "assets/icons/qt/save.svg",
+    "viewBox": "0 0 24 24",
+    "defaultPx": 20
+  },
+  "save-as": {
+    "file": "assets/icons/qt/save-as.svg",
+    "viewBox": "0 0 24 24",
+    "defaultPx": 20
+  },
+  "recover-autosave": {
+    "file": "assets/icons/qt/recover-autosave.svg",
+    "viewBox": "0 0 24 24",
+    "defaultPx": 20
+  },
+  "export-review": {
+    "file": "assets/icons/qt/export-review.svg",
+    "viewBox": "0 0 24 24",
+    "defaultPx": 20
+  },
+  "select": {
+    "file": "assets/icons/qt/select.svg",
+    "viewBox": "0 0 24 24",
+    "defaultPx": 20
+  },
+  "orbit": {
+    "file": "assets/icons/qt/orbit.svg",
+    "viewBox": "0 0 24 24",
+    "defaultPx": 20
+  },
+  "pan": {
+    "file": "assets/icons/qt/pan.svg",
+    "viewBox": "0 0 24 24",
+    "defaultPx": 20
+  },
+  "zoom": {
+    "file": "assets/icons/qt/zoom.svg",
+    "viewBox": "0 0 24 24",
+    "defaultPx": 20
+  },
+  "fit-view": {
+    "file": "assets/icons/qt/fit-view.svg",
+    "viewBox": "0 0 24 24",
+    "defaultPx": 20
+  },
+  "isometric": {
+    "file": "assets/icons/qt/isometric.svg",
+    "viewBox": "0 0 24 24",
+    "defaultPx": 20
+  },
+  "front": {
+    "file": "assets/icons/qt/front.svg",
+    "viewBox": "0 0 24 24",
+    "defaultPx": 20
+  },
+  "back": {
+    "file": "assets/icons/qt/back.svg",
+    "viewBox": "0 0 24 24",
+    "defaultPx": 20
+  },
+  "left": {
+    "file": "assets/icons/qt/left.svg",
+    "viewBox": "0 0 24 24",
+    "defaultPx": 20
+  },
+  "right": {
+    "file": "assets/icons/qt/right.svg",
+    "viewBox": "0 0 24 24",
+    "defaultPx": 20
+  },
+  "top": {
+    "file": "assets/icons/qt/top.svg",
+    "viewBox": "0 0 24 24",
+    "defaultPx": 20
+  },
+  "bottom": {
+    "file": "assets/icons/qt/bottom.svg",
+    "viewBox": "0 0 24 24",
+    "defaultPx": 20
+  },
+  "shaded": {
+    "file": "assets/icons/qt/shaded.svg",
+    "viewBox": "0 0 24 24",
+    "defaultPx": 20
+  },
+  "shaded-edges": {
+    "file": "assets/icons/qt/shaded-edges.svg",
+    "viewBox": "0 0 24 24",
+    "defaultPx": 20
+  },
+  "wireframe": {
+    "file": "assets/icons/qt/wireframe.svg",
+    "viewBox": "0 0 24 24",
+    "defaultPx": 20
+  },
+  "transparency": {
+    "file": "assets/icons/qt/transparency.svg",
+    "viewBox": "0 0 24 24",
+    "defaultPx": 20
+  },
+  "section-view": {
+    "file": "assets/icons/qt/section-view.svg",
+    "viewBox": "0 0 24 24",
+    "defaultPx": 20
+  },
+  "manufacturing-intent": {
+    "file": "assets/icons/qt/manufacturing-intent.svg",
+    "viewBox": "0 0 24 24",
+    "defaultPx": 20
+  },
+  "annotate-geometry": {
+    "file": "assets/icons/qt/annotate-geometry.svg",
+    "viewBox": "0 0 24 24",
+    "defaultPx": 20
+  },
+  "analyze-assembly": {
+    "file": "assets/icons/qt/analyze-assembly.svg",
+    "viewBox": "0 0 24 24",
+    "defaultPx": 20
+  },
+  "generate-concepts": {
+    "file": "assets/icons/qt/generate-concepts.svg",
+    "viewBox": "0 0 24 24",
+    "defaultPx": 20
+  },
+  "compare-concepts": {
+    "file": "assets/icons/qt/compare-concepts.svg",
+    "viewBox": "0 0 24 24",
+    "defaultPx": 20
+  },
+  "validate-concept": {
+    "file": "assets/icons/qt/validate-concept.svg",
+    "viewBox": "0 0 24 24",
+    "defaultPx": 20
+  },
+  "edit-feature": {
+    "file": "assets/icons/qt/edit-feature.svg",
+    "viewBox": "0 0 24 24",
+    "defaultPx": 20
+  },
+  "regenerate": {
+    "file": "assets/icons/qt/regenerate.svg",
+    "viewBox": "0 0 24 24",
+    "defaultPx": 20
+  },
+  "review-findings": {
+    "file": "assets/icons/qt/review-findings.svg",
+    "viewBox": "0 0 24 24",
+    "defaultPx": 20
+  },
+  "approve": {
+    "file": "assets/icons/qt/approve.svg",
+    "viewBox": "0 0 24 24",
+    "defaultPx": 20
+  },
+  "reject": {
+    "file": "assets/icons/qt/reject.svg",
+    "viewBox": "0 0 24 24",
+    "defaultPx": 20
+  },
+  "lock-decision": {
+    "file": "assets/icons/qt/lock-decision.svg",
+    "viewBox": "0 0 24 24",
+    "defaultPx": 20
+  },
+  "pass": {
+    "file": "assets/icons/qt/pass.svg",
+    "viewBox": "0 0 24 24",
+    "defaultPx": 20
+  },
+  "warning": {
+    "file": "assets/icons/qt/warning.svg",
+    "viewBox": "0 0 24 24",
+    "defaultPx": 20
+  },
+  "fail": {
+    "file": "assets/icons/qt/fail.svg",
+    "viewBox": "0 0 24 24",
+    "defaultPx": 20
+  },
+  "not-evaluated": {
+    "file": "assets/icons/qt/not-evaluated.svg",
+    "viewBox": "0 0 24 24",
+    "defaultPx": 20
+  },
+  "override": {
+    "file": "assets/icons/qt/override.svg",
+    "viewBox": "0 0 24 24",
+    "defaultPx": 20
+  },
+  "stale": {
+    "file": "assets/icons/qt/stale.svg",
+    "viewBox": "0 0 24 24",
+    "defaultPx": 20
+  },
+  "assumption": {
+    "file": "assets/icons/qt/assumption.svg",
+    "viewBox": "0 0 24 24",
+    "defaultPx": 20
+  },
+  "focus-geometry": {
+    "file": "assets/icons/qt/focus-geometry.svg",
+    "viewBox": "0 0 24 24",
+    "defaultPx": 20
+  },
+  "external-link": {
+    "file": "assets/icons/qt/external-link.svg",
+    "viewBox": "0 0 24 24",
+    "defaultPx": 20
+  }
+}
