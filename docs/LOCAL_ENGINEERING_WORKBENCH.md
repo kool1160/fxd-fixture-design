@@ -15,7 +15,16 @@ Install the pinned desktop runtime in the existing Python 3.12 environment:
 .\.venv\Scripts\python.exe -m pip install --only-binary=:all: -r requirements-desktop.txt
 ```
 
-Launch from the repository root:
+For Windows Explorer, double-click `launch-fxd.bat` in the repository root.
+It resolves the repository root itself, uses `.venv\Scripts\python.exe`, and
+keeps its console open if launch validation fails. Drag a `.step` or `.stp`
+file onto the batch file to open it immediately through the normal FXD OCP
+import path.
+
+To create a desktop shortcut, right-click `launch-fxd.bat`, choose **Show more
+options** if necessary, then choose **Send to > Desktop (create shortcut)**.
+
+The PowerShell launcher remains available from the repository root:
 
 ```powershell
 .\scripts\launch-fxd.ps1
