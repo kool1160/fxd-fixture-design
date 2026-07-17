@@ -407,7 +407,8 @@ class FxdWorkbenchWindow(QMainWindow):
         for label in (
             "Source file", "Source SHA-256", "Components", "Faces", "Triangles",
             "Selected identity", "Evidence", "Validation", "Render backend",
-            "Actors", "Points", "Native rendering", "Fallback",
+            "Actors", "Points", "Native rendering", "Fallback", "Average render",
+            "Visible FPS",
         ):
             value = QLabel("-", properties)
             value.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)

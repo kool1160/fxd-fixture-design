@@ -66,6 +66,13 @@ class FakeScene:
         self.calls.append(("select", identity, focus))
         return identity.startswith("component:") or identity == "source:geometry"
 
+    def benchmark(self, frames=20):
+        self.calls.append(("benchmark", frames))
+        return RenderDiagnostics(
+            "FakeEmbeddedOpenGL", 1, 24, 12, True, True, False,
+            average_render_ms=5.25, frames_per_second=190.5,
+        )
+
 
 class FakeViewport(QWidget):
     def __init__(self, parent=None):
@@ -250,6 +257,14 @@ print(json.dumps(result, sort_keys=True))
             [("fit",), ("view", "bottom"), ("navigation", "pan"),
              ("wireframe", True), ("transparent", True)],
         )
+
+    def test_benchmark_updates_registered_property_rows(self):
+        self.window.viewport.document = object()
+        result = self.window.benchmark_renderer(frames=12)
+        self.assertEqual(result.average_render_ms, 5.25)
+        self.assertEqual(self.window._property_values["Average render"].text(), "5.25 ms")
+        self.assertEqual(self.window._property_values["Visible FPS"].text(), "190.5")
+        self.assertIn(("benchmark", 12), self.window.viewport.scene.calls)
 
     def test_metadata_only_step_fails_closed_and_never_claims_real_ocp(self):
         with patch("fxd_qt_app.QMessageBox.critical"):
