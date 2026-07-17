@@ -1,81 +1,34 @@
 # FXD Strategy Handoff
 
-This document is the authoritative short-form handoff for continuing FXD strategy and implementation work across chats.
+This is the short-form cross-task repository handoff. It does not override
+`BACKLOG.md`, `docs/ROADMAP_QUEUE.md`, or the Engineering Constitution.
 
 ## Current repository state
 
 - Repository: `kool1160/fxd-fixture-design`
-- Current `main`: `31b7945ab50cde14280bea6e341ce4010a4a8057`
-- Milestones 1–18 are complete.
-- Milestone 18 merged in PR #29 after local Windows validation: 91 tests passed, real OCP kernel proof passed, and backlog validation passed.
-- Duplicate Milestone 18 PR #31 was closed without merge.
-- Roadmap PR #38 is merged and defines Milestones 21–26 in `docs/ROADMAP_QUEUE.md`.
-- `AGENTS.md` now explicitly governs the transition from `BACKLOG.md` through Milestone 20 into `docs/ROADMAP_QUEUE.md` for Milestones 21–26.
-- Issues #32–#37 track Milestones 21–26.
+- Milestone 26 was squash-merged through PR #48 at `c8f831d`.
+- PR #48 passed Kernel acceptance and independent Windows visual review.
+- The accepted Milestone 26 limitation was a detached VTK viewer window.
+- Milestone 27 is active on `milestone-27-unified-engineering-workbench`.
 
 ## Active milestone
 
-Milestone 19 — Deepen weld-fixture and automation workflow.
+Milestone 27 replaces the launched Tk shell with one PySide6 main window and
+an embedded persistent VTK viewport. The deterministic engineering, geometry,
+project, validation, manufacturing, and export contracts remain UI-framework
+independent and must not be rewritten to suit Qt.
 
-Remote branch:
+The application must preserve ordinary vendor STEP import, source bytes and
+SHA-256, XCAF color evidence, validated zero-based tessellation, project
+workflows, and fail-closed behavior. Metadata-only or malformed input may not
+be displayed as real source geometry, and no generated substitute is allowed.
 
-`milestone-19-weld-fixture-automation-workflow`
+## Review boundary
 
-The branch must be aligned with current `main` before Foreman starts and currently has no remote Milestone 19 implementation commits.
-
-## Existing foundation that must not be duplicated
-
-Milestone 13, merged in PR #15, already provides:
-
-- weld process, direction, sequence, heat-input, distortion, tack, release, and assumption metadata
-- configurable heat thresholds and clamp-force directions
-- weld-zone support and clamp findings
-- warnings for missing process, direction, tack, and release evidence
-- reinforcing, opposing, and perpendicular clamp-direction handling
-- rule, evidence, assumption, and confidence traceability
-
-Milestone 19 must build an engineer-review workflow on top of those contracts rather than recreate the weld-rule engine.
-
-## Milestone 19 remaining acceptance scope
-
-- weld and tack sequences are editable and visually traceable
-- clamp and release sequences are represented and validated
-- heat, distortion, spatter, and restricted-contact zones are visible
-- torch, hand, operator, robot, and cobot approach envelopes use shared geometry references
-- loading and unloading sequences expose trapped-part and access conflicts
-- warnings link directly to the responsible deterministic rule and geometry
-- manual and robotic fixture variants can be compared without weakening deterministic gates
-
-## Required working method
-
-Normal repository implementation should use the GitHub Foreman workflow.
-
-Use local Codex only when the work specifically requires:
-
-- the authorized Windows development PC
-- installed OCP or Windows-only behavior
-- GUI or manual engineering review
-- reproduction of a failure Foreman cannot reproduce
-- final independent local validation
-
-Do not default to a chain of loose local coding slices. Keep work milestone-driven and prefer one coherent Milestone 19 PR unless a genuine technical boundary requires more than one.
-
-Before launching new work, inspect existing remote branches, PRs, Foreman runs, and any local-only commits. Do not overwrite or discard local work without explicit authorization.
-
-## Local-only work warning
-
-A local commit referenced as `11b4387` was not found in GitHub at the time of this handoff. It must not be assumed merged, pushed, valid, or redundant. Inspect it locally before deciding whether to push, replace, retain, or abandon it.
-
-## Forward queue
-
-1. Milestone 19 — Deepen weld-fixture and automation workflow
-2. Milestone 20 — Harden projects, packaging, and release operations
-3. Milestone 21 — Generate complete fixture structures
-4. Milestone 22 — Optimize locator, support, and clamp placement
-5. Milestone 23 — Produce manufacturing-ready fixture geometry
-6. Milestone 24 — Generate fixture drawings and documentation
-7. Milestone 25 — Optimize cost, volume, and manufacturability
-8. Milestone 26 — Complete end-to-end engineering pilots
+Milestone 27 remains Pending until automated validation, Kernel acceptance,
+local Windows screenshots, independent visual acceptance, review, and merge.
+The workbench and all exports remain engineering-review-only and never imply
+production, structural, weld-process, or safety approval.
 
 ## Governing principles
 
@@ -84,4 +37,4 @@ A local commit referenced as `11b4387` was not found in GitHub at the time of th
 - Deterministic engineering overrides AI assumptions.
 - Every recommendation must be explainable.
 - Manufacturing practicality matters more than geometric perfection.
-- Human engineering approval remains mandatory before production release.
+- Qualified human approval remains mandatory before production release.

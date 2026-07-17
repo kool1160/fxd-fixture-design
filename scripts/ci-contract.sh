@@ -7,6 +7,7 @@ required_files=(
   AGENTS.md
   BACKLOG.md
   requirements-kernel.txt
+  requirements-desktop.txt
   docs/PRODUCT_DIRECTION.md
   docs/ENGINEERING_CONSTITUTION.md
   docs/ARCHITECTURE.md
@@ -21,7 +22,7 @@ done
 
 node scripts/fxd-backlog.mjs validate
 python -m json.tool .github/codex/schemas/planning-handoff.schema.json >/dev/null
-python -m compileall -q fxd_geometry tests scripts
+python -m compileall -q fxd_geometry tests scripts fxd_app.py fxd_qt_app.py
 
 # Run the repository suite without attempting network installation. Tests that
 # explicitly require the real OCP runtime must skip or fail closed when it is
@@ -30,7 +31,8 @@ python -m compileall -q fxd_geometry tests scripts
 python -m unittest discover -s tests
 
 if grep -RInE '(sk-[A-Za-z0-9_-]{20,}|OPENAI_API_KEY=.+)' \
-  --exclude-dir=.git --exclude='*.md' --exclude='ci.sh' --exclude='ci-contract.sh' .; then
+  --exclude-dir=.git --exclude-dir=.venv \
+  --exclude='*.md' --exclude='ci.sh' --exclude='ci-contract.sh' .; then
   echo 'Potential committed secret detected.' >&2
   exit 1
 fi
