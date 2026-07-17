@@ -592,9 +592,11 @@ class FxdWorkbenchWindow(QMainWindow):
                 source_name=self.project.product.source_name,
             )
             self.viewport.load_document(self.document)
-        except (KernelOperationError, ValueError):
+        except Exception:
+            # A renderer failure cannot invalidate an otherwise readable project.
             logger.exception("project source has no authoritative real-kernel display evidence")
             self.viewport.clear()
+            self.document = None
         self._refresh_all()
         self.log.record("project_opened", source_sha256=self.project.product.source_sha256,
                         revision=self.project.revision_id)

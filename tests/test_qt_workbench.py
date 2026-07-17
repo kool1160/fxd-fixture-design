@@ -102,6 +102,12 @@ class FakeViewport(QWidget):
         self.closed = True
 
 
+class FailingViewport(FakeViewport):
+    def load_document(self, document):
+        self.document = document
+        raise RuntimeError("injected native renderer startup failure")
+
+
 class QtWorkbenchTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -306,6 +312,28 @@ print(json.dumps(result, sort_keys=True))
         ]
         self.assertIn("Product geometry", titles)
         self.assertTrue(self.window.findings.count())
+
+    def test_project_remains_open_when_native_renderer_startup_fails(self):
+        window = FxdWorkbenchWindow(viewport_factory=FailingViewport)
+        try:
+            with tempfile.TemporaryDirectory() as directory:
+                source = Path(directory) / "project.fxd.json"
+                project = self._project()
+                project.save(source)
+                with patch("fxd_qt_app.load_step_for_workbench", return_value=object()):
+                    window.load_project_path(source)
+            self.assertEqual(window.project.revision_id, project.revision_id)
+            self.assertIsNone(window.document)
+            self.assertIsNone(window.viewport.document)
+            self.assertEqual(window._property_values["Evidence"].text(), EVIDENCE_PROVISIONAL)
+            titles = [
+                window.tree.topLevelItem(index).text(0)
+                for index in range(window.tree.topLevelItemCount())
+            ]
+            self.assertIn("Product geometry", titles)
+        finally:
+            window.close()
+            self.application.processEvents()
 
 
 if __name__ == "__main__":

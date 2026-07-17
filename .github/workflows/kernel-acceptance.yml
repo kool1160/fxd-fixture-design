@@ -6,6 +6,7 @@
       "branches": ["main"],
       "paths": [
         "fxd_geometry/**",
+        "fxd_qt_app.py",
         "tests/**",
         "scripts/**",
         "requirements-kernel.txt",
@@ -16,6 +17,7 @@
     "pull_request": {
       "paths": [
         "fxd_geometry/**",
+        "fxd_qt_app.py",
         "tests/**",
         "scripts/**",
         "requirements-kernel.txt",
