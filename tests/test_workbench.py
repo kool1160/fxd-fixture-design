@@ -1,5 +1,6 @@
 import unittest
 import tempfile
+import os
 from pathlib import Path
 from importlib.util import find_spec
 import tkinter as tk
@@ -67,7 +68,10 @@ class WorkbenchTests(unittest.TestCase):
         app.fit_view()
         self.assertEqual((app.yaw, app.pitch, app.pan_x, app.pan_y, app.zoom), (35.0, 22.0, 0.0, 0.0, 1.0))
 
-    @unittest.skipUnless(find_spec("vtk"), "VTK is unavailable")
+    @unittest.skipUnless(
+        find_spec("vtk") and (os.name == "nt" or os.environ.get("DISPLAY")),
+        "VTK/Tk display is unavailable",
+    )
     def test_persistent_vtk_scene_defaults_and_camera_controls(self):
         kernel = OcpKernel()
         with tempfile.TemporaryDirectory() as directory:
@@ -96,6 +100,25 @@ class WorkbenchTests(unittest.TestCase):
             viewer.destroy()
         finally:
             root.destroy()
+
+    def test_default_workbench_path_uses_hardened_zero_based_meshes(self):
+        base_kernel = OcpKernel()
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "real_box.step"
+            source.write_bytes(base_kernel.export_step(base_kernel.make_box((0, 0, 0), (12, 10, 8))))
+            document = load_step_for_workbench(source)
+        self.assertTrue(document.meshes)
+        self.assertTrue(all(
+            0 <= index < len(mesh.vertices_mm)
+            for mesh in document.meshes
+            for triangle in mesh.triangles
+            for index in triangle
+        ))
+
+    def test_neutral_metadata_cannot_be_presented_as_authoritative_ocp(self):
+        source = Path(__file__).parent / "fixtures" / "synthetic_assembly.step"
+        with self.assertRaises(KernelOperationError):
+            load_step_for_workbench(source)
 
 
 if __name__ == "__main__":
