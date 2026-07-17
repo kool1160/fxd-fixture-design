@@ -75,6 +75,11 @@ def run(source: Path, expected_sha256: str, title: str) -> int:
                     scene.set_transparent(bool(request["enabled"]))
                 elif command == "set_visible":
                     scene.set_visible(bool(request["enabled"]))
+                elif command == "set_review_geometry":
+                    raw_items = request.get("items", [])
+                    if not isinstance(raw_items, list):
+                        raise ValueError("review geometry items must be a list")
+                    scene.set_review_geometry(tuple(raw_items))
                 elif command == "set_orbit":
                     scene.set_orbit(bool(request["enabled"]))
                 elif command == "set_navigation_mode":
@@ -112,6 +117,7 @@ def run(source: Path, expected_sha256: str, title: str) -> int:
         "backend": diagnostics.backend,
         "actor_count": diagnostics.actor_count,
         "actor_identities": sorted(scene.actors),
+        "selection_identities": sorted(set(scene.actors) | set(scene.selection_aliases)),
         "point_count": diagnostics.point_count,
         "triangle_count": diagnostics.triangle_count,
     })

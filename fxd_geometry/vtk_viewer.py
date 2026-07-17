@@ -59,6 +59,9 @@ class VtkSceneController:
         self.actors: dict[str, object] = {}
         self.polydata: dict[str, object] = {}
         self._base_colors: dict[str, tuple[float, float, float]] = {}
+        self.source_actor_identities: set[str] = set()
+        self.review_actor_identities: set[str] = set()
+        self.selection_aliases: dict[str, str] = {}
         self.selected_identity: str | None = None
 
         component_for_face = {
@@ -66,6 +69,7 @@ class VtkSceneController:
             for component in document.assembly.components
             for face in component.faces
         }
+        self.selection_aliases.update(component_for_face)
         groups: dict[str, list[object]] = {}
         for mesh in document.meshes:
             identity = component_for_face.get(mesh.face_reference, "source:geometry")
@@ -105,6 +109,7 @@ class VtkSceneController:
             self.actors[identity] = actor
             self.polydata[identity] = geometry
             self._base_colors[identity] = color
+            self.source_actor_identities.add(identity)
 
         self.fit(render=False)
 
@@ -149,8 +154,56 @@ class VtkSceneController:
         self.render()
 
     def set_visible(self, enabled: bool) -> None:
-        for actor in self.actors.values():
-            actor.SetVisibility(enabled)
+        for identity in self.source_actor_identities:
+            self.actors[identity].SetVisibility(enabled)
+        self.render()
+
+    def set_review_geometry(self, items: tuple[dict[str, object], ...]) -> None:
+        """Replace provisional fixture review actors without touching source actors."""
+        from vtkmodules.vtkFiltersSources import vtkCubeSource
+        from vtkmodules.vtkRenderingCore import vtkActor, vtkPolyDataMapper
+
+        for identity in tuple(self.review_actor_identities):
+            actor = self.actors.pop(identity)
+            self.renderer.RemoveActor(actor)
+            self.polydata.pop(identity, None)
+            self._base_colors.pop(identity, None)
+        self.review_actor_identities.clear()
+        colors = {
+            "valid": (0.25, 0.78, 0.46),
+            "provisional": (0.95, 0.65, 0.18),
+            "invalid": (0.90, 0.25, 0.25),
+        }
+        for item in sorted(items, key=lambda value: str(value.get("identity", ""))):
+            identity = str(item.get("identity", "")).strip()
+            minimum = item.get("minimum")
+            maximum = item.get("maximum")
+            status = str(item.get("status", "provisional"))
+            if (not identity or identity in self.actors or not isinstance(minimum, (list, tuple))
+                    or not isinstance(maximum, (list, tuple)) or len(minimum) != 3 or len(maximum) != 3):
+                raise VtkViewerUnavailable("review geometry requires a unique identity and 3D bounds")
+            low = tuple(float(value) for value in minimum)
+            high = tuple(float(value) for value in maximum)
+            if any(left >= right for left, right in zip(low, high)):
+                raise VtkViewerUnavailable(f"review geometry {identity} has invalid bounds")
+            source = vtkCubeSource()
+            source.SetBounds(*(value for pair in zip(low, high) for value in pair))
+            source.Update()
+            mapper = vtkPolyDataMapper()
+            mapper.SetInputConnection(source.GetOutputPort())
+            actor = vtkActor()
+            actor.SetMapper(mapper)
+            color = colors.get(status, colors["provisional"])
+            actor.GetProperty().SetColor(*color)
+            actor.GetProperty().SetOpacity(0.55)
+            actor.GetProperty().SetRepresentationToWireframe()
+            actor.GetProperty().EdgeVisibilityOn()
+            actor.GetProperty().SetLineWidth(2.0)
+            self.renderer.AddActor(actor)
+            self.actors[identity] = actor
+            self.polydata[identity] = source.GetOutput()
+            self._base_colors[identity] = color
+            self.review_actor_identities.add(identity)
         self.render()
 
     def set_orbit(self, enabled: bool) -> None:
@@ -195,8 +248,9 @@ class VtkSceneController:
     def select(self, identity: str | None, *, focus: bool = False) -> bool:
         for key, actor in self.actors.items():
             actor.GetProperty().SetColor(*self._base_colors[key])
-        self.selected_identity = identity if identity in self.actors else None
-        actor = self.actors.get(identity or "")
+        mapped_identity = self.selection_aliases.get(identity or "", identity)
+        self.selected_identity = identity if mapped_identity in self.actors else None
+        actor = self.actors.get(mapped_identity or "")
         if actor is None:
             self.render()
             return False

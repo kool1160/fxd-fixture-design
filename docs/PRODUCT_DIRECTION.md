@@ -63,3 +63,23 @@ AI may interpret instructions, propose plans, rank concepts, explain tradeoffs, 
 ## Commercial direction
 
 FXD may become commercial software, but the current repository is an early public development scaffold with no open-source license. Do not add billing, public accounts, or SaaS infrastructure until the local engineering product proves value.
+
+## Future runtime AI boundary
+
+The base local FXD product must remain useful without paid AI calls. Future AI
+capacity may use included usage and explicit add-on analysis packages, with
+replaceable runtime providers. Routine explanation may use a balanced model
+and difficult interpretation may use a higher-reasoning model, but customers
+must never be led to believe unbounded inference is free. Structured evidence,
+assumptions, and deterministic results remain the authority; provider-specific
+AI code does not belong in the engineering kernel.
+
+## Supplier and private tooling direction
+
+FXD may recommend an exact commercial component for customer approval. Without
+an authorized supplier integration, FXD may provide the official source link,
+but the customer downloads CAD under the supplier's terms and imports it into
+their private tooling library. FXD may then place and validate that exact local
+geometry. Built-in supplier catalogs require licensing, permission, an approved
+feed, API, or partnership. FXD does not scrape supplier sites or redistribute
+unauthorized catalog geometry.

@@ -104,4 +104,31 @@ def export_project_package(project: FxdProject, destination: str | Path,
     package: FabricationPackage = build_fabrication_package(
         project.active, revision=project.revision_id,
         validation=project.active_validation, manufacturing=manufacturing)
-    return write_fabrication_package(package, destination)
+    paths = list(write_fabrication_package(package, destination))
+    if project.workflow is not None:
+        target = Path(destination) / "interactive-workflow-evidence.json"
+        validation = project.active_validation
+        workflow = project.workflow.to_dict()
+        workflow["customer_tooling"] = [
+            {key: value for key, value in item.items() if key != "source_path"}
+            for item in workflow.get("customer_tooling", [])
+        ]
+        evidence = {
+            "format": "fxd-interactive-review-evidence-v1",
+            "source_name": project.product.source_name,
+            "source_sha256": project.product.source_sha256,
+            "active_concept": project.active_concept,
+            "revision": project.revision_id,
+            "validation_status": validation.status,
+            "validation_version": validation.version,
+            "evidence_digest": validation.evidence_digest,
+            "findings": [item.__dict__ for item in validation.findings],
+            "workflow": workflow,
+            "approval_boundary": (
+                "Engineering review only. This package is not production release, "
+                "structural certification, weld approval, or safety approval."
+            ),
+        }
+        target.write_text(json.dumps(evidence, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        paths.append(target)
+    return tuple(paths)

@@ -8,6 +8,7 @@ import os
 import tempfile
 from dataclasses import dataclass, replace
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from .annotations import (
     Assumption, CriticalCharacteristic, EngineeringAnnotations, GeometryReference, WeldJoint,
@@ -20,14 +21,23 @@ from .step_import import import_step
 from .validation import ValidationResult, validate_fixture_concept
 from .structure import generate_structural_assembly
 from .placement import PlacementPlan
+from .access import evaluate_access
+from .weld_rules import evaluate_weld_rules
+
+if TYPE_CHECKING:
+    from .interactive_workflow import InteractiveWorkflow
 
 
 class ProjectFormatError(ValueError):
     """Raised when a saved project is incomplete, unsafe, or incompatible."""
 
 
-SUPPORTED_LAYERS = frozenset({"product", "fixture", "datums", "welds", "access", "warnings"})
-PROJECT_FORMAT = "fxd-neutral-project-v2"
+SUPPORTED_LAYERS = frozenset({
+    "product", "fixture", "structure", "risers", "datums", "locators",
+    "supports", "stops", "clamps", "welds", "access", "keep_out",
+    "warnings", "provisional",
+})
+PROJECT_FORMAT = "fxd-neutral-project-v3"
 
 
 @dataclass(frozen=True)
@@ -121,6 +131,7 @@ class FxdProject:
     placement: PlacementPlan | None = None
     drawing_intent: dict[str, object] | None = None
     optimization_intent: dict[str, object] | None = None
+    workflow: "InteractiveWorkflow | None" = None
 
     def __post_init__(self) -> None:
         if self.annotations.source_sha256 != self.product.source_sha256:
@@ -135,15 +146,21 @@ class FxdProject:
             raise ProjectFormatError("project suppresses unknown fixture features")
         if self.approved_revision is not None and self.approved_revision != self.revision_id:
             raise ProjectFormatError("approval does not belong to the current revision")
+        if self.workflow is not None and self.workflow.source_sha256 != self.product.source_sha256:
+            raise ProjectFormatError("interactive workflow does not match the immutable source geometry")
+        if self.workflow is not None:
+            self.workflow.validate_references(self.product)
 
     @classmethod
     def from_product(cls, product: ProductModel, annotations: EngineeringAnnotations,
-                     placement: PlacementPlan | None = None) -> "FxdProject":
+                     placement: PlacementPlan | None = None,
+                     workflow: "InteractiveWorkflow | None" = None) -> "FxdProject":
         annotations.validate_references(product)
         concepts = generate_fixture_concepts(product, annotations, placement=placement).concepts
         if not concepts:
             raise ProjectFormatError("fixture generation produced no concepts")
-        return cls(product, annotations, concepts, concepts[0].identity, placement=placement)._record_revision(None)
+        return cls(product, annotations, concepts, concepts[0].identity,
+                   placement=placement, workflow=workflow)._record_revision(None)
 
     @property
     def active(self) -> CompleteFixtureConcept:
@@ -151,7 +168,19 @@ class FxdProject:
 
     @property
     def active_validation(self) -> ValidationResult:
-        return validate_fixture_concept(self.product, self.active)
+        return self.validation_for(self.active)
+
+    def validation_for(self, concept: CompleteFixtureConcept) -> ValidationResult:
+        """Compose deterministic validation evidence available to this project."""
+        access = None
+        weld = None
+        if self.workflow is not None and self.workflow.analysis_completed:
+            access = evaluate_access(self.product, concept.fixture, self.annotations)
+            if self.annotations.weld_joints:
+                weld = evaluate_weld_rules(self.product, concept.fixture, self.annotations)
+        return validate_fixture_concept(
+            self.product, concept, access=access, weld=weld,
+        )
 
     def _invalidate_derived_intent(self) -> "FxdProject":
         """Clear evidence derived from manufacturing or drawing state."""
@@ -185,6 +214,13 @@ class FxdProject:
                             suppressed_features=frozenset(), approved_revision=None)
         return candidate._record_revision(self.revision_id)
 
+    def with_workflow(self, workflow: "InteractiveWorkflow") -> "FxdProject":
+        """Persist presentation inputs and record their revision deterministically."""
+        if workflow.source_sha256 != self.product.source_sha256:
+            raise ProjectFormatError("interactive workflow does not match the immutable source geometry")
+        candidate = replace(self, workflow=workflow, approved_revision=None)
+        return candidate._record_revision(self.revision_id)
+
     @property
     def revision_id(self) -> str:
         payload = {
@@ -194,6 +230,10 @@ class FxdProject:
             "edits": [_edit_dict(item) for item in self.edit_log],
             "optimization_intent": self.optimization_intent,
         }
+        if self.workflow is not None:
+            payload["workflow"] = self.workflow.identity_dict()
+            payload["annotations"] = self.annotations.to_dict()
+            payload["placement_digest"] = self.placement.evidence_digest if self.placement else None
         encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"))
         return "rev-" + hashlib.sha256(encoded.encode()).hexdigest()[:16]
 
@@ -417,10 +457,10 @@ class FxdProject:
             concept.identity: {"status": result.status, "version": result.version,
                                "evidence_digest": result.evidence_digest}
             for concept in self.concepts
-            for result in (validate_fixture_concept(self.product, concept),)
+            for result in (self.validation_for(concept),)
         }
         return {
-            "format": PROJECT_FORMAT, "schema_version": 2, "units": "mm",
+            "format": PROJECT_FORMAT, "schema_version": 3, "units": "mm",
             "source_name": self.product.source_name,
             "source_sha256": self.product.source_sha256,
             "source_step_base64": base64.b64encode(self.product.source_bytes).decode("ascii"),
@@ -441,6 +481,7 @@ class FxdProject:
             "placement": self.placement.to_dict() if self.placement else None,
             "drawing_intent": self.drawing_intent,
             "optimization_intent": self.optimization_intent,
+            "interactive_workflow": self.workflow.to_dict() if self.workflow else None,
             "validations": validations,
             "concept_corrections": {
                 concept.identity: [correction.__dict__ for correction in concept.corrections]
@@ -500,14 +541,30 @@ class FxdProject:
     def load(cls, source: str | Path) -> "FxdProject":
         try:
             data = json.loads(Path(source).read_text(encoding="utf-8"))
-            if data.get("format") not in {"fxd-neutral-project-v1", PROJECT_FORMAT} or data.get("units") != "mm":
+            if data.get("format") not in {
+                    "fxd-neutral-project-v1", "fxd-neutral-project-v2", PROJECT_FORMAT
+            } or data.get("units") != "mm":
                 raise ProjectFormatError("unsupported FXD project format or units")
             raw = base64.b64decode(data["source_step_base64"], validate=True)
-            product = import_step(raw.decode("utf-8"), source_name=data["source_name"])
+            workflow_data = data.get("interactive_workflow")
+            workflow = None
+            if workflow_data:
+                from .interactive_workflow import (
+                    InteractiveWorkflow, product_from_workbench_document,
+                )
+                from .workbench import load_step_for_workbench
+                document = load_step_for_workbench(raw, source_name=data["source_name"])
+                product = product_from_workbench_document(document)
+                workflow = InteractiveWorkflow.from_dict(workflow_data)
+            else:
+                product = import_step(raw.decode("utf-8"), source_name=data["source_name"])
             if product.source_sha256 != data["source_sha256"]:
                 raise ProjectFormatError("project source hash does not match embedded source")
             placement = PlacementPlan.from_dict(data["placement"]) if data.get("placement") else None
-            project = cls.from_product(product, cls._annotations(data["annotations"], product), placement=placement)
+            project = cls.from_product(
+                product, cls._annotations(data["annotations"], product),
+                placement=placement, workflow=workflow,
+            )
             for raw_edit in data.get("edit_log", []):
                 edit = FixtureEdit(raw_edit["operation"], raw_edit["target"],
                                    raw_edit.get("value"), raw_edit.get("reason", ""))
@@ -532,7 +589,7 @@ class FxdProject:
             for concept in project.concepts:
                 saved = saved_validations.get(concept.identity)
                 if saved:
-                    current = validate_fixture_concept(project.product, concept)
+                    current = project.validation_for(concept)
                     if (saved.get("status"), saved.get("version"), saved.get("evidence_digest")) != (
                             current.status, current.version, current.evidence_digest):
                         raise ProjectFormatError(f"deterministic validation changed for concept {concept.identity}")
@@ -548,7 +605,8 @@ class FxdProject:
                                revisions=saved_revisions or project.revisions,
                                approved_revision=data.get("approved_revision"),
                                drawing_intent=data.get("drawing_intent"),
-                               optimization_intent=data.get("optimization_intent"))
+                               optimization_intent=data.get("optimization_intent"),
+                               workflow=workflow)
             if restored.approved_revision is not None and restored.approved_revision != restored.revision_id:
                 raise ProjectFormatError("saved approval does not belong to the restored revision")
             return restored

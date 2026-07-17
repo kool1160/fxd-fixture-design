@@ -88,10 +88,22 @@ class WorkbenchTests(unittest.TestCase):
             self.assertEqual(viewer.actor.GetProperty().GetRepresentation(), 2)
             self.assertEqual(viewer.actor.GetProperty().GetOpacity(), 1.0)
             self.assertEqual(mapper_input.GetNumberOfPolys(), sum(len(mesh.triangles) for mesh in document.meshes))
+            source_identities = set(viewer.source_actor_identities)
+            viewer.set_review_geometry(({
+                "identity": "fixture-review-base",
+                "minimum": (-5.0, -5.0, -5.0),
+                "maximum": (45.0, 35.0, -1.0),
+                "status": "provisional",
+            },))
+            self.assertEqual(set(viewer.source_actor_identities), source_identities)
+            self.assertEqual(viewer.review_actor_identities, {"fixture-review-base"})
+            self.assertEqual(viewer.actors["fixture-review-base"].GetProperty().GetRepresentation(), 1)
+            self.assertEqual(viewer.actors["fixture-review-base"].GetProperty().GetOpacity(), 0.55)
             viewer.set_wireframe(True)
             viewer.set_transparent(True)
             viewer.set_visible(False)
             self.assertEqual(viewer.actor.GetVisibility(), 0)
+            self.assertEqual(viewer.actors["fixture-review-base"].GetVisibility(), 1)
             viewer.set_visible(True)
             viewer.set_orbit(False)
             self.assertTrue(viewer.wireframe)

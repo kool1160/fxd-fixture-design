@@ -38,7 +38,11 @@ Acceptance criteria:
 
 ## Milestone 22 — Optimize locator, support, and clamp placement
 
-**Status:** Pending
+**Status:** Complete
+
+Implemented and merged in PR #44 at `85ce6c0`. Placement evidence remains
+engineering-review-only and deterministic validation continues to override
+preference scoring.
 
 Implementation is complete and under independent PR review. Kernel-derived surface
 evidence, final B-Rep tooling geometry, and qualified human approval remain
@@ -61,7 +65,10 @@ Acceptance criteria:
 
 ## Milestone 23 — Produce manufacturing-ready fixture geometry
 
-**Status:** Pending
+**Status:** Complete
+
+Implemented and merged in PR #45 at `85b76a8`. Manufacturing geometry and
+exports remain subject to qualified engineering review and release controls.
 
 Convert an approved fixture concept into real buildable fabricated and machined component geometry.
 
@@ -79,7 +86,10 @@ Acceptance criteria:
 
 ## Milestone 24 — Generate fixture drawings and documentation
 
-**Status:** Pending
+**Status:** Complete
+
+Implemented and merged in PR #46 at `e3aaf19`. Generated documentation is a
+review package and is not automatic production release.
 
 Generate a reviewable fixture drawing package from validated fixture manufacturing geometry.
 
@@ -141,7 +151,10 @@ Acceptance criteria:
 
 ## Milestone 27 - Unified engineering workbench
 
-**Status:** Pending
+**Status:** Complete
+
+Independently visually accepted, accepted by hosted Kernel validation, and
+squash-merged in PR #49 at `7a8076a`.
 
 Unify the local engineering application around an embedded accelerated VTK
 viewport and a professional desktop shell without changing deterministic
@@ -157,5 +170,27 @@ Acceptance criteria:
 - project open/save, autosave recovery, review export, layers, and review decisions remain governed by existing contracts
 - headless CI and local Windows visual evidence both pass
 - the application remains engineering-review-only and never substitutes generated geometry for source CAD
+
+**Recommended level:** Sol
+
+## Milestone 28 - Interactive fixture engineering workflow
+
+**Status:** Pending
+
+Expose the existing deterministic product, annotation, placement, concept,
+tooling, validation, edit, revision, and export systems through the unified
+desktop workbench.
+
+Acceptance criteria:
+
+- engineers can capture explicit process intent and unknowns without changing source CAD
+- exact supported OCP faces can receive traceable engineering annotation roles
+- deterministic assembly analysis exposes datum, locating, support, clamp, weld, access, and missing-evidence results
+- supported fixture concepts can be generated, compared, selected, visualized, edited, regenerated, and revalidated
+- invalid concepts are never recommended and provisional review geometry is never represented as released manufacturing geometry
+- findings can be filtered, linked, and marked reviewed without changing authoritative validation state
+- customer-owned tooling metadata remains private and visibly verified or unverified; no supplier scraping or redistribution is added
+- the complete workflow, revision history, validation evidence, visibility, and review boundary survive save and reload
+- local Windows visual review, hosted Kernel acceptance, independent review, and merge are required before completion
 
 **Recommended level:** Sol

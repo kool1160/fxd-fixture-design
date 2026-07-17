@@ -376,3 +376,35 @@ Evidence: `bash scripts/ci-contract.sh` passes with 94 tests and four skipped
 real-kernel tests. `bash scripts/ci.sh` was attempted but could not install the
 pinned `cadquery-ocp==7.9.3.1.1` because this environment cannot resolve
 PyPI; real-kernel acceptance remains an authoritative GitHub Actions concern.
+
+## 2026-07-17 - Milestone 27 complete
+
+The unified PySide6 workbench was independently visually accepted, passed
+hosted Kernel acceptance, and was squash-merged through PR #49 at `7a8076a`.
+One main window contains the supervised native VTK viewport, engineering
+explorer, properties, findings, project operations, and renderer diagnostics.
+Real OCP source evidence, immutable SHA-256 identity, XCAF colors, zero-based
+tessellation, and fail-closed imports remain authoritative.
+
+## 2026-07-17 - Milestone 28 implementation in review
+
+The unified workbench now orchestrates explicit process setup, exact OCP face
+annotations, deterministic placement and concept generation, gated concept
+comparison, provisional fixture review visualization, operational findings,
+private tooling metadata, supported edits, revision creation, revalidation,
+and schema-v3 persistence. The implementation composes existing engineering
+contracts and does not add supplier scraping, paid AI, source-CAD mutation, or
+automatic production approval.
+
+The comparison surface includes both loading and unloading, relative cost and
+repeatability evidence, feature and tooling counts, access disciplines,
+manufacturability, maintainability, unresolved assumptions, and deterministic
+ranking rationale. The workbench exposes existing move, resize, replace,
+suppress/restore, parameter, and saved-revision operations. Private tooling
+metadata remains local and can only be marked verified when its traceability
+fields are present and its selected STEP geometry imports through real OCP.
+
+Milestone 28 remains Pending until Windows visual acceptance, hosted Kernel
+acceptance, independent review, and merge. Provisional AABB review actors are
+visually and semantically separate from real source and final manufacturing
+geometry.
