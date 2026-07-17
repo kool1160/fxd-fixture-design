@@ -16,8 +16,10 @@ from unittest.mock import PropertyMock, patch
 if find_spec("PySide6") is None:
     raise unittest.SkipTest("PySide6 desktop runtime is not installed")
 
-from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QComboBox, QWidget
+from PySide6.QtCore import QPoint, QPointF, Qt
+from PySide6.QtGui import QWheelEvent
+from PySide6.QtTest import QTest
+from PySide6.QtWidgets import QApplication, QComboBox, QWidget
 
 from fxd_geometry import (
     EngineeringAnnotations,
@@ -47,6 +49,7 @@ from fxd_qt_app import (
     LIFECYCLE_OPTIONS,
     OPERATION_MODE_OPTIONS,
     PROCESS_OPTIONS,
+    ScrollPassthroughComboBox,
     VOLUME_OPTIONS,
     _load_user32,
     create_application,
@@ -186,6 +189,27 @@ class QtWorkbenchTests(unittest.TestCase):
                 self.window.assign_selected_annotation()
             self.assertFalse(warning.called, warning.call_args)
         return source
+
+    def _show_process_panel(self) -> None:
+        self.window.resize(1366, 768)
+        self.window.workflow_tabs.setCurrentWidget(self.window.process_scroll)
+        self.window.show()
+        self.application.processEvents()
+
+    def _wheel(self, widget: QWidget, *, angle_delta_y: int = -120) -> None:
+        position = widget.rect().center()
+        event = QWheelEvent(
+            QPointF(position),
+            QPointF(widget.mapToGlobal(position)),
+            QPoint(),
+            QPoint(0, angle_delta_y),
+            Qt.MouseButton.NoButton,
+            Qt.KeyboardModifier.NoModifier,
+            Qt.ScrollPhase.ScrollUpdate,
+            False,
+        )
+        QApplication.sendEvent(widget, event)
+        self.application.processEvents()
 
     def _author_m30_tack_build(self, *, source: Path = FIXTURE):
         self.window._replace_project(self._project(source))
@@ -369,6 +393,50 @@ class QtWorkbenchTests(unittest.TestCase):
         self.assertEqual(self.window.process_construction.currentText(), "Tack or Location Fixture")
         self.assertEqual(self.window.process_lifecycle.currentText(), "Disposable or job-run recut")
         self.assertEqual(self.window.process_cleco_strategy.currentText(), "Separate fixture Cleco holes")
+
+    def test_m30_closed_process_dropdown_wheel_scrolls_the_parent_without_changing_input(self):
+        self._show_process_panel()
+        controls = (
+            self.window.process_fixture_type, self.window.process_method, self.window.process_mode,
+            self.window.process_volume, self.window.process_build, self.window.process_load,
+            self.window.process_unload, self.window.process_base, self.window.process_construction,
+            self.window.process_lifecycle, self.window.process_cleco_strategy,
+            self.window.process_adjustment_state,
+        )
+        for control in controls:
+            with self.subTest(control=control.objectName() or control.currentText()):
+                self.assertIsInstance(control, ScrollPassthroughComboBox)
+
+        combo = self.window.process_fixture_type
+        scroll_bar = self.window.process_scroll.verticalScrollBar()
+        scroll_bar.setValue(0)
+        combo.setFocus()
+        selected_before = combo.currentIndex()
+        self._wheel(combo)
+
+        self.assertEqual(combo.currentIndex(), selected_before)
+        self.assertGreater(scroll_bar.value(), 0)
+
+    def test_m30_open_process_dropdown_and_keyboard_selection_remain_available(self):
+        self._show_process_panel()
+        combo = self.window.process_fixture_type
+        target_index = 1
+
+        combo.showPopup()
+        self.application.processEvents()
+        self.assertTrue(combo.view().isVisible())
+        target = combo.view().visualRect(combo.model().index(target_index, 0))
+        QTest.mouseClick(
+            combo.view().viewport(), Qt.MouseButton.LeftButton, pos=target.center()
+        )
+        self.application.processEvents()
+        self.assertEqual(combo.currentIndex(), target_index)
+
+        combo.setCurrentIndex(0)
+        combo.setFocus()
+        QTest.keyClick(combo, Qt.Key.Key_Down)
+        self.application.processEvents()
+        self.assertEqual(combo.currentIndex(), target_index)
 
     def test_m30_process_form_grows_without_horizontal_clipping(self):
         self.window.resize(1366, 768)

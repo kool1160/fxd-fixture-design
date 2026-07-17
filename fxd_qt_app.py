@@ -16,8 +16,8 @@ from threading import Thread
 from time import monotonic, perf_counter
 from typing import Callable
 
-from PySide6.QtCore import QObject, QRunnable, QSettings, QSize, QThreadPool, QTimer, Qt, Signal
-from PySide6.QtGui import QAction, QActionGroup, QCloseEvent, QPixmap, QResizeEvent
+from PySide6.QtCore import QObject, QPointF, QRunnable, QSettings, QSize, QThreadPool, QTimer, Qt, Signal
+from PySide6.QtGui import QAction, QActionGroup, QCloseEvent, QPixmap, QResizeEvent, QWheelEvent
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -127,6 +127,37 @@ ADJUSTMENT_STATE_OPTIONS = (
     "Provisional adjustment", "Prove-out setting", "Locked production position",
     "Doweled production position", "Revalidation required",
 )
+
+
+class ScrollPassthroughComboBox(QComboBox):
+    """Keep closed engineering selectors from consuming scroll-wheel input."""
+
+    def wheelEvent(self, event) -> None:
+        if self.view().isVisible():
+            super().wheelEvent(event)
+            return
+        parent = self.parentWidget()
+        while parent is not None:
+            if isinstance(parent, QScrollArea):
+                target = parent.viewport()
+                global_position = event.globalPosition()
+                local_position = QPointF(target.mapFromGlobal(global_position.toPoint()))
+                forwarded = QWheelEvent(
+                    local_position,
+                    global_position,
+                    event.pixelDelta(),
+                    event.angleDelta(),
+                    event.buttons(),
+                    event.modifiers(),
+                    event.phase(),
+                    event.inverted(),
+                )
+                QApplication.sendEvent(target, forwarded)
+                event.accept()
+                return
+            parent = parent.parentWidget()
+        # Preserve standard Qt propagation when the combo is not in a scroll area.
+        event.ignore()
 
 
 def _load_user32():
@@ -533,8 +564,10 @@ class FxdWorkbenchWindow(QMainWindow):
         self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, dock)
 
     @staticmethod
-    def _combo(values: tuple[str, ...], *, editable: bool = False) -> QComboBox:
-        combo = QComboBox()
+    def _combo(
+        values: tuple[str, ...], *, editable: bool = False, wheel_to_parent: bool = False,
+    ) -> QComboBox:
+        combo = ScrollPassthroughComboBox() if wheel_to_parent else QComboBox()
         combo.addItems(values)
         combo.setEditable(editable)
         combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
@@ -587,16 +620,16 @@ class FxdWorkbenchWindow(QMainWindow):
         process_form.setHorizontalSpacing(10)
         process_form.setVerticalSpacing(8)
         self.process_project_name = QLineEdit()
-        self.process_fixture_type = self._combo(FIXTURE_TYPE_OPTIONS)
-        self.process_method = self._combo(PROCESS_OPTIONS)
-        self.process_mode = self._combo(OPERATION_MODE_OPTIONS)
+        self.process_fixture_type = self._combo(FIXTURE_TYPE_OPTIONS, wheel_to_parent=True)
+        self.process_method = self._combo(PROCESS_OPTIONS, wheel_to_parent=True)
+        self.process_mode = self._combo(OPERATION_MODE_OPTIONS, wheel_to_parent=True)
         self.process_quantity = QSpinBox()
         self.process_quantity.setRange(1, 10_000_000)
         self.process_quantity.setValue(10)
-        self.process_volume = self._combo(VOLUME_OPTIONS)
-        self.process_build = self._combo(DIRECTION_OPTIONS)
-        self.process_load = self._combo(DIRECTION_OPTIONS)
-        self.process_unload = self._combo(DIRECTION_OPTIONS)
+        self.process_volume = self._combo(VOLUME_OPTIONS, wheel_to_parent=True)
+        self.process_build = self._combo(DIRECTION_OPTIONS, wheel_to_parent=True)
+        self.process_load = self._combo(DIRECTION_OPTIONS, wheel_to_parent=True)
+        self.process_unload = self._combo(DIRECTION_OPTIONS, wheel_to_parent=True)
         self.process_build.setCurrentText("+Z")
         self.process_unload.setCurrentText("-X")
         self.process_operator = QLineEdit()
@@ -607,15 +640,15 @@ class FxdWorkbenchWindow(QMainWindow):
         self.process_shop.setPlaceholderText("laser cutting, welding, machining")
         self.process_material = QLineEdit()
         self.process_material.setPlaceholderText("Unknown, or product/process assumptions")
-        self.process_base = self._combo(BASE_STRATEGY_OPTIONS)
-        self.process_construction = self._combo(CONSTRUCTION_OPTIONS)
-        self.process_lifecycle = self._combo(LIFECYCLE_OPTIONS)
+        self.process_base = self._combo(BASE_STRATEGY_OPTIONS, wheel_to_parent=True)
+        self.process_construction = self._combo(CONSTRUCTION_OPTIONS, wheel_to_parent=True)
+        self.process_lifecycle = self._combo(LIFECYCLE_OPTIONS, wheel_to_parent=True)
         self.process_repeat_frequency = QLineEdit()
         self.process_repeat_frequency.setPlaceholderText("Unknown, or repeat frequency")
         self.process_job_revision = QLineEdit()
         self.process_job_revision.setPlaceholderText("Required for disposable or recut fixture")
-        self.process_cleco_strategy = self._combo(CLECO_STRATEGY_OPTIONS)
-        self.process_adjustment_state = self._combo(ADJUSTMENT_STATE_OPTIONS)
+        self.process_cleco_strategy = self._combo(CLECO_STRATEGY_OPTIONS, wheel_to_parent=True)
+        self.process_adjustment_state = self._combo(ADJUSTMENT_STATE_OPTIONS, wheel_to_parent=True)
         self.process_product_hole_approval = QCheckBox("Recorded")
         self.process_product_hole_justification = QLineEdit()
         self.process_product_hole_justification.setPlaceholderText("Cost, process, or customer justification")
