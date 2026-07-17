@@ -65,6 +65,12 @@ from .optimization import (ENGINEERING_ESTIMATE_NOTICE, CostAnalysis, CostAssump
                             LaborCost, ManufacturabilityFinding, MaterialCost, OptimizationAlternative,
                             OptimizationError, OptimizationRecommendation, ProcessCost, PurchasedToolingCost,
                             VolumeScenario, analyze_fixture_cost)
+from .interactive_workflow import (
+    WORKFLOW_SCHEMA, AnnotationRole, ConceptComparison, CustomerToolingRecord,
+    GeometryAnnotation, InteractiveWorkflow, InteractiveWorkflowError,
+    OperationTiming, ProcessSetup, analyze_engineering_workflow, compare_concepts,
+    face_annotation, product_from_workbench_document, tooling_record_from_file,
+)
 
 
 def require_real_kernel() -> RealKernel:
@@ -109,3 +115,7 @@ __all__ += ["ENGINEERING_ESTIMATE_NOTICE", "CostAnalysis", "CostAssumptions", "C
             "ManufacturabilityFinding", "MaterialCost", "OptimizationAlternative", "OptimizationError",
             "OptimizationRecommendation", "ProcessCost", "PurchasedToolingCost", "VolumeScenario",
             "analyze_fixture_cost"]
+__all__ += ["WORKFLOW_SCHEMA", "AnnotationRole", "ConceptComparison", "CustomerToolingRecord",
+            "GeometryAnnotation", "InteractiveWorkflow", "InteractiveWorkflowError",
+            "OperationTiming", "ProcessSetup", "analyze_engineering_workflow", "compare_concepts",
+            "face_annotation", "product_from_workbench_document", "tooling_record_from_file"]

@@ -175,6 +175,7 @@ def generate_fixture_primitives(product: ProductModel, annotations: EngineeringA
     physical = tuple((component, body) for component in product.components for body in component.bodies)
     if not physical:
         raise FixtureGenerationError("product has no physical bodies to fixture")
+    references = tuple(_ref(component.identity, body) for component, body in physical)
 
     product_box = _bounds(body.bounds.transformed(component.transform) for component, body in physical)
     mins = [product_box.minimum.x, product_box.minimum.y, product_box.minimum.z]
@@ -196,7 +197,7 @@ def generate_fixture_primitives(product: ProductModel, annotations: EngineeringA
         base_high[build_axis] = contact_plane + params.base_thickness
 
     features: list[FixtureFeature] = [FixtureFeature(
-        "baseplate", "baseplate", _aabb(base_low, base_high), (), "baseplate_from_build_orientation",
+        "baseplate", "baseplate", _aabb(base_low, base_high), references, "baseplate_from_build_orientation",
         {"margin": params.base_margin, "thickness": params.base_thickness,
          "build_axis": float(build_axis), "build_sign": build_sign},
         assumptions=("Dominant build-orientation axis defines the proof-layer base normal.",),
@@ -251,7 +252,6 @@ def generate_fixture_primitives(product: ProductModel, annotations: EngineeringA
             stop_high[build_axis] = contact_plane
             stop_low[build_axis] = min(stop_low[build_axis], mins[build_axis] - params.locator_height)
 
-    references = tuple(_ref(component.identity, body) for component, body in physical)
     features.append(FixtureFeature(
         "loading-stop", "hard_stop", _aabb(stop_low, stop_high), references,
         "stop_against_loading_direction",

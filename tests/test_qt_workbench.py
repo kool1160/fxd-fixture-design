@@ -19,6 +19,7 @@ from PySide6.QtWidgets import QWidget
 
 from fxd_geometry import (
     EngineeringAnnotations,
+    ExportError,
     KernelOperationError,
     OcpKernel,
     RenderDiagnostics,
@@ -66,6 +67,9 @@ class FakeScene:
         self.selected_identity = identity
         self.calls.append(("select", identity, focus))
         return identity.startswith("component:") or identity == "source:geometry"
+
+    def set_review_geometry(self, items):
+        self.calls.append(("review_geometry", tuple(item["identity"] for item in items)))
 
     def benchmark(self, frames=20):
         self.calls.append(("benchmark", frames))
@@ -142,6 +146,27 @@ class QtWorkbenchTests(unittest.TestCase):
             production_quantity=1,
         )
         return FxdProject.from_product(product, annotations)
+
+    def _load_and_annotate_real_product(self, directory: str):
+        source = self._real_step(directory)
+        self.window.load_step_path(source)
+        self.window.process_build.setCurrentText("+Z")
+        self.window.process_load.setCurrentText("+X")
+        self.window.process_unload.setCurrentText("-X")
+        for role_index, face_index in enumerate((0, 1, 2)):
+            category = next(
+                self.window.tree.topLevelItem(index)
+                for index in range(self.window.tree.topLevelItemCount())
+                if self.window.tree.topLevelItem(index).text(0) == "Components"
+            )
+            component = category.child(0)
+            self.window.tree.setCurrentItem(component.child(face_index))
+            self.application.processEvents()
+            self.window.annotation_role.setCurrentIndex(role_index)
+            with patch("fxd_qt_app.QMessageBox.warning") as warning:
+                self.window.assign_selected_annotation()
+            self.assertFalse(warning.called, warning.call_args)
+        return source
 
     def test_shell_creation_has_one_embedded_viewport_and_no_side_effects(self):
         self.assertIs(self.window.centralWidget().findChild(FakeViewport), self.window.viewport)
@@ -271,6 +296,132 @@ print(json.dumps(result, sort_keys=True))
             [("fit",), ("view", "bottom"), ("navigation", "pan"),
              ("wireframe", True), ("transparent", True)],
         )
+
+    def test_blocked_export_surfaces_authoritative_gate_without_writing(self):
+        self.window.project = self._project()
+        with tempfile.TemporaryDirectory() as directory, patch(
+            "fxd_qt_app.QFileDialog.getExistingDirectory", return_value=directory
+        ), patch(
+            "fxd_qt_app.export_project_package",
+            side_effect=ExportError("validation status is provisional"),
+        ) as export, patch("fxd_qt_app.QMessageBox.warning") as warning:
+            self.window.export_package()
+        export.assert_called_once()
+        warning.assert_called_once_with(
+            self.window, "Export blocked", "validation status is provisional"
+        )
+        self.assertIn("Export blocked", self.window.statusBar().currentMessage())
+
+    def test_interactive_analysis_wires_exact_faces_to_existing_engines(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = self._load_and_annotate_real_product(directory)
+            before = source.read_bytes()
+            with patch("fxd_qt_app.QMessageBox.warning") as warning:
+                self.window.analyze_assembly_now()
+            self.assertFalse(warning.called, warning.call_args)
+            self.assertEqual(source.read_bytes(), before)
+        self.assertIsNotNone(self.window.project)
+        self.assertTrue(self.window.workflow.analysis_completed)
+        self.assertEqual(len(self.window.workflow.geometry_annotations), 3)
+        self.assertIsNotNone(self.window.project.placement)
+        self.assertTrue(self.window._property_values["Evidence digest"].text())
+
+    def test_concepts_populate_comparison_tree_and_provisional_viewport_geometry(self):
+        with tempfile.TemporaryDirectory() as directory:
+            self._load_and_annotate_real_product(directory)
+            with patch("fxd_qt_app.QMessageBox.warning") as warning:
+                self.window.analyze_assembly_now()
+            self.assertFalse(warning.called, warning.call_args)
+            self.window.generate_concepts()
+        self.assertTrue(self.window.workflow.concepts_generated)
+        self.assertEqual(self.window.concept_table.rowCount(), 3)
+        self.assertEqual(self.window.concept_table.columnCount(), 18)
+        self.assertEqual(
+            self.window.concept_table.horizontalHeaderItem(17).text(), "Why ranked"
+        )
+        review_calls = [item for item in self.window.viewport.scene.calls
+                        if item[0] == "review_geometry"]
+        self.assertTrue(review_calls)
+        self.assertTrue(review_calls[-1][1])
+        titles = [self.window.tree.topLevelItem(index).text(0)
+                  for index in range(self.window.tree.topLevelItemCount())]
+        self.assertIn("Fixture concepts", titles)
+        self.assertFalse(any(
+            self.window.concept_table.item(row, 1).text() == "INVALID"
+            and self.window.concept_table.item(row, 2).text() == "Recommended"
+            for row in range(self.window.concept_table.rowCount())
+        ))
+
+    def test_supported_workbench_edit_records_revision_and_revalidation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            self._load_and_annotate_real_product(directory)
+            with patch("fxd_qt_app.QMessageBox.warning") as warning:
+                self.window.analyze_assembly_now()
+            self.assertFalse(warning.called, warning.call_args)
+            self.window.generate_concepts()
+        before = self.window.project.revision_id
+        self.window.edit_parameter_name.setCurrentText("base_thickness")
+        self.window.edit_parameter_value.setValue(18.0)
+        self.window.edit_reason.setText("Increase base review thickness")
+        with patch("fxd_qt_app.QMessageBox.warning") as warning:
+            self.window.apply_parameter_edit()
+        self.assertFalse(warning.called, warning.call_args)
+        self.assertNotEqual(self.window.project.revision_id, before)
+        self.assertEqual(self.window.project.active.fixture.parameters.base_thickness, 18.0)
+        self.assertIsNone(self.window.project.approved_revision)
+        self.assertGreaterEqual(self.window.revision_list.count(), 2)
+
+    def test_supported_feature_move_and_suppression_use_existing_revision_engine(self):
+        with tempfile.TemporaryDirectory() as directory:
+            self._load_and_annotate_real_product(directory)
+            with patch("fxd_qt_app.QMessageBox.warning") as warning:
+                self.window.analyze_assembly_now()
+            self.assertFalse(warning.called, warning.call_args)
+            self.window.generate_concepts()
+        target = self.window.project.active.fixture.features[0].identity
+        before = self.window.project.revision_id
+        self.window.edit_operation.setCurrentText("Move feature")
+        self.window.edit_target.setCurrentText(target)
+        self.window.edit_move_x.setValue(5.0)
+        self.window.edit_reason.setText("Move for deterministic access review")
+        with patch("fxd_qt_app.QMessageBox.warning") as warning:
+            self.window.apply_parameter_edit()
+        self.assertFalse(warning.called, warning.call_args)
+        self.assertNotEqual(self.window.project.revision_id, before)
+        self.assertEqual(self.window.project.edit_log[-1].operation, "move")
+        self.window.edit_operation.setCurrentText("Suppress or restore feature")
+        self.window.edit_target.setCurrentText(target)
+        with patch("fxd_qt_app.QMessageBox.warning") as warning:
+            self.window.apply_parameter_edit()
+        self.assertFalse(warning.called, warning.call_args)
+        self.assertIn(target, self.window.project.suppressed_features)
+
+    def test_private_tooling_import_records_engineer_supplied_metadata(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = self._real_step(directory)
+            self.window.load_step_path(source)
+            self.window.tooling_identity.setText("private-clamp-01")
+            self.window.tooling_kind.setCurrentText("clamp")
+            self.window.tooling_manufacturer.setText("FXD test tooling")
+            self.window.tooling_part_number.setText("TC-01")
+            self.window.tooling_revision.setText("B")
+            self.window.tooling_mount_direction.setCurrentText("+Z")
+            self.window.tooling_work_direction.setCurrentText("-Z")
+            self.window.tooling_stroke.setValue(32.0)
+            self.window.tooling_reach.setValue(85.0)
+            self.window.tooling_force.setValue(1200.0)
+            self.window.tooling_verified.setChecked(True)
+            with patch(
+                "fxd_qt_app.QFileDialog.getOpenFileName", return_value=(str(source), "")
+            ), patch("fxd_qt_app.QMessageBox.warning") as warning:
+                self.window.import_customer_tooling()
+        self.assertFalse(warning.called, warning.call_args)
+        record = self.window.workflow.customer_tooling[0]
+        self.assertEqual(record.identity, "private-clamp-01")
+        self.assertEqual(record.manufacturer, "FXD test tooling")
+        self.assertEqual(record.mounting_direction, Vec3(0, 0, 1))
+        self.assertEqual(record.force_n, 1200.0)
+        self.assertTrue(record.verified)
 
     def test_benchmark_updates_registered_property_rows(self):
         self.window.viewport.document = object()
