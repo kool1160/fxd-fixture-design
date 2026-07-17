@@ -508,7 +508,14 @@ def analyze_engineering_workflow(document: WorkbenchDocument,
     validation_started = perf_counter()
     _ = tuple(project.validation_for(concept) for concept in project.concepts)
     validation_ms = (perf_counter() - validation_started) * 1000.0
-    timings = (
+    analysis_operations = {
+        "normalize_real_ocp_evidence", "placement_analysis", "concept_generation",
+        "validation", "total_analysis",
+    }
+    retained_timings = tuple(
+        item for item in state.timings if item.operation not in analysis_operations
+    )
+    timings = retained_timings + (
         OperationTiming("normalize_real_ocp_evidence", round(normalize_ms, 3)),
         OperationTiming("placement_analysis", round(placement_ms, 3)),
         OperationTiming("concept_generation", round(concept_ms, 3)),

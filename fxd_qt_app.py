@@ -54,6 +54,7 @@ from fxd_geometry import (
     InteractiveWorkflowError,
     KernelOperationError,
     OcpKernel,
+    OperationTiming,
     ProcessSetup,
     RenderDiagnostics,
     Vec3,
@@ -834,7 +835,9 @@ class FxdWorkbenchWindow(QMainWindow):
         try:
             before = source.read_bytes()
             before_digest = sha256(before).hexdigest()
+            import_started = monotonic()
             document = load_step_for_workbench(source)
+            import_elapsed_ms = round((monotonic() - import_started) * 1000.0, 3)
             after_digest = sha256(source.read_bytes()).hexdigest()
             if before_digest != after_digest or before != document.source_bytes:
                 raise RuntimeError("source STEP identity changed during import")
@@ -844,6 +847,7 @@ class FxdWorkbenchWindow(QMainWindow):
             self.workflow = InteractiveWorkflow(
                 document.source_sha256,
                 ProcessSetup(project_name=source.stem),
+                timings=(OperationTiming("step_import", import_elapsed_ms),),
             )
             self.project_path = None
             self.selected_identity = None
@@ -851,10 +855,12 @@ class FxdWorkbenchWindow(QMainWindow):
             self._refresh_all()
             self.setWindowTitle(f"FXD - {source.name} - engineering review only")
             self.statusBar().showMessage(
-                f"Loaded immutable STEP through OCP: {document.component_count} components."
+                f"Loaded immutable STEP through OCP in {import_elapsed_ms:.1f} ms: "
+                f"{document.component_count} components."
             )
             self.log.record("step_opened", source_sha256=document.source_sha256,
-                            component_count=document.component_count)
+                            component_count=document.component_count,
+                            elapsed_ms=import_elapsed_ms)
         except Exception as exc:
             logger.exception("STEP import failed for %s", source)
             self.viewport.clear()
@@ -1532,6 +1538,7 @@ class FxdWorkbenchWindow(QMainWindow):
             reason = self.edit_reason.text().strip() or "Engineer fixture correction"
             operation = self.edit_operation.currentText()
             target = self.edit_target.currentText().strip()
+            regeneration_started = monotonic()
             if operation == "Set parameter":
                 self.project = self.project.edit_parameter(
                     self.edit_parameter_name.currentText(), self.edit_parameter_value.value(), reason,
@@ -1557,13 +1564,28 @@ class FxdWorkbenchWindow(QMainWindow):
                 self.project = self.project.suppress(target, reason)
             else:
                 raise ProjectFormatError(f"unsupported workbench edit {operation!r}")
-            self.workflow = replace(self.workflow, active_stage="Validation", concepts_generated=True)
+            regeneration_elapsed_ms = round(
+                (monotonic() - regeneration_started) * 1000.0, 3
+            )
+            timings = tuple(
+                item for item in self.workflow.timings if item.operation != "regeneration"
+            ) + (OperationTiming("regeneration", regeneration_elapsed_ms),)
+            self.workflow = replace(
+                self.workflow, active_stage="Validation", concepts_generated=True,
+                timings=timings,
+            )
             self.project = self.project.with_workflow(self.workflow)
             self._show_active_concept_geometry()
             self._refresh_all()
             self.statusBar().showMessage(
                 f"Revision {old_revision} replaced by {self.project.revision_id}; "
-                f"approval {'revoked' if old_approval else 'remains absent'} and validation reran."
+                f"approval {'revoked' if old_approval else 'remains absent'} and validation reran "
+                f"in {regeneration_elapsed_ms:.1f} ms."
+            )
+            self.log.record(
+                "engineering_regeneration_completed", revision=self.project.revision_id,
+                operation=operation, elapsed_ms=regeneration_elapsed_ms,
+                validation=self.project.active_validation.status,
             )
         except ProjectFormatError as exc:
             QMessageBox.warning(self, "Edit blocked", str(exc))

@@ -266,6 +266,11 @@ print(json.dumps(result, sort_keys=True))
         self.assertGreater(int(self.window._property_values["Faces"].text()), 0)
         self.assertGreater(int(self.window._property_values["Triangles"].text()), 0)
         self.assertFalse(self.window.viewport.separate_window_created)
+        import_timing = next(
+            item for item in self.window.workflow.timings if item.operation == "step_import"
+        )
+        self.assertGreaterEqual(import_timing.elapsed_ms, 0.0)
+        self.assertIn(" ms", self.window.statusBar().currentMessage())
 
     def test_component_selection_preserves_identity_and_routes_to_scene(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -370,6 +375,10 @@ print(json.dumps(result, sort_keys=True))
         self.assertEqual(self.window.project.active.fixture.parameters.base_thickness, 18.0)
         self.assertIsNone(self.window.project.approved_revision)
         self.assertGreaterEqual(self.window.revision_list.count(), 2)
+        regeneration = next(
+            item for item in self.window.workflow.timings if item.operation == "regeneration"
+        )
+        self.assertGreaterEqual(regeneration.elapsed_ms, 0.0)
 
     def test_supported_feature_move_and_suppression_use_existing_revision_engine(self):
         with tempfile.TemporaryDirectory() as directory:
