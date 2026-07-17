@@ -2,7 +2,7 @@
 
 from collections.abc import Iterable
 
-from PySide6.QtCore import QSize, Qt, Signal
+from PySide6.QtCore import QSize, Qt, QTimer, Signal
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -141,6 +141,7 @@ class WorkflowRail(QListWidget):
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
+        self._clicked_item: QListWidgetItem | None = None
         self.setObjectName("workflowRail")
         self.setFixedWidth(DIMENSIONS.workflow_rail)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -156,9 +157,25 @@ class WorkflowRail(QListWidget):
             item.setToolTip(f"{index}. {name} - Not started")
             item.setData(Qt.ItemDataRole.AccessibleTextRole, f"{name}, Not started")
             self.addItem(item)
-        self.itemActivated.connect(
-            lambda item: self.stage_selected.emit(str(item.data(Qt.ItemDataRole.UserRole)))
-        )
+        self.itemClicked.connect(self._select_clicked_stage)
+        self.itemActivated.connect(self._activate_stage)
+
+    def _emit_stage(self, item: QListWidgetItem) -> None:
+        self.stage_selected.emit(str(item.data(Qt.ItemDataRole.UserRole)))
+
+    def _select_clicked_stage(self, item: QListWidgetItem) -> None:
+        self._clicked_item = item
+        self._emit_stage(item)
+        QTimer.singleShot(0, self._clear_clicked_item)
+
+    def _activate_stage(self, item: QListWidgetItem) -> None:
+        if item is self._clicked_item:
+            self._clicked_item = None
+            return
+        self._emit_stage(item)
+
+    def _clear_clicked_item(self) -> None:
+        self._clicked_item = None
 
     def set_states(self, states: dict[str, str], active: str | None) -> None:
         active_item = None

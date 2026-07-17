@@ -11,6 +11,7 @@ if find_spec("PySide6") is None:
     raise unittest.SkipTest("PySide6 desktop runtime is not installed")
 
 from PySide6.QtCore import Qt
+from PySide6.QtTest import QSignalSpy, QTest
 from PySide6.QtWidgets import QApplication
 
 from fxd_ui import ApprovalGatePanel, SourceCadBadge, StatusChip, WorkflowRail
@@ -126,6 +127,47 @@ class BrandingWidgetTests(unittest.TestCase):
         self.assertEqual(validation.data(Qt.ItemDataRole.UserRole + 1), "active")
         self.assertIn("Validation - Active", validation.toolTip())
         self.assertIn("Engineer Modified", rail.item(10).toolTip())
+
+    def test_workflow_rail_single_click_navigates_once(self):
+        rail = WorkflowRail()
+        rail.resize(64, 320)
+        rail.show()
+        try:
+            selected = QSignalSpy(rail.stage_selected)
+            item = rail.item(1)
+            QTest.mouseClick(
+                rail.viewport(), Qt.MouseButton.LeftButton,
+                Qt.KeyboardModifier.NoModifier, rail.visualItemRect(item).center(),
+            )
+            self.application.processEvents()
+            self.assertEqual(selected.count(), 1)
+            self.assertEqual(selected.at(0)[0], "Import")
+        finally:
+            rail.close()
+
+    def test_workflow_rail_keyboard_activation_navigates_once(self):
+        rail = WorkflowRail()
+        rail.show()
+        try:
+            selected = QSignalSpy(rail.stage_selected)
+            rail.setCurrentRow(2)
+            rail.setFocus()
+            QTest.keyClick(rail, Qt.Key.Key_Return)
+            self.application.processEvents()
+            self.assertEqual(selected.count(), 1)
+            self.assertEqual(selected.at(0)[0], "Assembly")
+        finally:
+            rail.close()
+
+    def test_workflow_rail_click_activation_pair_does_not_duplicate_navigation(self):
+        rail = WorkflowRail()
+        selected = QSignalSpy(rail.stage_selected)
+        item = rail.item(3)
+        rail.itemClicked.emit(item)
+        rail.itemActivated.emit(item)
+        self.application.processEvents()
+        self.assertEqual(selected.count(), 1)
+        self.assertEqual(selected.at(0)[0], "Manufacturing Intent")
 
     def test_approval_gate_cannot_hide_a_blocking_result(self):
         gate = ApprovalGatePanel()
