@@ -46,6 +46,18 @@ Foreman setup is documented in `docs/FOREMAN_SETUP.md`.
 
 FXD is in early research and prototyping. It does not yet generate production-approved fixtures.
 
+## Local workbench
+
+On Windows, launch the first desktop viewer with:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\fxd-app.py
+```
+
+Use **Import STEP** to load a model through the real OCP kernel and inspect
+its 3D geometry. The workbench is engineering-review-only and never mutates
+customer source CAD.
+
 ## Baseline checks
 
 Run `bash scripts/ci.sh` for repository health. The Milestone 1 synthetic

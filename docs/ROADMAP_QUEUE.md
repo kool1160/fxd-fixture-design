@@ -95,7 +95,11 @@ Acceptance criteria:
 
 ## Milestone 25 — Optimize cost, volume, and manufacturability
 
-**Status:** Pending
+**Status:** Complete
+
+Implemented and merged in PR #47. Cost, volume, and manufacturability
+comparisons remain engineering-review evidence and do not claim production
+approval.
 
 Compare fixture strategies against production volume, loading time, tooling cost, fabrication effort, machining effort, repeatability, maintenance, and automation requirements.
 

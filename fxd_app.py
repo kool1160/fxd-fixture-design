@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import math
+import logging
 import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog, ttk
@@ -14,12 +15,19 @@ from fxd_geometry import (
     ReviewGeometry,
     Vec3,
     VisualEdge,
+    VtkViewerUnavailable,
+    VtkWorkbenchViewer,
+    WorkbenchDocument,
     build_review_geometry,
     generate_manufacturing_geometry,
     import_step,
+    load_step_for_workbench,
 )
 from fxd_geometry.project import FxdProject, ProjectFormatError, SUPPORTED_LAYERS
 from fxd_geometry.operations import ProjectRecovery, StructuredLog, export_project_package
+
+
+logger = logging.getLogger("fxd.app")
 
 REVIEW_LAYERS = ("locators", "supports", "stops", "clamps")
 
@@ -28,6 +36,8 @@ class FxdApp:
     def __init__(self, root: tk.Tk, project: FxdProject | None = None) -> None:
         self.root, self.project = root, project
         self.yaw, self.pitch, self.drag = 35.0, 22.0, None
+        self.pan_x, self.pan_y, self.zoom = 0.0, 0.0, 1.0
+        self.pan_drag = None
         self.kernel = None
         self.product_shape = None
         self.review_geometry: ReviewGeometry | None = None
@@ -37,13 +47,18 @@ class FxdApp:
         self.section_view = False
         self.hidden_review_layers: set[str] = set()
         self.project_path: Path | None = None
+        self.workbench_document: WorkbenchDocument | None = None
+        self.vtk_viewer: VtkWorkbenchViewer | None = None
+        self.orbit_enabled = True
         self.log = StructuredLog(Path.home() / ".fxd" / "diagnostics.jsonl")
 
         root.title("FXD — Engineering Review (not production approval)")
         root.geometry("1180x760")
         self.status = tk.StringVar(value="Open a legally shareable STEP assembly to begin.")
-        self.canvas = tk.Canvas(root, background="#18212b", highlightthickness=0)
-        self.canvas.pack(side="left", fill="both", expand=True)
+        self.viewport = ttk.Frame(root)
+        self.viewport.pack(side="left", fill="both", expand=True)
+        self.canvas = tk.Canvas(self.viewport, background="#18212b", highlightthickness=0)
+        self.canvas.pack(fill="both", expand=True)
         side = ttk.Frame(root, padding=10, width=330)
         side.pack(side="right", fill="y")
         ttk.Button(side, text="Import STEP", command=self.import_step).pack(fill="x")
@@ -71,10 +86,16 @@ class FxdApp:
         ttk.Button(side, text="Reject concept",
                    command=lambda: self.decide("reject")).pack(fill="x")
         ttk.Button(side, text="Fit to view", command=self.fit_view).pack(fill="x", pady=(8, 2))
+        ttk.Label(side, text="Standard views").pack(anchor="w", pady=(6, 0))
+        for view in ("front", "top", "right"):
+            ttk.Button(side, text=view.title(),
+                       command=lambda item=view: self.set_standard_view(item)).pack(fill="x", pady=1)
         ttk.Button(side, text="Toggle wireframe",
                    command=lambda: self.set_display("wireframe")).pack(fill="x", pady=1)
         ttk.Button(side, text="Toggle transparency",
                    command=lambda: self.set_display("transparent")).pack(fill="x", pady=1)
+        self.orbit_label = tk.StringVar(value="Orbit: On")
+        ttk.Button(side, textvariable=self.orbit_label, command=self.toggle_orbit).pack(fill="x", pady=1)
         ttk.Button(side, text="Toggle kernel section", command=self.toggle_section).pack(fill="x", pady=1)
 
         self.findings = tk.Text(side, width=42, height=12, wrap="word", state="disabled")
@@ -83,6 +104,10 @@ class FxdApp:
         self.canvas.bind("<ButtonPress-1>", self.start_drag)
         self.canvas.bind("<B1-Motion>", self.rotate)
         self.canvas.bind("<ButtonRelease-1>", self.pick_item)
+        self.canvas.bind("<ButtonPress-3>", self.start_pan)
+        self.canvas.bind("<B3-Motion>", self.pan)
+        self.canvas.bind("<ButtonRelease-3>", self.end_pan)
+        self.canvas.bind("<MouseWheel>", self.zoom_view)
         self.canvas.bind("<Configure>", lambda _event: self.render())
         if project:
             self._restore_kernel_geometry()
@@ -92,21 +117,45 @@ class FxdApp:
         name = filedialog.askopenfilename(filetypes=(("STEP", "*.step *.stp"), ("All files", "*")))
         if not name:
             return
+        self.load_step_path(Path(name))
+
+    def load_step_path(self, source: Path) -> None:
         try:
-            source = Path(name)
             product = import_step(source)
             annotations = EngineeringAnnotations.for_product(
                 product, build_orientation=Vec3(0, 0, 1), loading_direction=Vec3(1, 0, 0),
                 process_type="manual MIG", production_quantity=1)
             self.project = FxdProject.from_product(product, annotations)
+            self.workbench_document = None
+            self._hide_vtk_viewer()
             self.project_path = None
             self._restore_kernel_geometry()
+            self.root.title(f"FXD — {source.name} · OCP engineering review")
             message = (f"Imported immutable STEP and {len(self.review_geometry.meshes)} selectable "
                        "product/fixture B-Rep face meshes." if self.review_geometry else
                        "Imported immutable STEP; real-kernel display is unavailable and review remains provisional.")
             self.refresh(message)
-        except Exception as exc:
-            messagebox.showerror("STEP import failed", str(exc))
+        except Exception as neutral_error:
+            logger.exception("complete neutral STEP import traceback for %s", source.name)
+            try:
+                self.workbench_document = load_step_for_workbench(source)
+                self.project = None
+                self.project_path = None
+                self.kernel = OcpKernel()
+                self._show_vtk_viewer(self.workbench_document)
+                self.root.title(f"FXD — {source.name} · OCP engineering review")
+                self.status.set(
+                    f"Loaded {self.workbench_document.source_name}: OCP B-Rep, "
+                    f"{self.workbench_document.component_count} OCP components, "
+                    f"SHA-256 {self.workbench_document.source_sha256[:12]}."
+                )
+                self.refresh()
+            except Exception as kernel_error:
+                messagebox.showerror(
+                    "STEP import failed",
+                    f"Neutral FXD import failed:\n{neutral_error}\n\n"
+                    f"Real OCP import failed:\n{kernel_error}",
+                )
 
     def open_project(self) -> None:
         name = filedialog.askopenfilename(filetypes=(("FXD project", "*.fxd.json"),))
@@ -114,6 +163,8 @@ class FxdApp:
             return
         try:
             self.project = FxdProject.load(name)
+            self.workbench_document = None
+            self._hide_vtk_viewer()
             self.project_path = Path(name)
             self.log.record("project_opened", source_sha256=self.project.product.source_sha256,
                             revision=self.project.revision_id)
@@ -174,12 +225,38 @@ class FxdApp:
             return
         try:
             self.kernel = OcpKernel()
-            self.product_shape = self.kernel.import_step(self.project.product.source_bytes)
+            self.product_shape = load_step_for_workbench(
+                self.project.product.source_bytes, kernel=self.kernel,
+                source_name=self.project.product.source_name,
+            ).shape
             self._rebuild_review_geometry()
         except KernelUnavailable:
             return
         except Exception as exc:
+            logger.exception("complete workbench geometry traceback for %s", self.project.product.source_name)
             self.status.set(f"Real-kernel evidence unavailable; provisional view only ({exc}).")
+
+    def _show_vtk_viewer(self, document: WorkbenchDocument) -> None:
+        self._hide_vtk_viewer()
+        try:
+            self.vtk_viewer = VtkWorkbenchViewer(self.viewport, document)
+            if not self.vtk_viewer.visible:
+                self.vtk_viewer.destroy()
+                raise VtkViewerUnavailable("VTK render window could not map on this host")
+        except VtkViewerUnavailable as exc:
+            logger.exception("VTK viewer unavailable")
+            self.vtk_viewer = None
+            self.status.set(f"Native GPU viewport unavailable; using real-geometry CPU fallback ({exc}).")
+            self.canvas.pack(fill="both", expand=True)
+        else:
+            self.canvas.pack_forget()
+
+    def _hide_vtk_viewer(self) -> None:
+        if self.vtk_viewer is not None:
+            self.vtk_viewer.destroy()
+            self.vtk_viewer = None
+        if not self.canvas.winfo_ismapped():
+            self.canvas.pack(fill="both", expand=True)
 
     def _rebuild_review_geometry(self) -> None:
         self.review_geometry = None
@@ -283,6 +360,24 @@ class FxdApp:
     def start_drag(self, event) -> None:
         self.drag = (event.x, event.y, self.yaw, self.pitch)
 
+    def start_pan(self, event) -> None:
+        self.pan_drag = (event.x, event.y, self.pan_x, self.pan_y)
+
+    def pan(self, event) -> None:
+        if self.pan_drag:
+            x, y, pan_x, pan_y = self.pan_drag
+            self.pan_x = pan_x + event.x - x
+            self.pan_y = pan_y + event.y - y
+            self.render()
+
+    def end_pan(self, _event) -> None:
+        self.pan_drag = None
+
+    def zoom_view(self, event) -> None:
+        self.zoom = max(0.15, min(8.0, self.zoom * (1.1 if event.delta > 0 else 1 / 1.1)))
+        self.status.set(f"Zoom {self.zoom:.2f}x")
+        self.render()
+
     def rotate(self, event) -> None:
         if self.drag:
             x, y, yaw, pitch = self.drag
@@ -308,8 +403,21 @@ class FxdApp:
         self.drag = None
 
     def render(self) -> None:
+        if self.vtk_viewer and not self.project:
+            self.vtk_viewer.render()
+            return
         self.canvas.delete("all")
         if not self.project:
+            if self.workbench_document:
+                self._render_workbench_document()
+                self.canvas.create_text(
+                    12, 12, anchor="nw", fill="#9bd3ff",
+                    text=(f"REAL OCP · "
+                          f"{self.workbench_document.source_name} · "
+                          f"{self.workbench_document.component_count} components · "
+                          "engineering review only"),
+                )
+                return
             self.canvas.create_text(30, 30, anchor="nw", fill="white",
                                     text="FXD visual engineering review\n\nDrag to rotate the 3D projection.")
             return
@@ -324,6 +432,29 @@ class FxdApp:
             12, 12, anchor="nw", fill=banner_color,
             text=(f"{source} · {self.project.active.identity}: {validation.status.upper()} · "
                   f"evidence {validation.evidence_digest[:12]} — not production approval"))
+
+    def _render_workbench_document(self) -> None:
+        document = self.workbench_document
+        if not document:
+            return
+        vertices = [point for mesh in document.meshes for point in mesh.vertices_mm]
+        if not vertices:
+            return
+        center = tuple((min(point[i] for point in vertices) + max(point[i] for point in vertices)) / 2
+                       for i in range(3))
+        span = max(max(point[i] for point in vertices) - min(point[i] for point in vertices)
+                   for i in range(3)) or 1
+        polygons = []
+        for mesh in document.meshes:
+            for triangle in mesh.triangles:
+                points = [mesh.vertices_mm[index] for index in triangle]
+                polygons.append((sum(point[2] for point in points) / 3,
+                                 [self.project_point(point, center, span) for point in points]))
+        for _depth, projected in sorted(polygons):
+            flat = [coordinate for point in projected for coordinate in point]
+            outline = "#66c2ff" if self.display_mode == "wireframe" else ""
+            fill = "" if self.display_mode == "wireframe" else "#24445c"
+            self.canvas.create_polygon(*flat, fill=fill, outline=outline)
 
     def _visible_items(self):
         assert self.review_geometry and self.project
@@ -380,6 +511,19 @@ class FxdApp:
 
     def set_display(self, mode: str) -> None:
         self.display_mode = "solid" if self.display_mode == mode else mode
+        if self.vtk_viewer:
+            if mode == "wireframe":
+                self.vtk_viewer.set_wireframe(self.display_mode == "wireframe")
+            elif mode == "transparent":
+                self.vtk_viewer.set_transparent(self.display_mode == "transparent")
+        self.render()
+
+    def toggle_orbit(self) -> None:
+        self.orbit_enabled = not self.orbit_enabled
+        self.orbit_label.set(f"Orbit: {'On' if self.orbit_enabled else 'Off'}")
+        if self.vtk_viewer:
+            self.vtk_viewer.set_orbit(self.orbit_enabled)
+        self.status.set(f"Orbit mode {'enabled' if self.orbit_enabled else 'disabled'}.")
         self.render()
 
     def toggle_section(self) -> None:
@@ -389,6 +533,24 @@ class FxdApp:
 
     def fit_view(self) -> None:
         self.yaw, self.pitch = 35.0, 22.0
+        self.pan_x, self.pan_y, self.zoom = 0.0, 0.0, 1.0
+        if self.vtk_viewer:
+            self.vtk_viewer.fit()
+            return
+        self.status.set("Fit all: isometric view")
+        self.render()
+
+    def set_standard_view(self, view: str) -> None:
+        if self.vtk_viewer:
+            self.vtk_viewer.standard_view(view)
+            self.status.set(f"Standard view: {view}")
+            return
+        views = {"front": (0.0, 0.0), "top": (0.0, 90.0), "right": (90.0, 0.0)}
+        if view not in views:
+            raise ValueError(f"unsupported standard view {view!r}")
+        self.yaw, self.pitch = views[view]
+        self.pan_x, self.pan_y, self.zoom = 0.0, 0.0, 1.0
+        self.status.set(f"Standard view: {view}")
         self.render()
 
     def _render_bounds(self) -> None:
@@ -425,14 +587,16 @@ class FxdApp:
         xr, zr = x * math.cos(yaw) - z * math.sin(yaw), x * math.sin(yaw) + z * math.cos(yaw)
         yr = y * math.cos(pitch) - zr * math.sin(pitch)
         zr = y * math.sin(pitch) + zr * math.cos(pitch)
-        scale = min(self.canvas.winfo_width(), self.canvas.winfo_height()) * 0.72 / span
-        return (self.canvas.winfo_width() / 2 + xr * scale,
-                self.canvas.winfo_height() / 2 - yr * scale - zr * scale * 0.15)
+        scale = min(self.canvas.winfo_width(), self.canvas.winfo_height()) * 0.72 / span * self.zoom
+        return (self.canvas.winfo_width() / 2 + xr * scale + self.pan_x,
+                self.canvas.winfo_height() / 2 - yr * scale - zr * scale * 0.15 + self.pan_y)
 
 
-def main() -> None:
+def main(step_path: Path | None = None) -> None:
     root = tk.Tk()
-    FxdApp(root)
+    app = FxdApp(root)
+    if step_path is not None:
+        root.after(50, lambda: app.load_step_path(step_path))
     root.mainloop()
 
 

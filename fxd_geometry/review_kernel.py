@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import re
 
 from .kernel import (
@@ -10,6 +11,9 @@ from .kernel import (
     KernelTriangleMesh,
     OcpKernel as _BaseOcpKernel,
 )
+
+
+logger = logging.getLogger("fxd.review_kernel")
 
 
 def zero_based_triangle(indices: tuple[int, int, int], vertex_count: int) -> tuple[int, int, int]:
@@ -88,7 +92,9 @@ class OcpKernel(_BaseOcpKernel):
             model, linear_deflection_mm, False, angular_deflection_rad, True
         )
         result: list[KernelTriangleMesh] = []
-        for face in self._subshapes(model, "face"):
+        faces = self._subshapes(model, "face")
+        logger.info("STEP tessellation face_count=%d", len(faces))
+        for face in faces:
             records = self.face_records(face)
             if len(records) != 1:
                 raise KernelOperationError("OCCT face did not yield one stable face record")
@@ -115,6 +121,7 @@ class OcpKernel(_BaseOcpKernel):
                     values = (values[0], values[2], values[1])
                 triangles.append(values)
             result.append(KernelTriangleMesh(records[0].reference, vertices, tuple(triangles)))
+        logger.info("STEP tessellation triangle_count=%d", sum(len(mesh.triangles) for mesh in result))
         return tuple(sorted(result, key=lambda mesh: mesh.face_reference))
 
     def edge_records(self, model: object) -> tuple[KernelEdgeRecord, ...]:
