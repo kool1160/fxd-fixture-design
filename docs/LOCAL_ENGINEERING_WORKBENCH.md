@@ -98,6 +98,21 @@ Generated AABB feature evidence is shown only as translucent wireframe
 provisional review geometry; it is never labeled `REAL OCP`, final B-Rep, or
 released fabrication geometry.
 
+### Manufacturing orientation
+
+Before **Analyze Assembly**, choose the Manufacturing Orientation proposal in
+the Process panel. Familiar Front, Top, Right, selected planar face, custom
+plane, and source-orientation choices define a separate manufacturing XYZ
+frame. The selected face receives a review-only highlight; the VTK viewport
+also shows a translucent build plane, manufacturing triad, gravity, load, and
+unload directions. Flip and rotation controls change that review frame without
+rotating source CAD. An engineer must explicitly accept the current
+source-SHA-linked orientation before deterministic analysis can run. Any source
+or orientation change clears downstream concepts and authored fixture geometry.
+
+See `docs/MANUFACTURING_ORIENTATION_CONTRACT.md` for persistence, transform,
+validation, and limitation details.
+
 Supported parameter, move, resize, replacement, suppression/restore, and saved
 revision restoration operations create deterministic project revisions, revoke
 prior review approval, regenerate concepts, and rerun validation. Private local

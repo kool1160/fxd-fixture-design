@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 from time import perf_counter
 
 from .workbench import WorkbenchDocument
@@ -159,9 +160,26 @@ class VtkSceneController:
         self.render()
 
     def set_review_geometry(self, items: tuple[dict[str, object], ...]) -> None:
-        """Replace provisional fixture review actors without touching source actors."""
-        from vtkmodules.vtkFiltersSources import vtkCubeSource
+        """Replace review-only actors without touching immutable source actors."""
+        from vtkmodules.vtkCommonCore import vtkPoints
+        from vtkmodules.vtkCommonDataModel import vtkCellArray, vtkPolyData, vtkTriangle
+        from vtkmodules.vtkCommonTransforms import vtkTransform
+        from vtkmodules.vtkFiltersSources import vtkArrowSource, vtkCubeSource, vtkPlaneSource
         from vtkmodules.vtkRenderingCore import vtkActor, vtkPolyDataMapper
+
+        def vector(value: object, label: str) -> tuple[float, float, float]:
+            if not isinstance(value, (list, tuple)) or len(value) != 3:
+                raise VtkViewerUnavailable(f"{label} must be a 3D vector")
+            result = tuple(float(item) for item in value)
+            if not all(math.isfinite(item) for item in result):
+                raise VtkViewerUnavailable(f"{label} must contain finite values")
+            return result
+
+        def unit(value: tuple[float, float, float], label: str) -> tuple[float, float, float]:
+            length = math.sqrt(sum(item * item for item in value))
+            if length <= 1e-9:
+                raise VtkViewerUnavailable(f"{label} must not be zero")
+            return tuple(item / length for item in value)
 
         for identity in tuple(self.review_actor_identities):
             actor = self.actors.pop(identity)
@@ -176,32 +194,119 @@ class VtkSceneController:
         }
         for item in sorted(items, key=lambda value: str(value.get("identity", ""))):
             identity = str(item.get("identity", "")).strip()
-            minimum = item.get("minimum")
-            maximum = item.get("maximum")
+            kind = str(item.get("kind", "bounds"))
             status = str(item.get("status", "provisional"))
-            if (not identity or identity in self.actors or not isinstance(minimum, (list, tuple))
-                    or not isinstance(maximum, (list, tuple)) or len(minimum) != 3 or len(maximum) != 3):
-                raise VtkViewerUnavailable("review geometry requires a unique identity and 3D bounds")
-            low = tuple(float(value) for value in minimum)
-            high = tuple(float(value) for value in maximum)
-            if any(left >= right for left, right in zip(low, high)):
-                raise VtkViewerUnavailable(f"review geometry {identity} has invalid bounds")
-            source = vtkCubeSource()
-            source.SetBounds(*(value for pair in zip(low, high) for value in pair))
-            source.Update()
+            if not identity or identity in self.actors:
+                raise VtkViewerUnavailable("review geometry requires a unique identity")
+            source: object
+            geometry: object
+            actor_transform: object | None = None
+            if kind in {"orientation_plane", "orientation_selected_face_plane"}:
+                origin = vector(item.get("origin"), "orientation plane origin")
+                x_axis = unit(vector(item.get("x_axis"), "orientation plane X axis"), "orientation plane X axis")
+                y_axis = unit(vector(item.get("y_axis"), "orientation plane Y axis"), "orientation plane Y axis")
+                if abs(sum(left * right for left, right in zip(x_axis, y_axis))) > 1e-6:
+                    raise VtkViewerUnavailable("orientation plane axes must be orthogonal")
+                half_width = float(item.get("half_width", 0.0))
+                if not math.isfinite(half_width) or half_width <= 0.0:
+                    raise VtkViewerUnavailable("orientation plane half width must be positive")
+                corners = (
+                    tuple(origin[index] - half_width * x_axis[index] - half_width * y_axis[index] for index in range(3)),
+                    tuple(origin[index] + half_width * x_axis[index] - half_width * y_axis[index] for index in range(3)),
+                    tuple(origin[index] - half_width * x_axis[index] + half_width * y_axis[index] for index in range(3)),
+                )
+                source = vtkPlaneSource()
+                source.SetOrigin(*corners[0])
+                source.SetPoint1(*corners[1])
+                source.SetPoint2(*corners[2])
+                source.SetXResolution(1)
+                source.SetYResolution(1)
+                source.Update()
+                geometry = source.GetOutput()
+            elif kind == "orientation_arrow":
+                origin = vector(item.get("origin"), "orientation arrow origin")
+                direction = unit(vector(item.get("direction"), "orientation arrow direction"), "orientation arrow direction")
+                length = float(item.get("length", 0.0))
+                if not math.isfinite(length) or length <= 0.0:
+                    raise VtkViewerUnavailable("orientation arrow length must be positive")
+                source = vtkArrowSource()
+                source.Update()
+                transform = vtkTransform()
+                transform.PostMultiply()
+                transform.Scale(length, length, length)
+                dot = max(-1.0, min(1.0, direction[0]))
+                if dot < 1.0 - 1e-9:
+                    if dot <= -1.0 + 1e-9:
+                        transform.RotateWXYZ(180.0, 0.0, 1.0, 0.0)
+                    else:
+                        axis = (0.0, -direction[2], direction[1])
+                        transform.RotateWXYZ(math.degrees(math.acos(dot)), *unit(axis, "orientation arrow axis"))
+                transform.Translate(*origin)
+                actor_transform = transform
+                geometry = source.GetOutput()
+            elif kind == "orientation_face_highlight":
+                vertices = item.get("vertices")
+                triangles = item.get("triangles")
+                if not isinstance(vertices, (list, tuple)) or not isinstance(triangles, (list, tuple)):
+                    raise VtkViewerUnavailable("orientation face highlight requires tessellation")
+                points = vtkPoints()
+                for point in vertices:
+                    points.InsertNextPoint(*vector(point, "orientation face vertex"))
+                cells = vtkCellArray()
+                for triangle in triangles:
+                    if not isinstance(triangle, (list, tuple)) or len(triangle) != 3:
+                        raise VtkViewerUnavailable("orientation face highlight requires triangles")
+                    cell = vtkTriangle()
+                    for local, index in enumerate(triangle):
+                        if not isinstance(index, int) or index < 0 or index >= len(vertices):
+                            raise VtkViewerUnavailable("orientation face triangle index is invalid")
+                        cell.GetPointIds().SetId(local, index)
+                    cells.InsertNextCell(cell)
+                source = vtkPolyData()
+                source.SetPoints(points)
+                source.SetPolys(cells)
+                geometry = source
+            else:
+                minimum = item.get("minimum")
+                maximum = item.get("maximum")
+                low = vector(minimum, "review geometry minimum")
+                high = vector(maximum, "review geometry maximum")
+                if any(left >= right for left, right in zip(low, high)):
+                    raise VtkViewerUnavailable(f"review geometry {identity} has invalid bounds")
+                source = vtkCubeSource()
+                source.SetBounds(*(value for pair in zip(low, high) for value in pair))
+                source.Update()
+                geometry = source.GetOutput()
             mapper = vtkPolyDataMapper()
-            mapper.SetInputConnection(source.GetOutputPort())
+            if isinstance(source, vtkPolyData):
+                mapper.SetInputData(source)
+            else:
+                mapper.SetInputConnection(source.GetOutputPort())
             actor = vtkActor()
             actor.SetMapper(mapper)
-            color = colors.get(status, colors["provisional"])
+            if "color" in item:
+                color = vector(item["color"], "review geometry color")
+                if any(item < 0.0 or item > 1.0 for item in color):
+                    raise VtkViewerUnavailable("review geometry color must be normalized")
+            else:
+                color = colors.get(status, colors["provisional"])
             actor.GetProperty().SetColor(*color)
-            actor.GetProperty().SetOpacity(0.55)
-            actor.GetProperty().SetRepresentationToWireframe()
-            actor.GetProperty().EdgeVisibilityOn()
+            opacity = float(item.get("opacity", 0.55))
+            if not math.isfinite(opacity) or not 0.0 <= opacity <= 1.0:
+                raise VtkViewerUnavailable("review geometry opacity must be between zero and one")
+            actor.GetProperty().SetOpacity(opacity)
+            if str(item.get("representation", "wireframe")) == "surface":
+                actor.GetProperty().SetRepresentationToSurface()
+                actor.GetProperty().EdgeVisibilityOff()
+            else:
+                actor.GetProperty().SetRepresentationToWireframe()
+                actor.GetProperty().EdgeVisibilityOn()
             actor.GetProperty().SetLineWidth(2.0)
+            if actor_transform is not None:
+                actor.SetUserTransform(actor_transform)
             self.renderer.AddActor(actor)
             self.actors[identity] = actor
-            self.polydata[identity] = source.GetOutput()
+            self.polydata[identity] = geometry
             self._base_colors[identity] = color
             self.review_actor_identities.add(identity)
         self.render()

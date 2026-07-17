@@ -10,6 +10,7 @@ from fxd_geometry import (
     InteractiveWorkflowError, OcpKernel, OperationTiming, ProcessSetup, Vec3,
     analyze_engineering_workflow, compare_concepts, face_annotation,
     load_step_for_workbench, product_from_workbench_document,
+    reference_plane_orientation, source_orientation, ReferencePlane,
     tooling_record_from_file,
 )
 from fxd_geometry.project import FxdProject
@@ -40,6 +41,10 @@ class InteractiveWorkflowTests(unittest.TestCase):
             "Top and operator-side hand access", "No robot in this revision",
             ("laser cutting", "welding"), "Mild-steel fabricated assembly",
             "Baseplate", 0.1, 2.0, ("vendor-neutral standard clamps",),
+            manufacturing_orientation=source_orientation(self.document.source_sha256, accepted=True),
+            manufacturing_build_direction=Vec3(0, 0, 1),
+            manufacturing_loading_direction=Vec3(1, 0, 0),
+            manufacturing_unloading_direction=Vec3(-1, 0, 0),
         )
 
     def workflow(self):
@@ -60,6 +65,20 @@ class InteractiveWorkflowTests(unittest.TestCase):
         restored = ProcessSetup.from_dict(setup.to_dict())
         self.assertEqual(restored, setup)
         self.assertIsNone(restored.automation_assumptions)
+
+    def test_legacy_workflow_without_manufacturing_orientation_remains_readable(self):
+        payload = self.workflow().to_dict()
+        payload["schema_version"] = "fxd-interactive-workflow-v1"
+        for key in (
+            "manufacturing_orientation", "manufacturing_build_direction",
+            "manufacturing_loading_direction", "manufacturing_unloading_direction",
+        ):
+            payload["setup"].pop(key)
+        restored = InteractiveWorkflow.from_dict(payload)
+        self.assertEqual(restored.schema_version, "fxd-interactive-workflow-v1")
+        self.assertIsNone(restored.setup.manufacturing_orientation)
+        with self.assertRaisesRegex(InteractiveWorkflowError, "accepted manufacturing orientation"):
+            analyze_engineering_workflow(self.document, restored)
 
     def test_real_ocp_product_preserves_source_and_stable_face_references(self):
         first = product_from_workbench_document(self.document)
@@ -94,6 +113,38 @@ class InteractiveWorkflowTests(unittest.TestCase):
             {"normalize_real_ocp_evidence", "placement_analysis", "concept_generation",
              "validation", "total_analysis"},
         )
+
+    def test_analysis_requires_an_accepted_manufacturing_orientation(self):
+        setup = replace(
+            self.setup(), manufacturing_orientation=source_orientation(self.document.source_sha256),
+        )
+        with self.assertRaisesRegex(InteractiveWorkflowError, "accepted manufacturing orientation"):
+            analyze_engineering_workflow(
+                self.document, InteractiveWorkflow(self.document.source_sha256, setup)
+            )
+
+    def test_analysis_uses_accepted_manufacturing_axes_at_the_engine_boundary(self):
+        orientation = reference_plane_orientation(
+            self.document.source_sha256, ReferencePlane.RIGHT, accepted=True,
+        )
+        setup = replace(
+            self.setup(), manufacturing_orientation=orientation,
+            manufacturing_build_direction=Vec3(0, 0, 1),
+            manufacturing_loading_direction=Vec3(1, 0, 0),
+            manufacturing_unloading_direction=Vec3(-1, 0, 0),
+        )
+        project = analyze_engineering_workflow(
+            self.document, InteractiveWorkflow(self.document.source_sha256, setup)
+        )
+        self.assertEqual(
+            project.annotations.build_orientation,
+            orientation.manufacturing_vector_to_source(Vec3(0, 0, 1)),
+        )
+        self.assertEqual(
+            project.annotations.loading_direction,
+            orientation.manufacturing_vector_to_source(Vec3(1, 0, 0)),
+        )
+        self.assertEqual(self.source.read_bytes(), self.original)
 
     def test_missing_datum_evidence_is_blocking_not_placeholder_geometry(self):
         project = analyze_engineering_workflow(
@@ -140,6 +191,10 @@ class InteractiveWorkflowTests(unittest.TestCase):
         project.save(destination)
         restored = FxdProject.load(destination)
         self.assertEqual(restored.workflow.to_dict(), workflow.to_dict())
+        self.assertEqual(
+            restored.workflow.setup.manufacturing_orientation,
+            workflow.setup.manufacturing_orientation,
+        )
         self.assertEqual(restored.product.source_bytes, self.original)
         self.assertEqual(restored.revision_id, project.revision_id)
 

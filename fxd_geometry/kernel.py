@@ -75,6 +75,8 @@ class KernelFace:
     area_mm2: float
     center_mm: tuple[float, float, float]
     normal: tuple[float, float, float]
+    surface_type: str = "unknown"
+    is_planar: bool = False
 
 
 @dataclass(frozen=True)
@@ -473,6 +475,7 @@ class OcpKernel:
 
     def face_records(self, model: object) -> tuple[KernelFace, ...]:
         from OCP.BRepAdaptor import BRepAdaptor_Surface
+        from OCP.GeomAbs import GeomAbs_Plane
         from OCP.BRepGProp import BRepGProp
         from OCP.GProp import GProp_GProps
         from OCP.TopAbs import TopAbs_REVERSED
@@ -495,9 +498,14 @@ class OcpKernel:
             area = round(float(props.Mass()), 9)
             center = tuple(round(x, 9) for x in (point.X(), point.Y(), point.Z()))
             direction = tuple(round(x, 9) for x in (normal.X(), normal.Y(), normal.Z()))
+            surface_type = surface.GetType()
+            planar = surface_type == GeomAbs_Plane
             token = hashlib.sha256(repr((area, center, direction,
-                                         int(surface.GetType()))).encode()).hexdigest()[:24]
-            records.append(KernelFace("face:" + token, area, center, direction))
+                                         int(surface_type))).encode()).hexdigest()[:24]
+            records.append(KernelFace(
+                "face:" + token, area, center, direction,
+                "plane" if planar else str(surface_type), planar,
+            ))
         return tuple(sorted(records, key=lambda item: item.reference))
 
     @staticmethod

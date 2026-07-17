@@ -72,6 +72,19 @@ from .interactive_workflow import (
     OperationTiming, ProcessSetup, analyze_engineering_workflow, compare_concepts,
     face_annotation, product_from_workbench_document, tooling_record_from_file,
 )
+from .manufacturing_orientation import (
+    CoordinateSystem,
+    ManufacturingOrientation,
+    ManufacturingOrientationError,
+    OrientationMethod,
+    OrientationRecommendation,
+    ReferencePlane,
+    orientation_from_face,
+    orientation_from_plane,
+    recommend_orientations,
+    reference_plane_orientation,
+    source_orientation,
+)
 from .fabrication_workflow import (
     M30_SCHEMA, RULE_CATALOG, RULES_BY_ID, AdjustmentState, AuthoredFixtureAssembly,
     AuthoredFixtureComponent, BuildComponentRole, ClecoSpec, ClecoStrategy,
@@ -131,6 +144,10 @@ __all__ += ["WORKFLOW_SCHEMA", "AnnotationRole", "ConceptComparison", "CustomerT
             "GeometryAnnotation", "InteractiveWorkflow", "InteractiveWorkflowError",
             "OperationTiming", "ProcessSetup", "analyze_engineering_workflow", "compare_concepts",
             "face_annotation", "product_from_workbench_document", "tooling_record_from_file"]
+__all__ += ["CoordinateSystem", "ManufacturingOrientation", "ManufacturingOrientationError",
+            "OrientationMethod", "OrientationRecommendation", "ReferencePlane",
+            "orientation_from_face", "orientation_from_plane", "recommend_orientations",
+            "reference_plane_orientation", "source_orientation"]
 __all__ += ["M30_SCHEMA", "RULE_CATALOG", "RULES_BY_ID", "AdjustmentState", "AuthoredFixtureAssembly",
             "AuthoredFixtureComponent", "BuildComponentRole", "ClecoSpec", "ClecoStrategy",
             "ConstructionMethod", "FixtureBuildComparison", "FixtureBuildComponent", "FixtureBuildError",

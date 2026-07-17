@@ -48,7 +48,10 @@ from fxd_qt_app import (
     FIXTURE_TYPE_OPTIONS,
     LIFECYCLE_OPTIONS,
     OPERATION_MODE_OPTIONS,
+    ORIENTATION_METHOD_OPTIONS,
+    ORIENTATION_ROTATION_OPTIONS,
     PROCESS_OPTIONS,
+    REFERENCE_PLANE_OPTIONS,
     ScrollPassthroughComboBox,
     VOLUME_OPTIONS,
     _load_user32,
@@ -172,6 +175,8 @@ class QtWorkbenchTests(unittest.TestCase):
     def _load_and_annotate_real_product(self, directory: str):
         source = self._real_step(directory)
         self.window.load_step_path(source)
+        self.window.reset_to_source_orientation()
+        self.window.accept_manufacturing_orientation()
         self.window.process_build.setCurrentText("+Z")
         self.window.process_load.setCurrentText("+X")
         self.window.process_unload.setCurrentText("-X")
@@ -377,6 +382,9 @@ class QtWorkbenchTests(unittest.TestCase):
             self.window.process_lifecycle: LIFECYCLE_OPTIONS,
             self.window.process_cleco_strategy: CLECO_STRATEGY_OPTIONS,
             self.window.process_adjustment_state: ADJUSTMENT_STATE_OPTIONS,
+            self.window.orientation_method: ORIENTATION_METHOD_OPTIONS,
+            self.window.orientation_reference_plane: REFERENCE_PLANE_OPTIONS,
+            self.window.orientation_rotation: ORIENTATION_ROTATION_OPTIONS,
         }
         for control, options in expected.items():
             with self.subTest(control=control.objectName() or type(control).__name__):
@@ -393,6 +401,58 @@ class QtWorkbenchTests(unittest.TestCase):
         self.assertEqual(self.window.process_construction.currentText(), "Tack or Location Fixture")
         self.assertEqual(self.window.process_lifecycle.currentText(), "Disposable or job-run recut")
         self.assertEqual(self.window.process_cleco_strategy.currentText(), "Separate fixture Cleco holes")
+
+    def test_manufacturing_orientation_face_preview_acceptance_and_staleness(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = self._real_step(directory)
+            original = source.read_bytes()
+            self.window.load_step_path(source)
+            category = next(
+                self.window.tree.topLevelItem(index)
+                for index in range(self.window.tree.topLevelItemCount())
+                if self.window.tree.topLevelItem(index).text(0) == "Components"
+            )
+            self.window.tree.setCurrentItem(category.child(0).child(0))
+            self.application.processEvents()
+            self.window.select_build_down_face()
+            draft = self.window.workflow.setup.manufacturing_orientation
+            self.assertIsNotNone(draft)
+            self.assertFalse(draft.accepted)
+            self.assertIn("Selected planar OCP face", self.window.orientation_selected_face.text())
+            review_ids = next(
+                call[1] for call in reversed(self.window.viewport.scene.calls)
+                if call[0] == "review_geometry"
+            )
+            self.assertIn("orientation:build-plane", review_ids)
+            self.assertIn("orientation:selected-face", review_ids)
+            self.assertIn("orientation:manufacturing-z", review_ids)
+            self.assertIn("orientation:gravity", review_ids)
+
+            self.window.accept_manufacturing_orientation()
+            accepted = self.window.workflow.setup.manufacturing_orientation
+            self.assertTrue(accepted.accepted)
+            self.assertTrue(self.window.analyze_button.isEnabled())
+            self.window.authored_fixture_build = object()
+            self.window.orientation_flip_normal.setChecked(True)
+            self.application.processEvents()
+            self.assertIsNone(self.window.project)
+            self.assertIsNone(self.window.authored_fixture_build)
+            self.assertFalse(self.window.workflow.analysis_completed)
+            self.assertFalse(self.window.workflow.setup.manufacturing_orientation.accepted)
+            self.assertEqual(source.read_bytes(), original)
+
+    def test_source_replacement_invalidates_manufacturing_orientation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            first = self._real_step(directory)
+            second = Path(directory) / "replacement.step"
+            second.write_bytes(self.kernel.export_step(self.kernel.make_box((0, 0, 0), (40, 20, 8))))
+            self.window.load_step_path(first)
+            self.window.reset_to_source_orientation()
+            self.window.accept_manufacturing_orientation()
+            self.assertTrue(self.window.workflow.setup.manufacturing_orientation.accepted)
+            self.window.load_step_path(second)
+            self.assertIsNone(self.window.workflow.setup.manufacturing_orientation)
+            self.assertFalse(self.window.analyze_button.isEnabled())
 
     def test_m30_closed_process_dropdown_wheel_scrolls_the_parent_without_changing_input(self):
         self._show_process_panel()

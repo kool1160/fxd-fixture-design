@@ -89,16 +89,42 @@ class WorkbenchTests(unittest.TestCase):
             self.assertEqual(viewer.actor.GetProperty().GetOpacity(), 1.0)
             self.assertEqual(mapper_input.GetNumberOfPolys(), sum(len(mesh.triangles) for mesh in document.meshes))
             source_identities = set(viewer.source_actor_identities)
-            viewer.set_review_geometry(({
-                "identity": "fixture-review-base",
-                "minimum": (-5.0, -5.0, -5.0),
-                "maximum": (45.0, 35.0, -1.0),
-                "status": "provisional",
-            },))
+            mesh = document.meshes[0]
+            viewer.set_review_geometry((
+                {
+                    "identity": "fixture-review-base",
+                    "minimum": (-5.0, -5.0, -5.0),
+                    "maximum": (45.0, 35.0, -1.0),
+                    "status": "provisional",
+                },
+                {
+                    "identity": "orientation:build-plane", "kind": "orientation_plane",
+                    "origin": (0.0, 0.0, 0.0), "x_axis": (1.0, 0.0, 0.0),
+                    "y_axis": (0.0, 1.0, 0.0), "half_width": 20.0,
+                    "color": (0.04, 0.52, 0.84), "opacity": 0.18,
+                    "representation": "surface",
+                },
+                {
+                    "identity": "orientation:manufacturing-z", "kind": "orientation_arrow",
+                    "origin": (0.0, 0.0, 0.0), "direction": (0.0, 0.0, 1.0),
+                    "length": 20.0, "color": (0.12, 0.47, 0.95),
+                    "representation": "surface",
+                },
+                {
+                    "identity": "orientation:selected-face", "kind": "orientation_face_highlight",
+                    "vertices": mesh.vertices_mm, "triangles": mesh.triangles,
+                    "color": (1.0, 0.48, 0.0), "opacity": 0.62,
+                    "representation": "surface",
+                },
+            ))
             self.assertEqual(set(viewer.source_actor_identities), source_identities)
-            self.assertEqual(viewer.review_actor_identities, {"fixture-review-base"})
+            self.assertEqual(viewer.review_actor_identities, {
+                "fixture-review-base", "orientation:build-plane",
+                "orientation:manufacturing-z", "orientation:selected-face",
+            })
             self.assertEqual(viewer.actors["fixture-review-base"].GetProperty().GetRepresentation(), 1)
             self.assertEqual(viewer.actors["fixture-review-base"].GetProperty().GetOpacity(), 0.55)
+            self.assertEqual(viewer.polydata["orientation:selected-face"].GetNumberOfPolys(), len(mesh.triangles))
             viewer.set_wireframe(True)
             viewer.set_transparent(True)
             viewer.set_visible(False)
