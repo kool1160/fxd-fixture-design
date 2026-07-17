@@ -12,6 +12,7 @@ This roadmap extends the product beyond the current Phase 3 backlog. It preserve
 6. Milestone 24 — Generate fixture drawings and documentation
 7. Milestone 25 — Optimize cost, volume, and manufacturability
 8. Milestone 26 — Complete end-to-end engineering pilots
+9. Milestone 27 - Unified engineering workbench
 
 ## Milestone 21 — Generate complete fixture structures
 
@@ -117,7 +118,12 @@ Acceptance criteria:
 
 ## Milestone 26 — Complete end-to-end engineering pilots
 
-**Status:** Pending
+**Status:** Complete
+
+Milestone 26 was implemented, independently visually reviewed, accepted by
+Kernel acceptance, and squash-merged in PR #48. The accepted viewer limitation
+was a detached native VTK window alongside the Tk controls; Milestone 27 owns
+its replacement with one embedded viewport.
 
 Prove the complete FXD workflow on legally shareable representative fabricated assemblies and measure engineering usefulness honestly.
 
@@ -130,5 +136,26 @@ Acceptance criteria:
 - runtime, memory, interaction, regeneration, export, and drawing-package performance are measured
 - production release is prohibited without explicit qualified human approval
 - pilot evidence determines the next product-hardening and commercialization queue
+
+**Recommended level:** Sol
+
+## Milestone 27 - Unified engineering workbench
+
+**Status:** Pending
+
+Unify the local engineering application around an embedded accelerated VTK
+viewport and a professional desktop shell without changing deterministic
+engineering authority.
+
+Acceptance criteria:
+
+- one PySide6 main window embeds the persistent VTK viewport with no detached viewer
+- source colors, immutable STEP identity, validated zero-based tessellation, and fail-closed imports are preserved
+- CAD navigation, standard views, shaded/wireframe/transparency modes, and renderer diagnostics remain available
+- actual assembly components populate an engineering explorer without fabricated results
+- source identity, geometry counts, selection identity, findings, validation, and evidence status are visible
+- project open/save, autosave recovery, review export, layers, and review decisions remain governed by existing contracts
+- headless CI and local Windows visual evidence both pass
+- the application remains engineering-review-only and never substitutes generated geometry for source CAD
 
 **Recommended level:** Sol

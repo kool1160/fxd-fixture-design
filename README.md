@@ -48,15 +48,15 @@ FXD is in early research and prototyping. It does not yet generate production-ap
 
 ## Local workbench
 
-On Windows, launch the first desktop viewer with:
+On Windows, launch the unified PySide6 engineering workbench with:
 
 ```powershell
-.\.venv\Scripts\python.exe scripts\fxd-app.py
+.\scripts\launch-fxd.ps1
 ```
 
-Use **Import STEP** to load a model through the real OCP kernel and inspect
-its 3D geometry. The workbench is engineering-review-only and never mutates
-customer source CAD.
+Use **Import STEP** to load a model through the real OCP kernel into the
+embedded persistent VTK viewport. The workbench is engineering-review-only
+and never mutates customer source CAD.
 
 ## Baseline checks
 

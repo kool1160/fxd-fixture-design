@@ -34,3 +34,19 @@ license terms.
 
 This record approves engineering development use of the pinned runtime. A
 separate packaging review is still required before distributing an installer.
+
+## PySide6 desktop runtime
+
+FXD pins `PySide6==6.8.3` in `requirements-desktop.txt` for the local Windows
+application shell and native VTK child-window host.
+
+- Distribution: `PySide6`, including Shiboken, Essentials, and Addons wheels
+- Purpose: Qt 6 desktop widgets and the native VTK integration boundary
+- License options published by Qt: LGPLv3, GPLv3, or commercial Qt licensing
+- FXD development use: LGPLv3-compatible dynamic-library use
+
+An installer or commercial distribution requires a separate packaging and
+legal review. It must preserve applicable notices and license text and must
+not prevent replacement of covered dynamic libraries. This repository does
+not accept a commercial Qt agreement or redistribute Qt binaries by adding
+the development dependency.

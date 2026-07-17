@@ -1,5 +1,21 @@
 # FXD Project Record
 
+## 2026-07-17 - Milestone 27 unified workbench implementation
+
+Milestone 27 replaces the launch path's Tk shell with a PySide6 `QMainWindow`
+and embeds one persistent native VTK render child in the central viewport. Docked
+engineering explorer, properties, and findings panels expose only available
+source and project evidence. The renderer preserves immutable STEP identity,
+validated zero-based tessellation, source colors where XCAF mapping exists,
+and fail-closed behavior for metadata-only input. Camera movement reuses the
+same polydata and actors.
+
+PySide6 is pinned as a desktop dependency with its LGPLv3/commercial packaging
+boundary recorded. The legacy Tk module remains temporarily available for
+compatibility but is no longer the launcher target. Milestone 27 remains
+Pending until Windows screenshots, user visual acceptance, Kernel acceptance,
+independent review, and merge. No production approval is claimed.
+
 ## 2026-07-15 — Milestone 20 safe internal phase
 
 Milestone 20 adds versioned `fxd-neutral-project-v2` persistence with legacy
