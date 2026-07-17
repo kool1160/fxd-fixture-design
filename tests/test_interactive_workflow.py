@@ -13,6 +13,7 @@ from fxd_geometry import (
     reference_plane_orientation, source_orientation, ReferencePlane,
     tooling_record_from_file,
 )
+from fxd_geometry.operations import project_export_block_reason
 from fxd_geometry.project import FxdProject
 
 
@@ -66,9 +67,11 @@ class InteractiveWorkflowTests(unittest.TestCase):
         self.assertEqual(restored, setup)
         self.assertIsNone(restored.automation_assumptions)
 
-    def test_legacy_workflow_without_manufacturing_orientation_remains_readable(self):
+    def test_legacy_workflow_without_manufacturing_orientation_requires_revalidation(self):
         payload = self.workflow().to_dict()
         payload["schema_version"] = "fxd-interactive-workflow-v1"
+        payload["analysis_completed"] = True
+        payload["concepts_generated"] = True
         for key in (
             "manufacturing_orientation", "manufacturing_build_direction",
             "manufacturing_loading_direction", "manufacturing_unloading_direction",
@@ -77,8 +80,33 @@ class InteractiveWorkflowTests(unittest.TestCase):
         restored = InteractiveWorkflow.from_dict(payload)
         self.assertEqual(restored.schema_version, "fxd-interactive-workflow-v1")
         self.assertIsNone(restored.setup.manufacturing_orientation)
+        self.assertFalse(restored.analysis_completed)
+        self.assertFalse(restored.concepts_generated)
+        self.assertEqual(restored.active_stage, "Orientation")
+        self.assertEqual(restored.timings, ())
         with self.assertRaisesRegex(InteractiveWorkflowError, "accepted manufacturing orientation"):
             analyze_engineering_workflow(self.document, restored)
+
+    def test_legacy_project_loads_but_blocks_export_until_orientation_revalidation(self):
+        project = analyze_engineering_workflow(self.document, self.workflow())
+        destination = Path(self.directory.name) / "legacy-orientation.fxd.json"
+        project.save(destination)
+        payload = json.loads(destination.read_text(encoding="utf-8"))
+        workflow = payload["interactive_workflow"]
+        workflow["schema_version"] = "fxd-interactive-workflow-v1"
+        workflow["analysis_completed"] = True
+        workflow["concepts_generated"] = True
+        for key in (
+            "manufacturing_orientation", "manufacturing_build_direction",
+            "manufacturing_loading_direction", "manufacturing_unloading_direction",
+        ):
+            workflow["setup"].pop(key)
+        destination.write_text(json.dumps(payload), encoding="utf-8")
+        restored = FxdProject.load(destination)
+        self.assertEqual(restored.product.source_sha256, self.document.source_sha256)
+        self.assertFalse(restored.workflow.analysis_completed)
+        self.assertFalse(restored.workflow.concepts_generated)
+        self.assertIn("accepted manufacturing orientation", project_export_block_reason(restored))
 
     def test_real_ocp_product_preserves_source_and_stable_face_references(self):
         first = product_from_workbench_document(self.document)

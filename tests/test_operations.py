@@ -7,8 +7,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import PropertyMock, patch
 
-from fxd_geometry import (EngineeringAnnotations, ExportError, OperationsError, ProjectRecovery,
-                          StructuredLog, Vec3, export_project_package, import_step,
+from fxd_geometry import (EngineeringAnnotations, ExportError, InteractiveWorkflow, OperationsError,
+                          ProcessSetup, ProjectRecovery, StructuredLog, Vec3, export_project_package, import_step,
                           load_preferences, save_preferences)
 from fxd_geometry.project import FxdProject
 
@@ -63,6 +63,20 @@ class OperationsTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             with self.assertRaises(ExportError):
                 export_project_package(self.project, directory)
+            self.assertEqual(list(Path(directory).iterdir()), [])
+
+    def test_unaccepted_interactive_orientation_blocks_export_before_generation(self):
+        workflow = InteractiveWorkflow(
+            self.product.source_sha256, ProcessSetup("legacy orientation"),
+            analysis_completed=True, concepts_generated=True,
+            schema_version="fxd-interactive-workflow-v1",
+        )
+        project = replace(self.project, workflow=workflow)
+        with tempfile.TemporaryDirectory() as directory, patch(
+                "fxd_geometry.operations.build_fabrication_package") as build:
+            with self.assertRaisesRegex(ExportError, "accepted manufacturing orientation"):
+                export_project_package(project, directory)
+            build.assert_not_called()
             self.assertEqual(list(Path(directory).iterdir()), [])
 
     def test_suppressed_or_corrected_project_cannot_reach_export_generation(self):

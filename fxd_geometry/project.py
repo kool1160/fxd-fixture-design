@@ -586,6 +586,7 @@ class FxdProject:
             raw = base64.b64decode(data["source_step_base64"], validate=True)
             workflow_data = data.get("interactive_workflow")
             workflow = None
+            orientation_revalidation_required = False
             if workflow_data:
                 from .interactive_workflow import (
                     InteractiveWorkflow, product_from_workbench_document,
@@ -594,6 +595,7 @@ class FxdProject:
                 document = load_step_for_workbench(raw, source_name=data["source_name"])
                 product = product_from_workbench_document(document)
                 workflow = InteractiveWorkflow.from_dict(workflow_data)
+                orientation_revalidation_required = not workflow.has_accepted_manufacturing_orientation()
             else:
                 product = import_step(raw.decode("utf-8"), source_name=data["source_name"])
             if product.source_sha256 != data["source_sha256"]:
@@ -628,13 +630,14 @@ class FxdProject:
                 if layer not in project.hidden_layers:
                     project = project.toggle_layer(layer)
             saved_validations = data.get("validations", {})
-            for concept in project.concepts:
-                saved = saved_validations.get(concept.identity)
-                if saved:
-                    current = project.validation_for(concept)
-                    if (saved.get("status"), saved.get("version"), saved.get("evidence_digest")) != (
-                            current.status, current.version, current.evidence_digest):
-                        raise ProjectFormatError(f"deterministic validation changed for concept {concept.identity}")
+            if not orientation_revalidation_required:
+                for concept in project.concepts:
+                    saved = saved_validations.get(concept.identity)
+                    if saved:
+                        current = project.validation_for(concept)
+                        if (saved.get("status"), saved.get("version"), saved.get("evidence_digest")) != (
+                                current.status, current.version, current.evidence_digest):
+                            raise ProjectFormatError(f"deterministic validation changed for concept {concept.identity}")
             decisions = tuple(ReviewDecision(**item) for item in data.get("decisions", []))
             saved_revisions = tuple(ProjectRevision(
                 item["revision_id"], item.get("parent_id"), item.get("active_concept", data["active_concept"]),
@@ -645,7 +648,8 @@ class FxdProject:
                 for item in data.get("revisions", []))
             restored = replace(project, decisions=decisions,
                                revisions=saved_revisions or project.revisions,
-                               approved_revision=data.get("approved_revision"),
+                               approved_revision=(None if orientation_revalidation_required
+                                                  else data.get("approved_revision")),
                                drawing_intent=data.get("drawing_intent"),
                                optimization_intent=data.get("optimization_intent"),
                                workflow=workflow)

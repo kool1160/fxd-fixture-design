@@ -550,6 +550,11 @@ class FxdWorkbenchWindow(QMainWindow):
         """Replace project state and invalidate geometry authored for the old revision."""
         self.project = project
         self.authored_fixture_build = None
+        if (self.orientation_draft is not None and (
+                project is None
+                or self.orientation_draft.source_sha256 != project.product.source_sha256)):
+            self.orientation_draft = None
+            self.orientation_face_reference = None
 
     def _active_authored_fixture_build(self):
         """Return cache only when it belongs to the active source and build plan."""
@@ -1374,10 +1379,12 @@ class FxdWorkbenchWindow(QMainWindow):
         )
         has_annotations = bool(self.workflow and self.workflow.geometry_annotations)
         states["Datums"] = "complete" if has_annotations else "available"
-        analyzed = bool(self.workflow and self.workflow.analysis_completed)
+        analyzed = bool(self.workflow and self.workflow.analysis_completed
+                        and self.workflow.has_accepted_manufacturing_orientation())
         for name in ("Locators & Supports", "Clamps", "Base Structure", "Weld & Access"):
             states[name] = "complete" if analyzed else "available"
-        concepts = bool(self.workflow and self.workflow.concepts_generated)
+        concepts = bool(self.workflow and self.workflow.concepts_generated
+                        and self.workflow.has_accepted_manufacturing_orientation())
         states["Concepts"] = "complete" if concepts else ("available" if analyzed else "not started")
         states["Cost & Volume"] = "complete" if concepts else "not started"
         if self.project is not None:
@@ -1494,7 +1501,8 @@ class FxdWorkbenchWindow(QMainWindow):
             and self.workflow.setup.manufacturing_orientation is not None
             and self.workflow.setup.manufacturing_orientation.accepted
             and not self.workflow.setup.manufacturing_orientation.is_stale_for(self.document.source_sha256),
-            "generate": bool(self.project and self.workflow and self.workflow.analysis_completed),
+            "generate": bool(self.project and self.workflow and self.workflow.analysis_completed
+                              and self.workflow.has_accepted_manufacturing_orientation()),
             "findings": self.project is not None,
             "approve": can_approve and not approved,
             "reject": self.project is not None,
@@ -1774,7 +1782,8 @@ class FxdWorkbenchWindow(QMainWindow):
             ]
             self._add_tree_category("Product geometry", components)
 
-        if self.project and self.workflow and self.workflow.concepts_generated:
+        if (self.project and self.workflow and self.workflow.concepts_generated
+                and self.workflow.has_accepted_manufacturing_orientation()):
             concepts = [(item.identity, item.identity,
                          self.project.validation_for(item).status)
                         for item in self.project.concepts]
@@ -2317,9 +2326,18 @@ class FxdWorkbenchWindow(QMainWindow):
             self.document is not None and orientation is not None and orientation.accepted
             and not orientation.is_stale_for(self.document.source_sha256)
         )
-        self.generate_button.setEnabled(self.project is not None and self.workflow.analysis_completed)
-        self.fabrication_plan_button.setEnabled(self.project is not None and self.workflow.concepts_generated)
-        self.fabrication_author_button.setEnabled(self.project is not None and self.project.fixture_build is not None)
+        self.generate_button.setEnabled(
+            self.project is not None and self.workflow.analysis_completed
+            and self.workflow.has_accepted_manufacturing_orientation()
+        )
+        self.fabrication_plan_button.setEnabled(
+            self.project is not None and self.workflow.concepts_generated
+            and self.workflow.has_accepted_manufacturing_orientation()
+        )
+        self.fabrication_author_button.setEnabled(
+            self.project is not None and self.project.fixture_build is not None
+            and self.workflow.has_accepted_manufacturing_orientation()
+        )
         self._set_process_setup(self.workflow.setup)
         for annotation in self.workflow.geometry_annotations:
             self.annotation_list.addItem(
@@ -2470,7 +2488,8 @@ class FxdWorkbenchWindow(QMainWindow):
         )
 
     def generate_concepts(self) -> None:
-        if self.project is None or self.workflow is None or not self.workflow.analysis_completed:
+        if (self.project is None or self.workflow is None or not self.workflow.analysis_completed
+                or not self.workflow.has_accepted_manufacturing_orientation()):
             self.statusBar().showMessage("Run deterministic assembly analysis first.")
             return
         self.workflow = replace(self.workflow, concepts_generated=True, active_stage="Concepts")
@@ -2559,7 +2578,8 @@ class FxdWorkbenchWindow(QMainWindow):
         )
 
     def generate_fixture_build_plan(self) -> None:
-        if self.project is None or self.workflow is None or not self.workflow.concepts_generated:
+        if (self.project is None or self.workflow is None or not self.workflow.concepts_generated
+                or not self.workflow.has_accepted_manufacturing_orientation()):
             self.statusBar().showMessage("Generate and select a fixture concept before creating a build plan.")
             return
         try:
@@ -2576,7 +2596,8 @@ class FxdWorkbenchWindow(QMainWindow):
             QMessageBox.warning(self, "Fixture build blocked", str(exc))
 
     def author_real_fixture_geometry(self) -> None:
-        if self.project is None or self.project.fixture_build is None:
+        if (self.project is None or self.workflow is None or self.project.fixture_build is None
+                or not self.workflow.has_accepted_manufacturing_orientation()):
             self.statusBar().showMessage("Generate a valid fixture build plan before OCP authoring.")
             return
         try:
@@ -2593,7 +2614,8 @@ class FxdWorkbenchWindow(QMainWindow):
 
     def _review_geometry_items(self) -> list[dict[str, object]]:
         orientation_items = self._orientation_review_items()
-        if self.project is None or self.workflow is None or not self.workflow.concepts_generated:
+        if (self.project is None or self.workflow is None or not self.workflow.concepts_generated
+                or not self.workflow.has_accepted_manufacturing_orientation()):
             return orientation_items
         status = self.project.active_validation.status
         layers = {
@@ -2699,7 +2721,8 @@ class FxdWorkbenchWindow(QMainWindow):
 
     def _populate_concept_comparison(self) -> None:
         self.concept_table.setRowCount(0)
-        if self.project is None or self.workflow is None or not self.workflow.concepts_generated:
+        if (self.project is None or self.workflow is None or not self.workflow.concepts_generated
+                or not self.workflow.has_accepted_manufacturing_orientation()):
             return
         rows = compare_concepts(self.project)
         self.concept_table.setRowCount(len(rows))

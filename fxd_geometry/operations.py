@@ -101,6 +101,12 @@ def save_preferences(path: str | Path, preferences: dict[str, Any]) -> Path:
 
 def project_export_block_reason(project: FxdProject) -> str | None:
     """Return the authoritative project-level reason export must fail closed."""
+    workflow = getattr(project, "workflow", None)
+    if workflow is not None and not workflow.has_accepted_manufacturing_orientation():
+        return (
+            "interactive workflow requires an accepted manufacturing orientation "
+            "for the current source before export"
+        )
     if project.active_validation.blocked:
         return "invalid deterministic validation result cannot be exported"
     if project.suppressed_features:

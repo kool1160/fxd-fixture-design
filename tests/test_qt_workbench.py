@@ -33,6 +33,7 @@ from fxd_geometry import (
     import_step,
     load_step_for_workbench,
     product_from_workbench_document,
+    source_orientation,
 )
 from fxd_geometry.project import FxdProject
 from fxd_qt_app import (
@@ -219,7 +220,13 @@ class QtWorkbenchTests(unittest.TestCase):
     def _author_m30_tack_build(self, *, source: Path = FIXTURE):
         self.window._replace_project(self._project(source))
         self.window.workflow = InteractiveWorkflow(
-            self.window.project.product.source_sha256, ProcessSetup("M30 workbench"),
+            self.window.project.product.source_sha256,
+            ProcessSetup(
+                "M30 workbench",
+                manufacturing_orientation=source_orientation(
+                    self.window.project.product.source_sha256, accepted=True,
+                ),
+            ),
             concepts_generated=True,
         )
         self.window.process_fixture_type.setCurrentText("Tack or Location Fixture")
@@ -252,7 +259,13 @@ class QtWorkbenchTests(unittest.TestCase):
     def test_m30_tack_location_controls_create_and_author_a_fixture_build(self):
         self.window._replace_project(self._project())
         self.window.workflow = InteractiveWorkflow(
-            self.window.project.product.source_sha256, ProcessSetup("M30 workbench"),
+            self.window.project.product.source_sha256,
+            ProcessSetup(
+                "M30 workbench",
+                manufacturing_orientation=source_orientation(
+                    self.window.project.product.source_sha256, accepted=True,
+                ),
+            ),
             concepts_generated=True,
         )
         self.window.process_fixture_type.setCurrentText("Tack or Location Fixture")
@@ -323,7 +336,13 @@ class QtWorkbenchTests(unittest.TestCase):
         ):
             self.window._replace_project(self._project())
             self.window.workflow = InteractiveWorkflow(
-                self.window.project.product.source_sha256, ProcessSetup("M30 workbench"),
+                self.window.project.product.source_sha256,
+                ProcessSetup(
+                    "M30 workbench",
+                    manufacturing_orientation=source_orientation(
+                        self.window.project.product.source_sha256, accepted=True,
+                    ),
+                ),
                 concepts_generated=True,
             )
             self.window.process_fixture_type.setCurrentText("Full weld fixture")

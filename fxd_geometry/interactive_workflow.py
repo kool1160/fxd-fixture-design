@@ -351,10 +351,23 @@ class InteractiveWorkflow:
         result.pop("timings")
         return result
 
+    def has_accepted_manufacturing_orientation(self) -> bool:
+        """Return whether derived interactive evidence belongs to an accepted current frame."""
+        orientation = self.setup.manufacturing_orientation
+        if orientation is None:
+            return False
+        try:
+            orientation.require_accepted_for(self.source_sha256)
+        except ManufacturingOrientationError:
+            return False
+        return True
+
     @classmethod
     def from_dict(cls, data: dict[str, object]) -> "InteractiveWorkflow":
-        return cls(
-            str(data["source_sha256"]), ProcessSetup.from_dict(data["setup"]),
+        source_sha256 = str(data["source_sha256"])
+        setup = ProcessSetup.from_dict(data["setup"])
+        candidate = cls(
+            source_sha256, setup,
             tuple(GeometryAnnotation.from_dict(item) for item in data.get("geometry_annotations", ())),
             tuple(CustomerToolingRecord.from_dict(item) for item in data.get("customer_tooling", ())),
             tuple(data.get("reviewed_findings", ())), bool(data.get("analysis_completed", False)),
@@ -362,6 +375,12 @@ class InteractiveWorkflow:
             tuple(OperationTiming(**item) for item in data.get("timings", ())),
             str(data.get("schema_version", "")),
         )
+        if candidate.has_accepted_manufacturing_orientation():
+            return candidate
+        # Legacy source-coordinate analysis is readable history, not current
+        # manufacturing-frame evidence. Revalidation requires acceptance.
+        return replace(candidate, analysis_completed=False, concepts_generated=False,
+                       active_stage="Orientation", timings=())
 
 
 @dataclass(frozen=True)
