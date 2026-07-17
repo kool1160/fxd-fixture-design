@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 640" role="img" aria-label="FXD logo" style="color:#FFFFFF">
+<g fill="currentColor" stroke="currentColor">
+<g transform="translate(12,8) scale(.88)"><path d="M320 62 92 194v264l228 132M320 62 548 194v264L320 590" fill="none" stroke-width="30"/><path d="M150 258 260 194l35 20-110 64v142l-35 20zM384 214 490 276v164l-38-22V300l-68-39zM168 410l152-88 152 88-152 147-152-88z"/><rect x="281" y="270" width="78" height="150" rx="17"/><ellipse cx="320" cy="270" rx="46" ry="19"/><ellipse cx="320" cy="409" rx="64" ry="25"/></g>
+<g transform="translate(535,135)"><path d="M0 0h305l42 61H88v75h220l-39 59H88v188H0z"/><path d="M650 0h-108L390 191l152 192h108L498 191z"/><path d="M318 0h108l152 191-152 192H318l152-192z"/><path fill-rule="evenodd" d="M680 0h244l100 82v219l-100 82H680V160h91v151h120l42-35V107l-42-35H680z"/></g>
+</g></svg>

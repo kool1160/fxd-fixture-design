@@ -16,14 +16,16 @@ from threading import Thread
 from time import monotonic, perf_counter
 from typing import Callable
 
-from PySide6.QtCore import QObject, QRunnable, QThreadPool, QTimer, Qt, Signal
-from PySide6.QtGui import QAction, QActionGroup, QCloseEvent, QResizeEvent
+from PySide6.QtCore import QObject, QRunnable, QSettings, QSize, QThreadPool, QTimer, Qt, Signal
+from PySide6.QtGui import QAction, QActionGroup, QCloseEvent, QPixmap, QResizeEvent
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
     QComboBox,
     QDockWidget,
     QDoubleSpinBox,
+    QDialog,
+    QDialogButtonBox,
     QFileDialog,
     QFormLayout,
     QFrame,
@@ -35,8 +37,8 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QPushButton,
+    QSizePolicy,
     QSpinBox,
-    QStyle,
     QTabWidget,
     QTableWidget,
     QTableWidgetItem,
@@ -46,6 +48,17 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from fxd_ui import (
+    ApprovalGatePanel,
+    SourceCadBadge,
+    StatusChip,
+    WorkflowRail,
+    apply_fxd_theme,
+    application_icon,
+    asset_path,
+    icon,
+)
+from fxd_ui.theme.tokens import COLORS
 from fxd_geometry import (
     AnnotationRole,
     ExportError,
@@ -213,7 +226,7 @@ class EmbeddedVtkViewport(QFrame):
         self.render_host.setObjectName("vtkNativeRenderHost")
         self.render_host.setAttribute(Qt.WidgetAttribute.WA_NativeWindow, True)
         self.render_host.setAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent, True)
-        self.render_host.setStyleSheet("background: #111820;")
+        self.render_host.setStyleSheet(f"background: {COLORS.carbon};")
         self.native_title = f"FXD Embedded VTK {os.getpid()} {id(self)}"
         self.native_window_id: int | None = None
         self.worker: subprocess.Popen[str] | None = None
@@ -390,6 +403,8 @@ class FxdWorkbenchWindow(QMainWindow):
         self.setObjectName("fxdEngineeringWorkbench")
         self.setWindowTitle("FXD - Engineering Workbench - review only")
         self.resize(1500, 900)
+        self.setMinimumSize(1180, 720)
+        self.setWindowIcon(application_icon())
         self.document: WorkbenchDocument | None = None
         self.project: FxdProject | None = None
         self.workflow: InteractiveWorkflow | None = None
@@ -398,6 +413,9 @@ class FxdWorkbenchWindow(QMainWindow):
         self.selected_reference: GeometryReference | None = None
         self._geometry_references: dict[str, GeometryReference] = {}
         self._finding_records: dict[str, object] = {}
+        self._ui_active_stage: str | None = None
+        self._settings_enabled = os.environ.get("QT_QPA_PLATFORM") != "offscreen"
+        self.settings = QSettings("FXD", "EngineeringWorkbench")
         self.analysis_pool = QThreadPool(self)
         self.analysis_pool.setMaxThreadCount(1)
         self._analysis_request = 0
@@ -409,57 +427,45 @@ class FxdWorkbenchWindow(QMainWindow):
         self._actions: dict[str, QAction] = {}
 
         central = QWidget(self)
-        central_layout = QVBoxLayout(central)
+        central_layout = QHBoxLayout(central)
         central_layout.setContentsMargins(0, 0, 0, 0)
-        controls = QLabel(
-            "Mouse: left drag orbit | middle drag pan | wheel or right drag zoom | F fit",
-            central,
-        )
-        controls.setObjectName("mouseControls")
-        controls.setStyleSheet("padding: 6px 10px; color: #c9d3dd; background: #202a35;")
-        central_layout.addWidget(controls)
-        central_layout.addWidget(self.viewport, 1)
+        central_layout.setSpacing(0)
+        self.workflow_rail = WorkflowRail(central)
+        self.workflow_rail.stage_selected.connect(self._navigate_stage)
+        viewport_column = QWidget(central)
+        viewport_layout = QVBoxLayout(viewport_column)
+        viewport_layout.setContentsMargins(0, 0, 0, 0)
+        viewport_layout.setSpacing(0)
+        self.viewport_caption = QLabel("PERSPECTIVE \u00b7 SHADED", viewport_column)
+        self.viewport_caption.setObjectName("viewportCaption")
+        viewport_layout.addWidget(self.viewport_caption)
+        viewport_layout.addWidget(self.viewport, 1)
+        central_layout.addWidget(self.workflow_rail)
+        central_layout.addWidget(viewport_column, 1)
         self.setCentralWidget(central)
 
         self._build_tree_dock()
         self._build_workflow_dock()
         self._build_review_dock()
         self._build_actions()
+        self._build_identity_bar()
+        self._build_status_strip()
+        self._restore_layout()
         self.statusBar().showMessage("Open a legally shareable STEP file or FXD project.")
         self._set_property("Evidence", EVIDENCE_PROVISIONAL)
-        self._apply_style()
-
-    def _apply_style(self) -> None:
-        self.setStyleSheet(
-            "QMainWindow, QMainWindow > QWidget { background: #151c24; color: #e7edf3; }"
-            "QDockWidget { color: #e7edf3; font-weight: 600; }"
-            "QDockWidget::title { background: #202a35; padding: 6px; }"
-            "QTreeWidget, QListWidget, QTabWidget::pane {"
-            " background: #1b2530; color: #e7edf3; border: 1px solid #3a4856; }"
-            "QTreeWidget::item:selected, QListWidget::item:selected {"
-            " background: #2f6682; color: white; }"
-            "QHeaderView::section { background: #26323e; color: #e7edf3;"
-            " border: 0; border-right: 1px solid #3a4856; padding: 5px; }"
-            "QTabBar::tab { background: #26323e; color: #d5dee6; padding: 7px 14px; }"
-            "QTabBar::tab:selected { background: #2f6682; color: white; }"
-            "QLabel { color: #dbe4ec; background: transparent; }"
-            "QToolBar { background: #202a35; color: #e7edf3;"
-            " border-bottom: 1px solid #3a4856; spacing: 4px; }"
-            "QToolButton { color: #e7edf3; padding: 4px 6px; }"
-            "QToolButton:checked { background: #2f6682; }"
-            "QMenuBar, QMenu { background: #202a35; color: #e7edf3; }"
-            "QMenuBar::item:selected, QMenu::item:selected { background: #2f6682; }"
-            "QStatusBar { background: #202a35; color: #e7edf3; }"
-        )
+        self._refresh_shell_state()
 
     def _build_tree_dock(self) -> None:
         dock = QDockWidget("Engineering Explorer", self)
         dock.setObjectName("engineeringExplorerDock")
         dock.setAllowedAreas(Qt.DockWidgetArea.LeftDockWidgetArea)
+        dock.setMinimumWidth(230)
+        dock.setMaximumWidth(340)
         self.tree = QTreeWidget(dock)
         self.tree.setObjectName("engineeringTree")
+        self.tree.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Expanding)
         self.tree.setHeaderLabels(["Item", "Status"])
-        self.tree.setColumnWidth(0, 250)
+        self.tree.setColumnWidth(0, 180)
         self.tree.itemSelectionChanged.connect(self._tree_selection_changed)
         dock.setWidget(self.tree)
         self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, dock)
@@ -475,8 +481,13 @@ class FxdWorkbenchWindow(QMainWindow):
         dock = QDockWidget("Fixture Engineering Workflow", self)
         dock.setObjectName("workflowDock")
         dock.setAllowedAreas(Qt.DockWidgetArea.LeftDockWidgetArea)
+        dock.setMinimumWidth(230)
+        dock.setMaximumWidth(340)
         self.workflow_tabs = QTabWidget(dock)
         self.workflow_tabs.setObjectName("workflowTabs")
+        self.workflow_tabs.setSizePolicy(
+            QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Expanding
+        )
 
         product_page = QWidget(self.workflow_tabs)
         product_layout = QVBoxLayout(product_page)
@@ -673,8 +684,12 @@ class FxdWorkbenchWindow(QMainWindow):
         dock = QDockWidget("Properties and Findings", self)
         dock.setObjectName("reviewDock")
         dock.setAllowedAreas(Qt.DockWidgetArea.RightDockWidgetArea)
+        dock.setMinimumWidth(300)
+        dock.setMaximumWidth(440)
         tabs = QTabWidget(dock)
         tabs.setObjectName("reviewTabs")
+        tabs.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Expanding)
+        self.review_tabs = tabs
 
         properties = QWidget(tabs)
         self.properties_form = QFormLayout(properties)
@@ -687,6 +702,11 @@ class FxdWorkbenchWindow(QMainWindow):
             value = QLabel("-", properties)
             value.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
             value.setWordWrap(True)
+            if label in {
+                "Source SHA-256", "Selected identity", "Faces", "Triangles",
+                "Project revision", "Evidence digest", "Average render", "Visible FPS",
+            }:
+                value.setProperty("technical", True)
             self.properties_form.addRow(label + ":", value)
             self._property_values[label] = value
         tabs.addTab(properties, "Properties")
@@ -709,68 +729,198 @@ class FxdWorkbenchWindow(QMainWindow):
         findings_layout.addWidget(self.findings, 1)
         findings_layout.addWidget(self.finding_reviewed)
         tabs.addTab(findings_page, "Findings")
+
+        validation_page = QWidget(tabs)
+        validation_layout = QVBoxLayout(validation_page)
+        self.approval_gate = ApprovalGatePanel(validation_page)
+        self.approval_gate.approve_requested.connect(
+            lambda: self.record_decision("approve_for_review")
+        )
+        self.approval_gate.reject_requested.connect(
+            lambda: self.record_decision("reject")
+        )
+        validation_layout.addWidget(self.approval_gate)
+        validation_layout.addStretch(1)
+        tabs.addTab(validation_page, "Validation")
         dock.setWidget(tabs)
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, dock)
 
+    def _build_identity_bar(self) -> None:
+        host = QWidget(self)
+        host.setObjectName("fxdMenuHost")
+        host_layout = QVBoxLayout(host)
+        host_layout.setContentsMargins(0, 0, 0, 0)
+        host_layout.setSpacing(0)
+
+        bar = QWidget(host)
+        bar.setObjectName("fxdIdentityBar")
+        bar.setFixedHeight(34)
+        layout = QHBoxLayout(bar)
+        layout.setContentsMargins(10, 4, 10, 4)
+        layout.setSpacing(8)
+        logo = QLabel(bar)
+        logo.setPixmap(application_icon().pixmap(20, 20))
+        logo.setFixedSize(22, 22)
+        logo.setAccessibleName("FXD application icon")
+        brand = QLabel("FXD", bar)
+        brand.setObjectName("fxdBrandMark")
+        self.project_title = QLabel("Engineering Workbench", bar)
+        self.project_title.setObjectName("fxdProjectTitle")
+        self.source_badge = SourceCadBadge(bar)
+        self.source_badge.clicked.connect(self.show_source_identity)
+        self.kernel_health = StatusChip("pass", "OCP", bar)
+        self.renderer_health = StatusChip("notEvaluated", "VTK", bar)
+        layout.addWidget(logo)
+        layout.addWidget(brand)
+        layout.addWidget(self.project_title)
+        layout.addStretch(1)
+        layout.addWidget(self.source_badge)
+        layout.addStretch(1)
+        layout.addWidget(self.kernel_health)
+        layout.addWidget(self.renderer_health)
+        host_layout.addWidget(bar)
+        host_layout.addWidget(self.menuBar())
+        self.setMenuWidget(host)
+
+    def _build_status_strip(self) -> None:
+        self.status_units = QLabel("Units: mm", self)
+        self.status_units.setProperty("technical", True)
+        self.status_coordinates = QLabel("Coordinate: Project", self)
+        self.status_coordinates.setProperty("technical", True)
+        self.status_selection = QLabel("Selection: -", self)
+        self.status_selection.setProperty("technical", True)
+        self.status_validation = StatusChip("notEvaluated", "NOT EVALUATED", self)
+        self.statusBar().addPermanentWidget(self.status_units)
+        self.statusBar().addPermanentWidget(self.status_coordinates)
+        self.statusBar().addPermanentWidget(self.status_selection, 1)
+        self.statusBar().addPermanentWidget(self.status_validation)
+
+    def show_source_identity(self) -> None:
+        dialog = QDialog(self)
+        dialog.setWindowTitle("FXD Source CAD Identity")
+        dialog.setMinimumWidth(620)
+        layout = QVBoxLayout(dialog)
+        header = SourceCadBadge(dialog)
+        header.setEnabled(False)
+        if self.document:
+            filename = self.document.source_name
+            digest = self.document.source_sha256
+            components = self.document.component_count
+            faces = len(self.document.meshes)
+            triangles = sum(len(mesh.triangles) for mesh in self.document.meshes)
+            verified = True
+        elif self.project:
+            filename = self.project.product.source_name
+            digest = self.project.product.source_sha256
+            components = len(self.project.product.components)
+            faces = triangles = 0
+            verified = False
+        else:
+            filename = "No source loaded"
+            digest = "-"
+            components = faces = triangles = 0
+            verified = False
+        if digest != "-":
+            header.set_source(filename, digest, verified=verified)
+        form_host = QWidget(dialog)
+        form = QFormLayout(form_host)
+        for label, value in (
+            ("Filename", filename), ("SHA-256", digest),
+            ("Geometry evidence", "Verified OCP geometry" if verified else "Unavailable"),
+            ("Components", components), ("Faces", faces), ("Triangles", triangles),
+            ("Source policy", "Immutable; annotations and generated geometry are separate"),
+        ):
+            row = QLabel(str(value), form_host)
+            row.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+            row.setWordWrap(True)
+            if label in {"SHA-256", "Components", "Faces", "Triangles"}:
+                row.setProperty("technical", True)
+            form.addRow(label + ":", row)
+        boundary = QLabel(
+            "Engineering review only. Source bytes are never rewritten by the workbench.",
+            dialog,
+        )
+        boundary.setWordWrap(True)
+        boundary.setProperty("status", "warning")
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close, parent=dialog)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(header)
+        layout.addWidget(form_host)
+        layout.addWidget(boundary)
+        layout.addWidget(buttons)
+        dialog.exec()
+
     def _action(self, key: str, text: str, callback: Callable[[], None],
-                *, shortcut: str | None = None, icon: QStyle.StandardPixmap | None = None,
+                *, shortcut: str | None = None, icon_name: str | None = None,
                 checkable: bool = False) -> QAction:
         action = QAction(text, self)
         action.triggered.connect(callback)
         if shortcut:
             action.setShortcut(shortcut)
-        if icon is not None:
-            action.setIcon(self.style().standardIcon(icon))
+        if icon_name is not None:
+            action.setIcon(icon(icon_name))
         action.setCheckable(checkable)
+        action.setToolTip(f"{text}{f' ({shortcut})' if shortcut else ''}")
         self._actions[key] = action
         return action
 
     def _build_actions(self) -> None:
         file_menu = self.menuBar().addMenu("&File")
+        project_menu = self.menuBar().addMenu("&Project")
         view_menu = self.menuBar().addMenu("&View")
         engineering_menu = self.menuBar().addMenu("&Engineering")
+        validation_menu = self.menuBar().addMenu("&Validation")
+        tools_menu = self.menuBar().addMenu("&Tools")
+        window_menu = self.menuBar().addMenu("&Window")
         help_menu = self.menuBar().addMenu("&Help")
 
         import_action = self._action(
-            "import", "Import STEP...", self.import_step, shortcut="Ctrl+I",
-            icon=QStyle.StandardPixmap.SP_DialogOpenButton,
+            "import", "Import STEP...", self.import_step, shortcut="Ctrl+I", icon_name="import-step",
         )
         open_action = self._action(
             "open_project", "Open FXD project...", self.open_project, shortcut="Ctrl+O",
-            icon=QStyle.StandardPixmap.SP_DirOpenIcon,
+            icon_name="open-project",
         )
         save_action = self._action(
             "save_project", "Save FXD project...", self.save_project, shortcut="Ctrl+S",
-            icon=QStyle.StandardPixmap.SP_DialogSaveButton,
+            icon_name="save",
         )
         export_action = self._action(
             "export", "Export review package...", self.export_package,
-            icon=QStyle.StandardPixmap.SP_DialogApplyButton,
+            icon_name="export-review",
         )
         recover_action = self._action(
             "recover", "Recover autosave", self.recover_autosave,
-            icon=QStyle.StandardPixmap.SP_BrowserReload,
+            icon_name="recover-autosave",
         )
         file_menu.addActions([import_action, open_action, save_action, export_action])
         file_menu.addSeparator()
         file_menu.addAction(recover_action)
 
+        source_identity = self._action(
+            "source_identity", "Source CAD identity...", self.show_source_identity,
+            icon_name="lock-decision",
+        )
+        project_menu.addAction(source_identity)
+
         fit_action = self._action(
-            "fit", "Fit to view", self.fit_view, shortcut="F",
-            icon=QStyle.StandardPixmap.SP_DesktopIcon,
+            "fit", "Fit to view", self.fit_view, shortcut="F", icon_name="fit-view",
         )
         view_menu.addAction(fit_action)
         view_menu.addSeparator()
         for view in ("front", "back", "left", "right", "top", "bottom", "isometric"):
             view_menu.addAction(self._action(
-                "view_" + view, view.title(), lambda checked=False, name=view: self.set_standard_view(name)
+                "view_" + view, view.title(),
+                lambda checked=False, name=view: self.set_standard_view(name), icon_name=view,
             ))
         view_menu.addSeparator()
         wireframe = self._action(
-            "wireframe", "Wireframe", self.toggle_wireframe, checkable=True
+            "wireframe", "Wireframe", self.toggle_wireframe,
+            icon_name="wireframe", checkable=True,
         )
         transparency = self._action(
-            "transparency", "Transparency", self.toggle_transparency, checkable=True
+            "transparency", "Transparency", self.toggle_transparency,
+            icon_name="transparency", checkable=True,
         )
         view_menu.addActions([wireframe, transparency])
         layer_menu = view_menu.addMenu("Project layers")
@@ -790,39 +940,315 @@ class FxdWorkbenchWindow(QMainWindow):
             action = self._action(
                 "nav_" + mode, mode.title(),
                 lambda checked=False, name=mode: self.set_navigation_mode(name),
-                checkable=True,
+                icon_name=mode, checkable=True,
             )
             navigation_group.addAction(action)
             engineering_menu.addAction(action)
         self._actions["nav_orbit"].setChecked(True)
         engineering_menu.addSeparator()
-        engineering_menu.addAction(self._action(
-            "approve", "Approve for engineering review", lambda: self.record_decision("approve_for_review")
-        ))
-        engineering_menu.addAction(self._action(
-            "reject", "Reject concept", lambda: self.record_decision("reject")
-        ))
+        analyze_action = self._action(
+            "analyze", "Analyze assembly", self.analyze_assembly,
+            icon_name="analyze-assembly",
+        )
+        generate_action = self._action(
+            "generate", "Generate concepts", self.generate_concepts,
+            icon_name="generate-concepts",
+        )
+        engineering_menu.addActions([analyze_action, generate_action])
+
+        findings_action = self._action(
+            "findings", "Review findings", self.focus_findings,
+            icon_name="review-findings",
+        )
+        approve_action = self._action(
+            "approve", "Approve for engineering review",
+            lambda: self.record_decision("approve_for_review"), icon_name="approve",
+        )
+        reject_action = self._action(
+            "reject", "Reject concept", lambda: self.record_decision("reject"),
+            icon_name="reject",
+        )
+        validation_menu.addActions([findings_action, approve_action, reject_action])
+
+        tooling_action = self._action(
+            "tooling", "Customer tooling", lambda: self._navigate_stage("Component Library"),
+            icon_name="external-link",
+        )
+        tools_menu.addAction(tooling_action)
+
+        reset_layout = self._action(
+            "reset_layout", "Reset workbench layout", self.reset_workbench_layout,
+        )
+        window_menu.addAction(reset_layout)
+        for dock_name in ("engineeringExplorerDock", "workflowDock", "reviewDock"):
+            dock = self.findChild(QDockWidget, dock_name)
+            if dock is not None:
+                window_menu.addAction(dock.toggleViewAction())
+
         help_menu.addAction(self._action(
-            "diagnostics", "Renderer diagnostics", self.show_renderer_diagnostics
+            "diagnostics", "Renderer diagnostics", self.show_renderer_diagnostics,
+            icon_name="review-findings",
         ))
         help_menu.addAction(self._action(
             "benchmark", "Run visible render benchmark", self.show_renderer_benchmark
         ))
+        help_menu.addSeparator()
+        help_menu.addAction(self._action("about", "About FXD", self.show_about))
 
         toolbar = QToolBar("Main", self)
         toolbar.setObjectName("mainToolbar")
         toolbar.setMovable(False)
-        toolbar.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        toolbar.setIconSize(QSize(20, 20))
+        toolbar.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
         toolbar.addActions([import_action, open_action, save_action, export_action])
         toolbar.addSeparator()
         toolbar.addActions([fit_action, self._actions["nav_orbit"], self._actions["nav_pan"],
                             self._actions["nav_zoom"]])
         toolbar.addSeparator()
-        toolbar.addActions([wireframe, transparency])
+        toolbar.addActions([
+            self._actions["view_isometric"], self._actions["view_front"],
+            self._actions["view_top"], wireframe, transparency,
+        ])
+        toolbar.addSeparator()
+        toolbar.addActions([analyze_action, generate_action, findings_action])
+        toolbar.addSeparator()
+        toolbar.addActions([approve_action, reject_action])
         self.addToolBar(toolbar)
 
     def _set_property(self, name: str, value: object) -> None:
         self._property_values[name].setText(str(value))
+
+    def _navigate_stage(self, stage: str) -> None:
+        self._ui_active_stage = stage
+        tab_for_stage = {
+            "Project": 0, "Import": 0, "Assembly": 0,
+            "Manufacturing Intent": 1, "Orientation": 1,
+            "Datums": 2, "Locators & Supports": 2, "Clamps": 2,
+            "Base Structure": 3, "Weld & Access": 3, "Concepts": 3,
+            "Cost & Volume": 3, "Component Library": 4,
+            "Rules & Preferences": 4, "Project History": 5,
+        }
+        if stage in {"Validation", "Review & Approval", "Export"}:
+            review = self.findChild(QDockWidget, "reviewDock")
+            if review is not None:
+                review.show()
+                review.raise_()
+            self.review_tabs.setCurrentIndex(2 if stage != "Review & Approval" else 2)
+        else:
+            workflow_dock = self.findChild(QDockWidget, "workflowDock")
+            if workflow_dock is not None:
+                workflow_dock.show()
+                workflow_dock.raise_()
+            self.workflow_tabs.setCurrentIndex(tab_for_stage.get(stage, 0))
+        self._populate_workflow_rail()
+        self.statusBar().showMessage(f"Workflow view: {stage}.")
+
+    def focus_findings(self) -> None:
+        review = self.findChild(QDockWidget, "reviewDock")
+        if review is not None:
+            review.show()
+            review.raise_()
+        self.review_tabs.setCurrentIndex(1)
+
+    def _restore_layout(self) -> None:
+        if not self._settings_enabled:
+            self.reset_workbench_layout(persist=False)
+            return
+        geometry = self.settings.value("workbench/geometry")
+        state = self.settings.value("workbench/state")
+        if geometry is not None:
+            self.restoreGeometry(geometry)
+        if state is not None:
+            self.restoreState(state)
+        else:
+            self.reset_workbench_layout(persist=False)
+
+    def reset_workbench_layout(self, *, persist: bool = True) -> None:
+        self.resize(1500, 900)
+        explorer = self.findChild(QDockWidget, "engineeringExplorerDock")
+        workflow = self.findChild(QDockWidget, "workflowDock")
+        review = self.findChild(QDockWidget, "reviewDock")
+        for dock in (explorer, workflow, review):
+            if dock is not None:
+                dock.show()
+        if explorer is not None and workflow is not None:
+            self.tabifyDockWidget(explorer, workflow)
+            explorer.raise_()
+        docks = [dock for dock in (explorer, review) if dock is not None]
+        if docks:
+            self.resizeDocks(docks, [250, 320][:len(docks)], Qt.Orientation.Horizontal)
+        if persist and self._settings_enabled:
+            self.settings.remove("workbench/geometry")
+            self.settings.remove("workbench/state")
+        self.statusBar().showMessage("Workbench layout restored; project data was not changed.")
+
+    def _workflow_states(self) -> dict[str, str]:
+        states = {name: "not started" for name in (
+            "Project", "Import", "Assembly", "Manufacturing Intent", "Orientation",
+            "Datums", "Locators & Supports", "Clamps", "Base Structure",
+            "Weld & Access", "Concepts", "Validation", "Cost & Volume",
+            "Review & Approval", "Export", "Component Library",
+            "Rules & Preferences", "Project History",
+        )}
+        has_source = self.document is not None or self.project is not None
+        if not has_source:
+            states["Project"] = "available"
+            states["Import"] = "available"
+            states["Rules & Preferences"] = "deferred"
+            return states
+        for name in ("Project", "Import", "Assembly"):
+            states[name] = "complete"
+        states["Manufacturing Intent"] = "complete" if self.workflow else "available"
+        states["Orientation"] = (
+            "complete" if self.workflow and self.workflow.setup.build_orientation else "warning"
+        )
+        has_annotations = bool(self.workflow and self.workflow.geometry_annotations)
+        states["Datums"] = "complete" if has_annotations else "available"
+        analyzed = bool(self.workflow and self.workflow.analysis_completed)
+        for name in ("Locators & Supports", "Clamps", "Base Structure", "Weld & Access"):
+            states[name] = "complete" if analyzed else "available"
+        concepts = bool(self.workflow and self.workflow.concepts_generated)
+        states["Concepts"] = "complete" if concepts else ("available" if analyzed else "not started")
+        states["Cost & Volume"] = "complete" if concepts else "not started"
+        if self.project is not None:
+            validation = self.project.active_validation.status
+            states["Validation"] = {
+                "valid": "complete", "provisional": "warning", "invalid": "blocked",
+            }.get(validation, "not evaluated")
+            if self.project.suppressed_features or self.project.active.corrections:
+                states["Concepts"] = "engineer modified"
+                states["Validation"] = "stale"
+            states["Review & Approval"] = (
+                "complete" if self.project.approved_revision else
+                "blocked" if (
+                    self.project.active_validation.blocked
+                    or self.project.suppressed_features
+                    or self.project.active.corrections
+                ) else "available"
+            )
+            states["Export"] = (
+                "blocked" if (
+                    self.project.active_validation.blocked
+                    or self.project.suppressed_features
+                    or self.project.active.corrections
+                ) else "available"
+            )
+            states["Project History"] = "complete" if self.project.revisions else "available"
+        states["Component Library"] = (
+            "complete" if self.workflow and self.workflow.customer_tooling else "available"
+        )
+        states["Rules & Preferences"] = "deferred"
+        return states
+
+    def _populate_workflow_rail(self) -> None:
+        stage_map = {
+            "Product": "Project", "Datums and intent": "Datums",
+            "Concepts": "Concepts", "Validation": "Validation",
+        }
+        active = self._ui_active_stage
+        if active is None and self.workflow is not None:
+            active = stage_map.get(self.workflow.active_stage, self.workflow.active_stage)
+        if active is None:
+            active = "Project"
+        self.workflow_rail.set_states(self._workflow_states(), active)
+
+    def _refresh_shell_state(self) -> None:
+        if self.document is not None:
+            self.source_badge.set_source(
+                self.document.source_name, self.document.source_sha256, verified=True
+            )
+            self.project_title.setText(self.document.source_name)
+        elif self.project is not None:
+            self.source_badge.set_source(
+                self.project.product.source_name,
+                self.project.product.source_sha256,
+                verified=False,
+            )
+            self.project_title.setText(self.project.product.source_name)
+        else:
+            self.source_badge.clear_source()
+            self.project_title.setText("Engineering Workbench")
+
+        diagnostics = self.viewport.diagnostics()
+        if diagnostics and diagnostics.native_rendering_active and not diagnostics.fallback_active:
+            self.renderer_health.set_status("pass", "VTK")
+        elif self.document is not None:
+            self.renderer_health.set_status("warning", "VTK WARNING")
+        else:
+            self.renderer_health.set_status("notEvaluated", "VTK")
+
+        if self.project is None:
+            status = "not evaluated"
+            failures = warnings = 0
+            can_approve = approved = False
+        else:
+            status = self.project.active_validation.status
+            failures = sum(
+                finding.severity == "error" for finding in self.project.active_validation.findings
+            )
+            warnings = sum(
+                finding.severity == "warning" for finding in self.project.active_validation.findings
+            )
+            can_approve = (
+                not self.project.active_validation.blocked
+                and not self.project.suppressed_features
+                and not self.project.active.corrections
+            )
+            approved = self.project.approved_revision == self.project.revision_id
+        self.status_validation.set_status(status, status.upper())
+        self.approval_gate.set_result(
+            status, failures, warnings, can_approve=can_approve, approved=approved
+        )
+        self.status_selection.setText(f"Selection: {self.selected_identity or '-'}")
+
+        action_state = {
+            "save_project": self.project is not None,
+            "export": self.project is not None and not self.project.active_validation.blocked,
+            "recover": self.project_path is not None,
+            "fit": self.document is not None,
+            "analyze": self.document is not None,
+            "generate": bool(self.project and self.workflow and self.workflow.analysis_completed),
+            "findings": self.project is not None,
+            "approve": can_approve and not approved,
+            "reject": self.project is not None,
+        }
+        for key, enabled in action_state.items():
+            if key in self._actions:
+                self._actions[key].setEnabled(enabled)
+        if "export" in self._actions and self.project and self.project.active_validation.blocked:
+            self._actions["export"].setToolTip(
+                f"Export disabled: {failures} deterministic failures block this concept."
+            )
+        self._populate_workflow_rail()
+
+    def show_about(self) -> None:
+        dialog = QDialog(self)
+        dialog.setWindowTitle("About FXD")
+        dialog.setMinimumWidth(640)
+        layout = QVBoxLayout(dialog)
+        artwork = QLabel(dialog)
+        pixmap = QPixmap(str(asset_path(
+            "assets", "branding", "logos", "fxd-logo-approved-dark-1600x900.png"
+        )))
+        artwork.setPixmap(pixmap.scaled(
+            600, 338, Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation,
+        ))
+        artwork.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        message = QLabel(
+            "FXD - Intelligent Industrial Fixture Design\n"
+            "AI proposes. Engineering validates.\n"
+            "Engineering review only; no automatic production approval.",
+            dialog,
+        )
+        message.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        message.setWordWrap(True)
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close, parent=dialog)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(artwork)
+        layout.addWidget(message)
+        layout.addWidget(buttons)
+        dialog.exec()
 
     def import_step(self) -> None:
         name, _ = QFileDialog.getOpenFileName(
@@ -962,6 +1388,7 @@ class FxdWorkbenchWindow(QMainWindow):
         self._populate_properties()
         self._populate_findings()
         self._populate_workflow()
+        self._refresh_shell_state()
 
     def _sync_layer_actions(self) -> None:
         for layer in sorted(SUPPORTED_LAYERS):
@@ -1188,6 +1615,7 @@ class FxdWorkbenchWindow(QMainWindow):
         self.selected_reference = self._geometry_references.get(self.selected_identity)
         mapped = bool(self.viewport.scene and self.viewport.scene.select(self.selected_identity))
         self._set_property("Selected identity", self.selected_identity)
+        self.status_selection.setText(f"Selection: {self.selected_identity}")
         if self.selected_reference is not None:
             self.annotation_selection.setText(
                 f"Exact OCP face selected: {self.selected_reference.face_identity}"
@@ -1634,10 +2062,17 @@ class FxdWorkbenchWindow(QMainWindow):
     def toggle_wireframe(self) -> None:
         if self._scene():
             self._scene().set_wireframe(self._actions["wireframe"].isChecked())
+        self.viewport_caption.setText(
+            "PERSPECTIVE \u00b7 WIREFRAME"
+            if self._actions["wireframe"].isChecked() else "PERSPECTIVE \u00b7 SHADED"
+        )
 
     def toggle_transparency(self) -> None:
         if self._scene():
             self._scene().set_transparent(self._actions["transparency"].isChecked())
+        suffix = " \u00b7 TRANSPARENT" if self._actions["transparency"].isChecked() else ""
+        base = "WIREFRAME" if self._actions["wireframe"].isChecked() else "SHADED"
+        self.viewport_caption.setText(f"PERSPECTIVE \u00b7 {base}{suffix}")
 
     def toggle_project_layer(self, layer: str) -> None:
         action = self._actions["layer_" + layer]
@@ -1703,6 +2138,9 @@ class FxdWorkbenchWindow(QMainWindow):
         )
 
     def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802 - Qt API name
+        if self._settings_enabled:
+            self.settings.setValue("workbench/geometry", self.saveGeometry())
+            self.settings.setValue("workbench/state", self.saveState())
         self._analysis_request += 1
         self.analysis_pool.clear()
         self.analysis_pool.waitForDone(5000)
@@ -1713,7 +2151,9 @@ class FxdWorkbenchWindow(QMainWindow):
 def create_application(argv: list[str] | None = None) -> QApplication:
     if os.environ.get("CI") and not os.environ.get("QT_QPA_PLATFORM"):
         os.environ["QT_QPA_PLATFORM"] = "offscreen"
-    return QApplication.instance() or QApplication(argv or sys.argv)
+    application = QApplication.instance() or QApplication(argv or sys.argv)
+    apply_fxd_theme(application)
+    return application
 
 
 def main(step_path: Path | None = None) -> int:

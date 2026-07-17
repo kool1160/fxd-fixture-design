@@ -1,0 +1,87 @@
+{
+  "meta": {
+    "name": "FXD Desktop Engineering",
+    "version": "1.1.0",
+    "platform": "PySide6 / Qt Windows"
+  },
+  "color": {
+    "carbon": "#0B0D10",
+    "graphite": "#14181D",
+    "panel": "#1A1F26",
+    "raised": "#222831",
+    "border": "#323A45",
+    "steel": "#D6DBE0",
+    "muted": "#8B96A3",
+    "blue": "#0A84D7",
+    "orange": "#FF7A00",
+    "pass": "#39C98A",
+    "warning": "#F4B740",
+    "fail": "#EF6464",
+    "notEvaluated": "#7D8794",
+    "override": "#B78AF7",
+    "selection": "#153B55",
+    "selectionInactive": "#263440",
+    "input": "#101419",
+    "tooltip": "#222831",
+    "black": "#000000",
+    "white": "#FFFFFF"
+  },
+  "font": {
+    "ui": "Segoe UI",
+    "technical": "Consolas",
+    "size": {
+      "small": 8,
+      "body": 9,
+      "bodyLarge": 10,
+      "section": 11,
+      "dialog": 13,
+      "display": 18
+    }
+  },
+  "spacing": {
+    "2": 2,
+    "4": 4,
+    "6": 6,
+    "8": 8,
+    "12": 12,
+    "16": 16,
+    "20": 20,
+    "24": 24,
+    "32": 32
+  },
+  "radius": {
+    "small": 3,
+    "medium": 5,
+    "large": 8
+  },
+  "size": {
+    "appBar": 34,
+    "menuBar": 26,
+    "toolbar": 40,
+    "statusBar": 24,
+    "workflowRail": 48,
+    "targetMin": 40,
+    "iconDefault": 20,
+    "splitterHit": 6
+  },
+  "layout": {
+    "minWindowWidth": 1180,
+    "minWindowHeight": 720,
+    "explorerMin": 230,
+    "explorerDefault": 300,
+    "inspectorMin": 300,
+    "inspectorDefault": 360,
+    "viewportMinWidth": 680,
+    "viewportMinHeight": 440
+  },
+  "opacity": {
+    "disabled": 0.46,
+    "secondary": 0.72,
+    "overlay": 0.16
+  },
+  "motion": {
+    "fastMs": 90,
+    "normalMs": 140,
+    "reducedMs": 0
+  }
+}

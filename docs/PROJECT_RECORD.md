@@ -386,7 +386,7 @@ explorer, properties, findings, project operations, and renderer diagnostics.
 Real OCP source evidence, immutable SHA-256 identity, XCAF colors, zero-based
 tessellation, and fail-closed imports remain authoritative.
 
-## 2026-07-17 - Milestone 28 implementation in review
+## 2026-07-17 - Milestone 28 complete
 
 The unified workbench now orchestrates explicit process setup, exact OCP face
 annotations, deterministic placement and concept generation, gated concept
@@ -404,7 +404,36 @@ suppress/restore, parameter, and saved-revision operations. Private tooling
 metadata remains local and can only be marked verified when its traceability
 fields are present and its selected STEP geometry imports through real OCP.
 
-Milestone 28 remains Pending until Windows visual acceptance, hosted Kernel
-acceptance, independent review, and merge. Provisional AABB review actors are
-visually and semantically separate from real source and final manufacturing
-geometry.
+Milestone 28 passed Windows visual acceptance and hosted Kernel validation,
+received independent review, and was squash-merged through PR #50 at
+`1313922`. Provisional AABB review actors remain visually and semantically
+separate from real source and final manufacturing geometry.
+
+## 2026-07-17 - Milestone 29 local implementation evidence
+
+The approved FXD UI & Branding Kit v1.1 is integrated through a presentation-
+only `fxd_ui` package. Shared tokens, palette, QSS, application and toolbar
+icons, source-CAD identity, semantic status chips, workflow navigation,
+approval gates, desktop menus, compact status evidence, and `QSettings` layout
+persistence now brand the existing PySide6 workbench. The persistent VTK
+viewport, OCP import, project schema, interactive workflow, validation gates,
+and source geometry contracts were not replaced.
+
+Branding source `FXD_UI_Branding_Kit_v1.1.zip` was read at 7,386,642 bytes with
+SHA-256 `D73627B0760B59FCD9521A120824258F27EFCDB1B7FF5FA33F7CD37FDC06AF76`.
+All 148 manifest payload entries matched before a curated 68-file production
+payload subset plus the source manifest was imported. Reference-only HTML,
+mockups, social artwork, duplicate
+raster previews, fonts, supplier data, and customer CAD were excluded.
+
+Local evidence: Python 3.12.10, OCP 7.9.3.1, PySide6 6.8.3, and VTK 9.6.2;
+30 focused branding/workbench tests and 201 full-suite tests pass with zero
+failures, errors, or skips; compile, schema, backlog, launcher, secret-scan,
+kernel-proof, and `scripts/ci.sh` checks pass. A live Windows review loaded a
+four-component OCP STEP compound with 24 faces and 48 triangles, displayed its
+real geometry, exercised orbit, pan, zoom, fit, standard view, wireframe, and
+transparency, and closed cleanly. Its source SHA-256 remained
+`D33C0464216D0F38124CBB64D0E64D8183C52A15A1D62BEC18B72899A3E33AAA`.
+
+Milestone 29 remains Pending until independent review, hosted CI, visual
+acceptance, and merge. No production approval or physical prove-out is claimed.

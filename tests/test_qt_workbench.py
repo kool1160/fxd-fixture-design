@@ -174,6 +174,37 @@ class QtWorkbenchTests(unittest.TestCase):
         self.assertEqual(self.window.tree.topLevelItemCount(), 0)
         self.assertEqual(self.window._property_values["Evidence"].text(), EVIDENCE_PROVISIONAL)
 
+    def test_brand_shell_uses_shared_assets_and_accessible_engineering_states(self):
+        self.assertIn("SOURCE CAD \u00b7 READ-ONLY", self.window.source_badge.text())
+        self.assertEqual(self.window.workflow_rail.count(), 18)
+        self.assertFalse(self.window._actions["import"].icon().isNull())
+        self.assertFalse(self.window._actions["approve"].isEnabled())
+        self.assertEqual(self.window.status_validation.text_label.text(), "NOT EVALUATED")
+        self.assertEqual(self.window.minimumWidth(), 1180)
+        self.assertEqual(self.window.minimumHeight(), 720)
+
+    def test_real_source_identity_badge_is_verified_without_mutating_step(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = self._real_step(directory)
+            before = source.read_bytes()
+            self.window.load_step_path(source)
+            self.assertEqual(source.read_bytes(), before)
+            self.assertIn(source.name, self.window.source_badge.text())
+            self.assertIn("VERIFIED", self.window.source_badge.text())
+            self.assertIn(sha256(before).hexdigest(), self.window.source_badge.toolTip())
+            self.assertEqual(self.window.renderer_health.text_label.text(), "VTK")
+
+    def test_layout_reset_preserves_document_viewport_and_project_state(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = self._real_step(directory)
+            self.window.load_step_path(source)
+            document = self.window.document
+            viewport = self.window.viewport
+            self.window.reset_workbench_layout()
+            self.assertIs(self.window.document, document)
+            self.assertIs(self.window.viewport, viewport)
+            self.assertEqual(source.read_bytes(), document.source_bytes)
+
     def test_user32_loader_enables_reliable_last_error_capture(self):
         with patch(
             "fxd_qt_app.ctypes.WinDLL", return_value=object(), create=True

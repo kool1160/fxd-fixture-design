@@ -1,0 +1,21 @@
+# Accessibility Checklist
+
+- [ ] Text and meaningful icons meet WCAG AA contrast against their surfaces.
+- [ ] Every semantic state uses icon + text + color.
+- [ ] No datum, locator, validation result, or concept state relies on color alone.
+- [ ] Complete keyboard navigation exists through menus, toolbar, workflow, tree, inspector, findings, dialogs, and export.
+- [ ] Focus is always visible with a 2 px outline or equivalent.
+- [ ] Desktop interactive targets are at least 40×40 px where practical; dense rows retain at least 24 px height and full-row hit areas.
+- [ ] Unfamiliar toolbar icons have visible labels or nearby labeled group actions.
+- [ ] Tooltips supplement, never replace, labels and disabled reasons.
+- [ ] Engineering tree provides an accessible parallel to 3D selection.
+- [ ] VTK selection changes announce object identity through accessible status text where practical.
+- [ ] Tables have meaningful headers, sort state, units, and accessible row descriptions.
+- [ ] Input labels are programmatically associated with fields.
+- [ ] Units are visible and not encoded only in placeholder text.
+- [ ] Error and warning text identifies the field and corrective action.
+- [ ] Reduced-motion preference disables nonessential transitions.
+- [ ] High-DPI scaling is tested at 100%, 125%, 150%, and 200%.
+- [ ] Color-blind review covers source/generation layers, status chips, and viewport overlays.
+- [ ] Dialogs preserve logical tab order and return focus to the invoking control.
+- [ ] External links identify the supplier domain and open through a confirmed external-browser action.
