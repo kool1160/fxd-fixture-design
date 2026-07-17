@@ -38,6 +38,7 @@ from PySide6.QtWidgets import (
 )
 from fxd_geometry import (
     KernelOperationError,
+    OcpKernel,
     RenderDiagnostics,
     WorkbenchDocument,
     load_step_for_workbench,
@@ -326,7 +327,8 @@ class FxdWorkbenchWindow(QMainWindow):
     """One-window desktop shell around the deterministic FXD engineering core."""
 
     def __init__(self, *,
-                 viewport_factory: Callable[..., EmbeddedVtkViewport] = EmbeddedVtkViewport) -> None:
+                 viewport_factory: Callable[..., EmbeddedVtkViewport] = EmbeddedVtkViewport,
+                 kernel: OcpKernel | None = None) -> None:
         super().__init__()
         self.setObjectName("fxdEngineeringWorkbench")
         self.setWindowTitle("FXD - Engineering Workbench - review only")
@@ -336,6 +338,7 @@ class FxdWorkbenchWindow(QMainWindow):
         self.project_path: Path | None = None
         self.selected_identity: str | None = None
         self.log = StructuredLog(Path.home() / ".fxd" / "diagnostics.jsonl")
+        self.kernel = kernel or OcpKernel()
         self.viewport = viewport_factory(self)
         self._property_values: dict[str, QLabel] = {}
         self._actions: dict[str, QAction] = {}
@@ -629,7 +632,7 @@ class FxdWorkbenchWindow(QMainWindow):
             return
         destination = QFileDialog.getExistingDirectory(self, "Export engineering review package")
         if destination:
-            paths = export_project_package(self.project, destination)
+            paths = export_project_package(self.project, destination, kernel=self.kernel)
             self.statusBar().showMessage(
                 f"Exported {len(paths)} review artifacts; production approval is not implied."
             )

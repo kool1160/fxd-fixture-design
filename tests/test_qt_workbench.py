@@ -335,6 +335,18 @@ print(json.dumps(result, sort_keys=True))
             window.close()
             self.application.processEvents()
 
+    def test_export_passes_real_ocp_kernel_to_manufacturing_package(self):
+        self.window.project = self._project()
+        with tempfile.TemporaryDirectory() as directory:
+            with patch(
+                "fxd_qt_app.QFileDialog.getExistingDirectory", return_value=directory
+            ), patch(
+                "fxd_qt_app.export_project_package", return_value=(Path(directory) / "manifest.json",)
+            ) as export:
+                self.window.export_package()
+        export.assert_called_once_with(self.window.project, directory, kernel=self.window.kernel)
+        self.assertIsInstance(self.window.kernel, OcpKernel)
+
 
 if __name__ == "__main__":
     unittest.main()
