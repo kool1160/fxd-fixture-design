@@ -6,10 +6,12 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from dataclasses import replace
 from importlib.util import find_spec
 from hashlib import sha256
 from pathlib import Path
-from unittest.mock import patch
+from types import SimpleNamespace
+from unittest.mock import PropertyMock, patch
 
 if find_spec("PySide6") is None:
     raise unittest.SkipTest("PySide6 desktop runtime is not installed")
@@ -335,18 +337,62 @@ print(json.dumps(result, sort_keys=True))
 
     def test_blocked_export_surfaces_authoritative_gate_without_writing(self):
         self.window.project = self._project()
-        with tempfile.TemporaryDirectory() as directory, patch(
-            "fxd_qt_app.QFileDialog.getExistingDirectory", return_value=directory
-        ), patch(
-            "fxd_qt_app.export_project_package",
-            side_effect=ExportError("validation status is provisional"),
+        with patch("fxd_qt_app.QFileDialog.getExistingDirectory") as chooser, patch(
+            "fxd_qt_app.export_project_package"
         ) as export, patch("fxd_qt_app.QMessageBox.warning") as warning:
             self.window.export_package()
-        export.assert_called_once()
-        warning.assert_called_once_with(
-            self.window, "Export blocked", "validation status is provisional"
-        )
+        chooser.assert_not_called()
+        export.assert_not_called()
+        warning.assert_called_once()
+        self.assertIn("validation result", warning.call_args.args[2])
         self.assertIn("Export blocked", self.window.statusBar().currentMessage())
+
+    def test_suppressed_or_corrected_project_disables_and_blocks_export(self):
+        clean_validation = SimpleNamespace(
+            blocked=False, status="provisional", findings=(), evidence_digest="evidence"
+        )
+        with patch.object(
+            FxdProject, "active_validation", new_callable=PropertyMock,
+            return_value=clean_validation,
+        ):
+            base = self._project()
+            projects = (
+                replace(base, suppressed_features=frozenset({"support-1"})),
+                base.correct("clamp_force", "review", "engineering correction"),
+            )
+            for project in projects:
+                state = "suppressed" if project.suppressed_features else "corrected"
+                with self.subTest(state=state):
+                    self.window.project = project
+                    self.window._refresh_shell_state()
+                    self.assertFalse(self.window._actions["export"].isEnabled())
+                    with patch(
+                        "fxd_qt_app.QFileDialog.getExistingDirectory"
+                    ) as chooser, patch(
+                        "fxd_qt_app.export_project_package"
+                    ) as export, patch("fxd_qt_app.QMessageBox.warning") as warning:
+                        self.window.export_package()
+                    chooser.assert_not_called()
+                    export.assert_not_called()
+                    warning.assert_called_once()
+
+    def test_clean_validated_project_enables_and_exports(self):
+        clean_validation = SimpleNamespace(
+            blocked=False, status="provisional", findings=(), evidence_digest="evidence"
+        )
+        self.window.project = self._project()
+        with tempfile.TemporaryDirectory() as directory, patch.object(
+            FxdProject, "active_validation", new_callable=PropertyMock,
+            return_value=clean_validation,
+        ), patch(
+            "fxd_qt_app.QFileDialog.getExistingDirectory", return_value=directory
+        ), patch(
+            "fxd_qt_app.export_project_package", return_value=(Path(directory) / "manifest.json",)
+        ) as export:
+            self.window._refresh_shell_state()
+            self.assertTrue(self.window._actions["export"].isEnabled())
+            self.window.export_package()
+        export.assert_called_once_with(self.window.project, directory, kernel=self.window.kernel)
 
     def test_interactive_analysis_wires_exact_faces_to_existing_engines(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -536,7 +582,11 @@ print(json.dumps(result, sort_keys=True))
 
     def test_export_passes_real_ocp_kernel_to_manufacturing_package(self):
         self.window.project = self._project()
-        with tempfile.TemporaryDirectory() as directory:
+        clean_validation = SimpleNamespace(blocked=False)
+        with tempfile.TemporaryDirectory() as directory, patch.object(
+            FxdProject, "active_validation", new_callable=PropertyMock,
+            return_value=clean_validation,
+        ):
             with patch(
                 "fxd_qt_app.QFileDialog.getExistingDirectory", return_value=directory
             ), patch(

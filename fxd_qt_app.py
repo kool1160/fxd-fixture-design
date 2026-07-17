@@ -79,7 +79,12 @@ from fxd_geometry import (
     product_from_workbench_document,
     tooling_record_from_file,
 )
-from fxd_geometry.operations import ProjectRecovery, StructuredLog, export_project_package
+from fxd_geometry.operations import (
+    ProjectRecovery,
+    StructuredLog,
+    export_project_package,
+    project_export_block_reason,
+)
 from fxd_geometry.project import FxdProject, ProjectFormatError, SUPPORTED_LAYERS
 
 
@@ -1201,9 +1206,12 @@ class FxdWorkbenchWindow(QMainWindow):
         )
         self.status_selection.setText(f"Selection: {self.selected_identity or '-'}")
 
+        export_block_reason = (
+            project_export_block_reason(self.project) if self.project is not None else None
+        )
         action_state = {
             "save_project": self.project is not None,
-            "export": self.project is not None and not self.project.active_validation.blocked,
+            "export": self.project is not None and export_block_reason is None,
             "recover": self.project_path is not None,
             "fit": self.document is not None,
             "analyze": self.document is not None,
@@ -1215,9 +1223,10 @@ class FxdWorkbenchWindow(QMainWindow):
         for key, enabled in action_state.items():
             if key in self._actions:
                 self._actions[key].setEnabled(enabled)
-        if "export" in self._actions and self.project and self.project.active_validation.blocked:
+        if "export" in self._actions:
             self._actions["export"].setToolTip(
-                f"Export disabled: {failures} deterministic failures block this concept."
+                f"Export disabled: {export_block_reason}." if export_block_reason else
+                "Export the current engineering review package"
             )
         self._populate_workflow_rail()
 
@@ -1355,6 +1364,17 @@ class FxdWorkbenchWindow(QMainWindow):
     def export_package(self) -> None:
         if self.project is None:
             self.statusBar().showMessage("No validated FXD project is open.")
+            return
+        block_reason = project_export_block_reason(self.project)
+        if block_reason is not None:
+            self.log.record(
+                "export_blocked", revision=self.project.revision_id, reason=block_reason
+            )
+            QMessageBox.warning(self, "Export blocked", block_reason)
+            self.statusBar().showMessage(
+                "Export blocked by deterministic validation or stale review state; "
+                "no review package was written."
+            )
             return
         destination = QFileDialog.getExistingDirectory(self, "Export engineering review package")
         if destination:

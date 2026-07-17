@@ -32,7 +32,8 @@ from .review_kernel import OcpKernel
 from .visual import ReviewGeometry, ReviewVisualItem, VisualEdge, build_review_geometry
 from .project import FixtureEdit, ProjectRevision
 from .operations import (DiagnosticEvent, OperationsError, ProjectRecovery, StructuredLog,
-                         export_project_package, load_preferences, save_preferences)
+                         export_project_package, load_preferences, project_export_block_reason,
+                         save_preferences)
 from .validation import (VALIDATION_VERSION, ValidationFinding, ValidationResult,
                          validate_fixture_concept)
 from .workflow import (SequencePlan, WorkflowComparison, WorkflowEnvelope, WorkflowError,
@@ -90,7 +91,8 @@ __all__ += ["ReviewZone", "SequencePlan", "WorkflowComparison", "WorkflowEnvelop
             "WorkflowVisualItem",
             "compare_workflow_variants", "evaluate_workflow"]
 __all__ += ["DiagnosticEvent", "OperationsError", "ProjectRecovery", "StructuredLog",
-            "export_project_package", "load_preferences", "save_preferences"]
+            "export_project_package", "load_preferences", "project_export_block_reason",
+            "save_preferences"]
 __all__ += ["StructuralAssembly", "StructuralComparison", "StructuralFinding", "StructuralGenerationError",
             "StructuralMember", "StructuralParameters", "StructuralStrategy", "compare_structural_concepts",
             "generate_structural_assembly", "select_structural_strategy", "validate_structural_assembly"]

@@ -3,8 +3,12 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import json
 from hashlib import sha256
+from importlib.util import find_spec
 from pathlib import Path
 import unittest
+
+if find_spec("PySide6") is None:
+    raise unittest.SkipTest("PySide6 desktop runtime is not installed")
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication

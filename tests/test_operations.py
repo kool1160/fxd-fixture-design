@@ -2,7 +2,10 @@ import importlib.util
 import json
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import PropertyMock, patch
 
 from fxd_geometry import (EngineeringAnnotations, ExportError, OperationsError, ProjectRecovery,
                           StructuredLog, Vec3, export_project_package, import_step,
@@ -61,6 +64,44 @@ class OperationsTests(unittest.TestCase):
             with self.assertRaises(ExportError):
                 export_project_package(self.project, directory)
             self.assertEqual(list(Path(directory).iterdir()), [])
+
+    def test_suppressed_or_corrected_project_cannot_reach_export_generation(self):
+        clean_validation = SimpleNamespace(
+            blocked=False, status="provisional", evidence_digest="evidence"
+        )
+        with patch.object(
+            FxdProject, "active_validation", new_callable=PropertyMock,
+            return_value=clean_validation,
+        ):
+            suppressed = replace(
+                self.project, suppressed_features=frozenset({"support-1"})
+            )
+            corrected = self.project.correct("clamp_force", "review", "engineering correction")
+            for project, message in (
+                (suppressed, "suppressed fixture features"),
+                (corrected, "active fixture corrections"),
+            ):
+                with self.subTest(message=message), tempfile.TemporaryDirectory() as directory, \
+                        patch("fxd_geometry.operations.build_fabrication_package") as build:
+                    with self.assertRaisesRegex(ExportError, message):
+                        export_project_package(project, directory)
+                    build.assert_not_called()
+                    self.assertEqual(list(Path(directory).iterdir()), [])
+
+    def test_clean_validated_project_reaches_export_generation(self):
+        clean_validation = SimpleNamespace(blocked=False)
+        package = SimpleNamespace()
+        with tempfile.TemporaryDirectory() as directory, patch.object(
+            FxdProject, "active_validation", new_callable=PropertyMock,
+            return_value=clean_validation,
+        ), patch(
+            "fxd_geometry.operations.build_fabrication_package", return_value=package
+        ) as build, patch(
+            "fxd_geometry.operations.write_fabrication_package", return_value=()
+        ) as write:
+            self.assertEqual(export_project_package(self.project, directory), ())
+        build.assert_called_once()
+        write.assert_called_once_with(package, directory)
 
     def test_large_legally_shareable_assembly_has_a_measured_budget(self):
         performance = _load_script("fxd_performance_budget", ROOT / "scripts" / "performance_budget.py")

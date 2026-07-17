@@ -12,7 +12,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from .export import FabricationPackage, build_fabrication_package, write_fabrication_package
+from .export import (
+    ExportError,
+    FabricationPackage,
+    build_fabrication_package,
+    write_fabrication_package,
+)
 from .project import FxdProject
 
 
@@ -94,9 +99,29 @@ def save_preferences(path: str | Path, preferences: dict[str, Any]) -> Path:
     return target
 
 
+def project_export_block_reason(project: FxdProject) -> str | None:
+    """Return the authoritative project-level reason export must fail closed."""
+    if project.active_validation.blocked:
+        return "invalid deterministic validation result cannot be exported"
+    if project.suppressed_features:
+        return (
+            "suppressed fixture features must be regenerated and deterministically "
+            "revalidated before export"
+        )
+    if project.active.corrections:
+        return (
+            "active fixture corrections must be regenerated and deterministically "
+            "revalidated before export"
+        )
+    return None
+
+
 def export_project_package(project: FxdProject, destination: str | Path,
                            *, kernel: object | None = None) -> tuple[Path, ...]:
     """Export through the same deterministic, fail-closed gate used by the core."""
+    block_reason = project_export_block_reason(project)
+    if block_reason is not None:
+        raise ExportError(block_reason)
     manufacturing = None
     if kernel is not None:
         from .manufacturing import generate_manufacturing_geometry
