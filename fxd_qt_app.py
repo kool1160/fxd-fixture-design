@@ -625,6 +625,7 @@ class FxdWorkbenchWindow(QMainWindow):
         self._analysis_tasks: dict[int, _AnalysisTask] = {}
         self._proposal_request = 0
         self._proposal_tasks: dict[int, _ProposalTask] = {}
+        self._proposal_contexts: dict[int, str] = {}
         self._proposal_cancellation: CancellationToken | None = None
         self.ai_provider = ai_provider
         self._proposal_records: dict[str, object] = {}
@@ -1844,6 +1845,7 @@ class FxdWorkbenchWindow(QMainWindow):
             self.project.fixture_proposal if self.project else None,
         )
         self._proposal_tasks[request_id] = task
+        self._proposal_contexts[request_id] = self._proposal_workflow_identity(self.workflow)
         task.signals.completed.connect(self._proposal_completed)
         task.signals.failed.connect(self._proposal_failed)
         self.proposal_generate.setEnabled(False)
@@ -1858,6 +1860,13 @@ class FxdWorkbenchWindow(QMainWindow):
             self._proposal_cancellation.cancel()
             self.proposal_status.setText("Cancelling fixture proposal generation safely...")
 
+    @staticmethod
+    def _proposal_workflow_identity(workflow: InteractiveWorkflow) -> str:
+        encoded = json.dumps(
+            workflow.to_dict(), sort_keys=True, separators=(",", ":"),
+        )
+        return sha256(encoded.encode("utf-8")).hexdigest()
+
     def _invalidate_pending_proposal_generation(self) -> None:
         """Discard completions tied to a source or project being replaced."""
         self._proposal_request += 1
@@ -1865,13 +1874,17 @@ class FxdWorkbenchWindow(QMainWindow):
             self._proposal_cancellation.cancel()
         self._proposal_cancellation = None
         self._proposal_tasks.clear()
+        self._proposal_contexts.clear()
         self.proposal_cancel.setVisible(False)
 
     def _proposal_completed(self, outcome: object, request_id: int) -> None:
         self._proposal_tasks.pop(request_id, None)
+        request_context = self._proposal_contexts.pop(request_id, None)
         if request_id != self._proposal_request:
             return
-        if (self.document is None
+        if (self.workflow is None or request_context is None
+                or request_context != self._proposal_workflow_identity(self.workflow)
+                or self.document is None
                 or outcome.project.product.source_sha256 != self.document.source_sha256
                 or outcome.project.product.source_bytes != self.document.source_bytes
                 or (self.project is not None
@@ -1881,7 +1894,7 @@ class FxdWorkbenchWindow(QMainWindow):
             self.proposal_cancel.setVisible(False)
             self.proposal_generate.setEnabled(True)
             self.statusBar().showMessage(
-                "Discarded fixture proposal generated for a replaced source model."
+                "Discarded fixture proposal generated for replaced source or workflow evidence."
             )
             return
         self._proposal_cancellation = None
@@ -1895,6 +1908,7 @@ class FxdWorkbenchWindow(QMainWindow):
 
     def _proposal_failed(self, message: str, request_id: int) -> None:
         self._proposal_tasks.pop(request_id, None)
+        self._proposal_contexts.pop(request_id, None)
         if request_id != self._proposal_request:
             return
         self._proposal_cancellation = None
