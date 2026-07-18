@@ -388,6 +388,7 @@ class AiFixtureEngineerTests(unittest.TestCase):
         request = build_ai_request(stale)
         encoded = json.dumps(request.to_dict(), sort_keys=True)
         self.assertIn("tooling:test-toggle", encoded)
+        self.assertIn("tooling:test-toggle", request.known_identities)
         self.assertIn('"force_n": 1200.0', encoded)
         self.assertNotIn("C:/private/tooling", encoded)
         self.assertNotIn("source_path", encoded)

@@ -686,6 +686,8 @@ def _known_identities(project: FxdProject) -> frozenset[str]:
             values.update(face.identity for face in body.faces)
             values.update(edge.identity for edge in body.edges)
     values.update(item.identity for item in project.active.fixture.features)
+    if project.workflow:
+        values.update(item.identity for item in project.workflow.customer_tooling)
     if project.placement:
         values.update(item.identity for item in project.placement.placements)
     orientation = project.workflow.setup.manufacturing_orientation if project.workflow else None
