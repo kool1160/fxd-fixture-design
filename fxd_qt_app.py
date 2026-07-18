@@ -228,7 +228,8 @@ class _ProposalTask(QRunnable):
 
     def __init__(self, document: WorkbenchDocument, workflow: InteractiveWorkflow,
                  request_id: int, provider: AiFixtureProvider | None,
-                 cancellation: CancellationToken, prior_proposal: object | None = None) -> None:
+                 cancellation: CancellationToken, prior_proposal: object | None = None,
+                 current_project: FxdProject | None = None) -> None:
         super().__init__()
         self.document = document
         self.workflow = workflow
@@ -236,6 +237,7 @@ class _ProposalTask(QRunnable):
         self.provider = provider
         self.cancellation = cancellation
         self.prior_proposal = prior_proposal
+        self.current_project = current_project
         self.signals = _ProposalSignals()
 
     def run(self) -> None:
@@ -243,6 +245,7 @@ class _ProposalTask(QRunnable):
             outcome = generate_fixture_proposal(
                 self.document, self.workflow, provider=self.provider,
                 cancellation=self.cancellation, prior_proposal=self.prior_proposal,
+                current_project=self.current_project,
             )
             self.signals.completed.emit(outcome, self.request_id)
         except Exception as exc:
@@ -1813,6 +1816,7 @@ class FxdWorkbenchWindow(QMainWindow):
             self.document, self.workflow,
             provider=provider if provider is not None else self.ai_provider,
             prior_proposal=self.project.fixture_proposal if self.project else None,
+            current_project=self.project,
         )
         self.workflow = outcome.project.workflow
         self._replace_project(outcome.project)
@@ -1846,6 +1850,7 @@ class FxdWorkbenchWindow(QMainWindow):
         task = _ProposalTask(
             self.document, self.workflow, request_id, self.ai_provider, cancellation,
             self.project.fixture_proposal if self.project else None,
+            self.project,
         )
         self._proposal_tasks[request_id] = task
         self._proposal_contexts[request_id] = self._proposal_workflow_identity(self.workflow)

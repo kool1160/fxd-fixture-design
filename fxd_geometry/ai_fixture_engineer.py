@@ -687,7 +687,9 @@ def _known_identities(project: FxdProject) -> frozenset[str]:
             values.update(edge.identity for edge in body.edges)
     values.update(item.identity for item in project.active.fixture.features)
     if project.workflow:
-        values.update(item.identity for item in project.workflow.customer_tooling)
+        values.update(
+            item.identity for item in project.workflow.customer_tooling if item.verified
+        )
     if project.placement:
         values.update(item.identity for item in project.placement.placements)
     orientation = project.workflow.setup.manufacturing_orientation if project.workflow else None
@@ -1315,6 +1317,7 @@ def generate_fixture_proposal(
     *, provider: AiFixtureProvider | None = None, allow_fallback: bool = True,
     timeout_seconds: float = 45.0, cancellation: CancellationToken | None = None,
     prior_proposal: FixtureProposal | None = None,
+    current_project: FxdProject | None = None,
 ) -> ProposalGenerationOutcome:
     if workflow.source_sha256 != document.source_sha256:
         raise FixtureProposalError("workflow and immutable STEP source do not match")
@@ -1330,10 +1333,22 @@ def generate_fixture_proposal(
         raise MissingIntentError(questions)
     token = cancellation or CancellationToken.create()
     token.raise_if_cancelled()
-    prepared = _infer_minimum_annotations(document, workflow)
-    project = analyze_engineering_workflow(document, prepared)
-    prepared = replace(project.workflow, concepts_generated=True, active_stage="Proposal")
-    project = project.with_workflow(prepared)
+    if current_project is not None:
+        if (current_project.product.source_sha256 != document.source_sha256
+                or current_project.product.source_bytes != document.source_bytes):
+            raise FixtureProposalError(
+                "current project does not match the immutable STEP source"
+            )
+        prepared = replace(
+            workflow, analysis_completed=True, concepts_generated=True,
+            active_stage="Proposal",
+        )
+        project = current_project.with_workflow(prepared)
+    else:
+        prepared = _infer_minimum_annotations(document, workflow)
+        project = analyze_engineering_workflow(document, prepared)
+        prepared = replace(project.workflow, concepts_generated=True, active_stage="Proposal")
+        project = project.with_workflow(prepared)
     request = build_ai_request(project)
     provider = provider or HttpJsonAiProvider.from_environment()
     proposal: FixtureProposal

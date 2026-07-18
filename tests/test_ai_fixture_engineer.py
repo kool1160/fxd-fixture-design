@@ -293,6 +293,19 @@ class AiFixtureEngineerTests(unittest.TestCase):
         self.assertEqual(event.action, "regenerate")
         self.assertEqual(event.prior_proposal_identity, self.fallback.proposal.proposal_identity)
 
+    def test_generation_preserves_existing_project_edits_and_decisions(self):
+        feature = self.fallback.project.active.fixture.features[0]
+        edited = self.fallback.project.suppress(feature.identity, "engineer suppression")
+        regenerated = generate_fixture_proposal(
+            self.document, edited.workflow, current_project=edited,
+            prior_proposal=edited.fixture_proposal,
+        ).project
+        self.assertEqual(regenerated.active_concept, edited.active_concept)
+        self.assertEqual(regenerated.edit_log, edited.edit_log)
+        self.assertEqual(regenerated.suppressed_features, edited.suppressed_features)
+        self.assertTrue(set(edited.decisions) <= set(regenerated.decisions))
+        self.assertEqual(regenerated.product.source_bytes, edited.product.source_bytes)
+
     def test_proposal_persists_with_decisions_and_source_bytes_unchanged(self):
         recommendation = self.fallback.proposal.recommendations[0]
         project = self.fallback.project.decide_proposal_recommendation(
@@ -401,6 +414,15 @@ class AiFixtureEngineerTests(unittest.TestCase):
             "manufacturing intent or engineering context changed",
         )
         self.assertIn("stale fixture proposal", project_export_block_reason(stale))
+        unverified = replace(
+            tooling, identity="tooling:unverified-toggle", verified=False,
+        )
+        unverified_project = self.fallback.project.with_workflow(
+            self.fallback.project.workflow.with_tooling(unverified)
+        )
+        self.assertNotIn(
+            unverified.identity, build_ai_request(unverified_project).known_identities,
+        )
 
     def test_source_sha_mismatch_cannot_be_attached_or_loaded(self):
         payload = self.fallback.proposal.to_dict()

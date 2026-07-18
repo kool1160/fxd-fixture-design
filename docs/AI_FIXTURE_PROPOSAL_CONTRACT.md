@@ -43,7 +43,8 @@ files. Requests contain compact structured identities, bounds, intent,
 orientation axes, annotations, sanitized customer-tooling evidence, placements,
 deterministic candidates, findings, and alternatives. Tooling source paths, STEP
 bytes, base64 source geometry, unrestricted project dumps, customer credentials,
-and hidden chain-of-thought are excluded.
+and hidden chain-of-thought are excluded. Only verified customer-tooling records
+enter the strict identity set that provider recommendations may cite.
 
 Provider calls are bounded by a caller-visible timeout and cooperative
 cancellation. Missing configuration produces the explicit state `ai_unavailable`.
@@ -69,6 +70,11 @@ persisted before an asynchronous request is bound, and a completion is discarded
 if that governed context changes while the request runs. Stale proposals and
 proposals with deterministic blockers cannot be accepted, approved, or exported.
 Source STEP bytes and source coordinates remain unchanged.
+
+Generating or regenerating a proposal from an existing project preserves its
+active concept, edit log, suppressed features, review decisions, revision history,
+and immutable product evidence. Proposal replacement still invalidates downstream
+authored fixture, drawing, optimization, approval, and export evidence by design.
 
 ## Guided validation
 

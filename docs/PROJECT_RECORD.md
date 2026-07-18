@@ -489,9 +489,9 @@ confirmation, per-recommendation highlights and explanations, guided validation
 with correction routing, and dismissible/reopenable first-run guidance.
 
 Local evidence: Python 3.12.10, OCP 7.9.3.1, PySide6 6.8.3, and VTK 9.6.2;
-16 focused AI fixture tests, 45 focused Qt/workbench tests, 14 project and export
+17 focused AI fixture tests, 45 focused Qt/workbench tests, 14 project and export
 persistence tests, 36 manufacturing-orientation/interactive/kernel tests, and
-277 full-suite tests pass with zero failures, errors, or skips. `compileall`,
+278 full-suite tests pass with zero failures, errors, or skips. `compileall`,
 `git diff --check`, launcher dependency checking, and `scripts/ci.sh` pass; the
 governed CI validates 20 milestones and its real OCP proof.
 
