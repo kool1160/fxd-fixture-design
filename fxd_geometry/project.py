@@ -18,13 +18,14 @@ from .concepts import CompleteFixtureConcept, FixtureCorrection, generate_fixtur
 from .fixture import FixtureFeature, FixtureFinding, FixtureParameters, ManufacturingSpec
 from .product_model import ProductModel
 from .step_import import import_step
-from .validation import ValidationResult, validate_fixture_concept
+from .validation import ValidationFinding, ValidationResult, validate_fixture_concept
 from .structure import generate_structural_assembly
 from .placement import PlacementPlan
 from .access import evaluate_access
 from .weld_rules import evaluate_weld_rules
 
 if TYPE_CHECKING:
+    from .fabrication_workflow import FixtureBuildPlan
     from .interactive_workflow import InteractiveWorkflow
 
 
@@ -37,7 +38,7 @@ SUPPORTED_LAYERS = frozenset({
     "supports", "stops", "clamps", "welds", "access", "keep_out",
     "warnings", "provisional",
 })
-PROJECT_FORMAT = "fxd-neutral-project-v3"
+PROJECT_FORMAT = "fxd-neutral-project-v4"
 
 
 @dataclass(frozen=True)
@@ -132,6 +133,7 @@ class FxdProject:
     drawing_intent: dict[str, object] | None = None
     optimization_intent: dict[str, object] | None = None
     workflow: "InteractiveWorkflow | None" = None
+    fixture_build: "FixtureBuildPlan | None" = None
 
     def __post_init__(self) -> None:
         if self.annotations.source_sha256 != self.product.source_sha256:
@@ -150,6 +152,11 @@ class FxdProject:
             raise ProjectFormatError("interactive workflow does not match the immutable source geometry")
         if self.workflow is not None:
             self.workflow.validate_references(self.product)
+        if self.fixture_build is not None:
+            if self.fixture_build.requirements.source_sha256 != self.product.source_sha256:
+                raise ProjectFormatError("fixture build does not match the immutable source geometry")
+            if self.fixture_build.concept_identity != self.active_concept:
+                raise ProjectFormatError("fixture build must belong to the active fixture concept")
 
     @classmethod
     def from_product(cls, product: ProductModel, annotations: EngineeringAnnotations,
@@ -178,13 +185,32 @@ class FxdProject:
             access = evaluate_access(self.product, concept.fixture, self.annotations)
             if self.annotations.weld_joints:
                 weld = evaluate_weld_rules(self.product, concept.fixture, self.annotations)
-        return validate_fixture_concept(
+        result = validate_fixture_concept(
             self.product, concept, access=access, weld=weld,
         )
+        if self.fixture_build is None or self.fixture_build.concept_identity != concept.identity:
+            return result
+        from .fabrication_workflow import validate_fixture_build_plan
+        build = validate_fixture_build_plan(self.product, self.fixture_build)
+        findings = result.findings + tuple(
+            ValidationFinding(item.rule_id, item.severity, "fabrication", item.message,
+                              item.evidence + tuple(f"component={value}" for value in item.component_identities),
+                              item.assumptions)
+            for item in build.findings
+        )
+        status = "invalid" if any(item.severity == "error" for item in findings) else (
+            "provisional" if any(item.severity == "warning" for item in findings) else "valid")
+        encoded = json.dumps({
+            "base_evidence_digest": result.evidence_digest,
+            "fixture_build_evidence_digest": build.evidence_digest,
+            "findings": [item.__dict__ for item in findings],
+        }, sort_keys=True, separators=(",", ":"))
+        return ValidationResult(result.version, result.concept_identity, result.source_sha256, result.units,
+                                status, findings, hashlib.sha256(encoded.encode()).hexdigest())
 
     def _invalidate_derived_intent(self) -> "FxdProject":
         """Clear evidence derived from manufacturing or drawing state."""
-        return replace(self, drawing_intent=None, optimization_intent=None)
+        return replace(self, drawing_intent=None, optimization_intent=None, fixture_build=None)
 
     def with_drawing_intent(self, intent: dict[str, object] | None) -> "FxdProject":
         """Attach drawing evidence and invalidate dependent cost evidence."""
@@ -221,6 +247,15 @@ class FxdProject:
         candidate = replace(self, workflow=workflow, approved_revision=None)
         return candidate._record_revision(self.revision_id)
 
+    def with_fixture_build(self, fixture_build: "FixtureBuildPlan") -> "FxdProject":
+        """Persist an editable M30 construction plan and revalidate it with the project."""
+        if fixture_build.requirements.source_sha256 != self.product.source_sha256:
+            raise ProjectFormatError("fixture build does not match the immutable source geometry")
+        if fixture_build.concept_identity != self.active_concept:
+            raise ProjectFormatError("fixture build must belong to the active fixture concept")
+        candidate = replace(self, fixture_build=fixture_build, approved_revision=None)
+        return candidate._record_revision(self.revision_id)
+
     @property
     def revision_id(self) -> str:
         payload = {
@@ -234,6 +269,8 @@ class FxdProject:
             payload["workflow"] = self.workflow.identity_dict()
             payload["annotations"] = self.annotations.to_dict()
             payload["placement_digest"] = self.placement.evidence_digest if self.placement else None
+        if self.fixture_build is not None:
+            payload["fixture_build"] = self.fixture_build.to_dict()
         encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"))
         return "rev-" + hashlib.sha256(encoded.encode()).hexdigest()[:16]
 
@@ -460,7 +497,7 @@ class FxdProject:
             for result in (self.validation_for(concept),)
         }
         return {
-            "format": PROJECT_FORMAT, "schema_version": 3, "units": "mm",
+            "format": PROJECT_FORMAT, "schema_version": 4, "units": "mm",
             "source_name": self.product.source_name,
             "source_sha256": self.product.source_sha256,
             "source_step_base64": base64.b64encode(self.product.source_bytes).decode("ascii"),
@@ -482,6 +519,7 @@ class FxdProject:
             "drawing_intent": self.drawing_intent,
             "optimization_intent": self.optimization_intent,
             "interactive_workflow": self.workflow.to_dict() if self.workflow else None,
+            "fixture_build": self.fixture_build.to_dict() if self.fixture_build else None,
             "validations": validations,
             "concept_corrections": {
                 concept.identity: [correction.__dict__ for correction in concept.corrections]
@@ -542,12 +580,13 @@ class FxdProject:
         try:
             data = json.loads(Path(source).read_text(encoding="utf-8"))
             if data.get("format") not in {
-                    "fxd-neutral-project-v1", "fxd-neutral-project-v2", PROJECT_FORMAT
+                    "fxd-neutral-project-v1", "fxd-neutral-project-v2", "fxd-neutral-project-v3", PROJECT_FORMAT
             } or data.get("units") != "mm":
                 raise ProjectFormatError("unsupported FXD project format or units")
             raw = base64.b64decode(data["source_step_base64"], validate=True)
             workflow_data = data.get("interactive_workflow")
             workflow = None
+            orientation_revalidation_required = False
             if workflow_data:
                 from .interactive_workflow import (
                     InteractiveWorkflow, product_from_workbench_document,
@@ -556,6 +595,7 @@ class FxdProject:
                 document = load_step_for_workbench(raw, source_name=data["source_name"])
                 product = product_from_workbench_document(document)
                 workflow = InteractiveWorkflow.from_dict(workflow_data)
+                orientation_revalidation_required = not workflow.has_accepted_manufacturing_orientation()
             else:
                 product = import_step(raw.decode("utf-8"), source_name=data["source_name"])
             if product.source_sha256 != data["source_sha256"]:
@@ -582,17 +622,22 @@ class FxdProject:
                 else:
                     raise ProjectFormatError(f"unsupported saved edit {edit.operation!r}")
             project = project.with_concept(data["active_concept"])
+            fixture_build_data = data.get("fixture_build")
+            if fixture_build_data:
+                from .fabrication_workflow import FixtureBuildPlan
+                project = project.with_fixture_build(FixtureBuildPlan.from_dict(fixture_build_data))
             for layer in data.get("hidden_layers", []):
                 if layer not in project.hidden_layers:
                     project = project.toggle_layer(layer)
             saved_validations = data.get("validations", {})
-            for concept in project.concepts:
-                saved = saved_validations.get(concept.identity)
-                if saved:
-                    current = project.validation_for(concept)
-                    if (saved.get("status"), saved.get("version"), saved.get("evidence_digest")) != (
-                            current.status, current.version, current.evidence_digest):
-                        raise ProjectFormatError(f"deterministic validation changed for concept {concept.identity}")
+            if not orientation_revalidation_required:
+                for concept in project.concepts:
+                    saved = saved_validations.get(concept.identity)
+                    if saved:
+                        current = project.validation_for(concept)
+                        if (saved.get("status"), saved.get("version"), saved.get("evidence_digest")) != (
+                                current.status, current.version, current.evidence_digest):
+                            raise ProjectFormatError(f"deterministic validation changed for concept {concept.identity}")
             decisions = tuple(ReviewDecision(**item) for item in data.get("decisions", []))
             saved_revisions = tuple(ProjectRevision(
                 item["revision_id"], item.get("parent_id"), item.get("active_concept", data["active_concept"]),
@@ -603,7 +648,8 @@ class FxdProject:
                 for item in data.get("revisions", []))
             restored = replace(project, decisions=decisions,
                                revisions=saved_revisions or project.revisions,
-                               approved_revision=data.get("approved_revision"),
+                               approved_revision=(None if orientation_revalidation_required
+                                                  else data.get("approved_revision")),
                                drawing_intent=data.get("drawing_intent"),
                                optimization_intent=data.get("optimization_intent"),
                                workflow=workflow)

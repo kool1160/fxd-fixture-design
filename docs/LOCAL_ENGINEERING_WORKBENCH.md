@@ -15,7 +15,16 @@ Install the pinned desktop runtime in the existing Python 3.12 environment:
 .\.venv\Scripts\python.exe -m pip install --only-binary=:all: -r requirements-desktop.txt
 ```
 
-Launch from the repository root:
+For Windows Explorer, double-click `launch-fxd.bat` in the repository root.
+It resolves the repository root itself, uses `.venv\Scripts\python.exe`, and
+keeps its console open if launch validation fails. Drag a `.step` or `.stp`
+file onto the batch file to open it immediately through the normal FXD OCP
+import path.
+
+To create a desktop shortcut, right-click `launch-fxd.bat`, choose **Show more
+options** if necessary, then choose **Send to > Desktop (create shortcut)**.
+
+The PowerShell launcher remains available from the repository root:
 
 ```powershell
 .\scripts\launch-fxd.ps1
@@ -88,6 +97,29 @@ assumptions, and ranking rationale. Relative evidence is not a quotation.
 Generated AABB feature evidence is shown only as translucent wireframe
 provisional review geometry; it is never labeled `REAL OCP`, final B-Rep, or
 released fabrication geometry.
+
+### Manufacturing orientation
+
+STEP import opens **Orientation** immediately. In the normal workflow, click the
+planar face that sits on the fixture, confirm or flip its side, then click the
+planar face that points toward the operator/front. FXD derives manufacturing
+right (+X), operator/front (+Y), and up (+Z), rejects parallel face pairs, and
+shows distinct bottom/front highlights plus the build plane, XYZ triad,
+operator side, gravity, load, and unload directions. The support-face
+recommendation asks for confirmation and is never silently accepted. Normal
+mode does not expose face IDs, source axes, rotations, or matrices.
+
+**Advanced orientation settings** retains the existing source reference-plane,
+exact-axis, normal-flip, quarter/custom rotation, transform, inverse, face,
+plane, and raw-evidence controls. **Edit orientation** returns to the guided
+page from the Engineering menu or toolbar. An engineer must explicitly accept
+the current source-SHA-linked orientation before deterministic analysis can
+run. Any source or selected-face change clears downstream analysis, concepts,
+approval, authored fixture geometry, and export evidence without rotating or
+rewriting source CAD.
+
+See `docs/MANUFACTURING_ORIENTATION_CONTRACT.md` for persistence, transform,
+validation, and limitation details.
 
 Supported parameter, move, resize, replacement, suppression/restore, and saved
 revision restoration operations create deterministic project revisions, revoke

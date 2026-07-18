@@ -60,6 +60,19 @@ validation APIs. It does not own geometry rules and may not convert unknown
 evidence into a pass. The PySide6 shell invokes this boundary; it does not
 duplicate engineering policy.
 
+### Manufacturing coordinate system
+
+`fxd_geometry.manufacturing_orientation` persists an accepted source-SHA-linked
+manufacturing frame, its inverse transform, and face/plane evidence separately
+from source CAD. Workflow orchestration converts manufacturing intent into
+source-coordinate vectors only at the existing CAD-neutral engine boundary.
+The frame is revision-sensitive: unaccepted or stale orientation evidence
+blocks analysis and invalidates dependent fixture results.
+The normal desktop path derives that frame from exact planar fixture-down and
+operator/front face evidence selected through VTK cell-to-OCP-face mapping;
+reference planes, explicit axes, and rotations remain advanced inputs to the
+same deterministic engine.
+
 ### Desktop presentation system
 
 `fxd_ui` owns the approved FXD desktop tokens, application palette, QSS,

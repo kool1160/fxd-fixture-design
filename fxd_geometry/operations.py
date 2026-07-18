@@ -101,6 +101,12 @@ def save_preferences(path: str | Path, preferences: dict[str, Any]) -> Path:
 
 def project_export_block_reason(project: FxdProject) -> str | None:
     """Return the authoritative project-level reason export must fail closed."""
+    workflow = getattr(project, "workflow", None)
+    if workflow is not None and not workflow.has_accepted_manufacturing_orientation():
+        return (
+            "interactive workflow requires an accepted manufacturing orientation "
+            "for the current source before export"
+        )
     if project.active_validation.blocked:
         return "invalid deterministic validation result cannot be exported"
     if project.suppressed_features:
@@ -113,6 +119,20 @@ def project_export_block_reason(project: FxdProject) -> str | None:
             "active fixture corrections must be regenerated and deterministically "
             "revalidated before export"
         )
+    if project.fixture_build is not None:
+        from .fabrication_workflow import AdjustmentState, validate_fixture_build_plan
+        build_validation = validate_fixture_build_plan(project.product, project.fixture_build)
+        if build_validation.blocked:
+            return "invalid deterministic fixture-build validation result cannot be exported"
+        if build_validation.status != "valid":
+            return "fixture-build validation status must be valid before export"
+        if project.fixture_build.requirements.adjustment_state in {
+                AdjustmentState.PROVISIONAL, AdjustmentState.PROVE_OUT,
+                AdjustmentState.REVALIDATION_REQUIRED}:
+            return (
+                "provisional fixture-build adjustment state must be locked or doweled and "
+                "deterministically revalidated before export"
+            )
     return None
 
 
@@ -122,6 +142,15 @@ def export_project_package(project: FxdProject, destination: str | Path,
     block_reason = project_export_block_reason(project)
     if block_reason is not None:
         raise ExportError(block_reason)
+    fixture_build_assembly = None
+    if project.fixture_build is not None:
+        if kernel is None:
+            raise ExportError("real OCP kernel is required to export authored fixture-build geometry")
+        from .fabrication_workflow import FixtureBuildError, author_fixture_build
+        try:
+            fixture_build_assembly = author_fixture_build(project.fixture_build, project.product, kernel)
+        except (FixtureBuildError, RuntimeError) as exc:
+            raise ExportError(f"fixture-build authoring failed closed: {exc}") from exc
     manufacturing = None
     if kernel is not None:
         from .manufacturing import generate_manufacturing_geometry
@@ -156,4 +185,13 @@ def export_project_package(project: FxdProject, destination: str | Path,
         }
         target.write_text(json.dumps(evidence, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         paths.append(target)
+    if fixture_build_assembly is not None:
+        from .fabrication_workflow import FixtureBuildError, write_fixture_build_package
+        try:
+            paths.extend(write_fixture_build_package(
+                fixture_build_assembly, project.fixture_build, Path(destination) / "m30-manufacturing",
+                project_validation=project.active_validation,
+            ))
+        except FixtureBuildError as exc:
+            raise ExportError(f"fixture-build package failed closed: {exc}") from exc
     return tuple(paths)

@@ -18,13 +18,15 @@ from .annotations import (
     Assumption, CriticalCharacteristic, EngineeringAnnotations, GeometryReference,
     WeldJoint,
 )
+from .manufacturing_orientation import ManufacturingOrientation, ManufacturingOrientationError
 from .placement import DatumCandidate, PlacementPlan, generate_placement_plan
 from .product_model import Body, Component, Face, ProductModel
 from .project import FxdProject
 from .workbench import WorkbenchDocument
 
 
-WORKFLOW_SCHEMA = "fxd-interactive-workflow-v1"
+WORKFLOW_SCHEMA = "fxd-interactive-workflow-v2"
+_LEGACY_WORKFLOW_SCHEMA = "fxd-interactive-workflow-v1"
 
 
 class InteractiveWorkflowError(ValueError):
@@ -67,6 +69,16 @@ class ProcessSetup:
     required_repeatability_mm: float | None = None
     required_clearance_mm: float | None = None
     tooling_preferences: tuple[str, ...] = ()
+    fixture_purpose: str | None = None
+    construction_method: str | None = None
+    fixture_lifecycle: str | None = None
+    repeat_frequency: str | None = None
+    job_revision: str | None = None
+    cleco_strategy: str | None = None
+    manufacturing_orientation: ManufacturingOrientation | None = None
+    manufacturing_build_direction: Vec3 | None = None
+    manufacturing_loading_direction: Vec3 | None = None
+    manufacturing_unloading_direction: Vec3 | None = None
 
     def __post_init__(self) -> None:
         if not self.project_name.strip():
@@ -83,6 +95,9 @@ class ProcessSetup:
             (self.build_orientation, "build orientation"),
             (self.loading_direction, "loading direction"),
             (self.unloading_direction, "unloading direction"),
+            (self.manufacturing_build_direction, "manufacturing build direction"),
+            (self.manufacturing_loading_direction, "manufacturing loading direction"),
+            (self.manufacturing_unloading_direction, "manufacturing unloading direction"),
         ):
             if value is not None and value == Vec3(0.0, 0.0, 0.0):
                 raise InteractiveWorkflowError(f"{name} must not be zero")
@@ -107,6 +122,18 @@ class ProcessSetup:
             "required_repeatability_mm": self.required_repeatability_mm,
             "required_clearance_mm": self.required_clearance_mm,
             "tooling_preferences": list(self.tooling_preferences),
+            "fixture_purpose": self.fixture_purpose,
+            "construction_method": self.construction_method,
+            "fixture_lifecycle": self.fixture_lifecycle,
+            "repeat_frequency": self.repeat_frequency,
+            "job_revision": self.job_revision,
+            "cleco_strategy": self.cleco_strategy,
+            "manufacturing_orientation": (
+                self.manufacturing_orientation.to_dict() if self.manufacturing_orientation else None
+            ),
+            "manufacturing_build_direction": vector(self.manufacturing_build_direction),
+            "manufacturing_loading_direction": vector(self.manufacturing_loading_direction),
+            "manufacturing_unloading_direction": vector(self.manufacturing_unloading_direction),
         }
 
     @classmethod
@@ -132,6 +159,19 @@ class ProcessSetup:
             required_repeatability_mm=data.get("required_repeatability_mm"),
             required_clearance_mm=data.get("required_clearance_mm"),
             tooling_preferences=tuple(data.get("tooling_preferences", ())),
+            fixture_purpose=data.get("fixture_purpose"),
+            construction_method=data.get("construction_method"),
+            fixture_lifecycle=data.get("fixture_lifecycle"),
+            repeat_frequency=data.get("repeat_frequency"),
+            job_revision=data.get("job_revision"),
+            cleco_strategy=data.get("cleco_strategy"),
+            manufacturing_orientation=(
+                ManufacturingOrientation.from_dict(data["manufacturing_orientation"])
+                if isinstance(data.get("manufacturing_orientation"), dict) else None
+            ),
+            manufacturing_build_direction=vector("manufacturing_build_direction"),
+            manufacturing_loading_direction=vector("manufacturing_loading_direction"),
+            manufacturing_unloading_direction=vector("manufacturing_unloading_direction"),
         )
 
 
@@ -248,14 +288,25 @@ class InteractiveWorkflow:
             raise InteractiveWorkflowError("geometry annotation identities must be unique")
         if len({item.identity for item in self.customer_tooling}) != len(self.customer_tooling):
             raise InteractiveWorkflowError("customer tooling identities must be unique")
-        if self.schema_version != WORKFLOW_SCHEMA:
+        if self.schema_version not in {WORKFLOW_SCHEMA, _LEGACY_WORKFLOW_SCHEMA}:
             raise InteractiveWorkflowError("unsupported interactive workflow schema")
+        if (self.setup.manufacturing_orientation is not None
+                and self.setup.manufacturing_orientation.source_sha256 != self.source_sha256):
+            raise InteractiveWorkflowError("manufacturing orientation does not match workflow source SHA-256")
 
     def with_annotation(self, annotation: GeometryAnnotation) -> "InteractiveWorkflow":
         remaining = tuple(item for item in self.geometry_annotations if item.identity != annotation.identity)
         return replace(self, geometry_annotations=remaining + (annotation,),
                        analysis_completed=False, concepts_generated=False,
                        active_stage="Datums and intent", timings=())
+
+    def with_manufacturing_orientation(self, orientation: ManufacturingOrientation) -> "InteractiveWorkflow":
+        """Replace manufacturing-frame evidence and invalidate all dependent analysis."""
+        if orientation.source_sha256 != self.source_sha256:
+            raise InteractiveWorkflowError("manufacturing orientation belongs to a different source STEP")
+        setup = replace(self.setup, manufacturing_orientation=orientation)
+        return replace(self, setup=setup, analysis_completed=False, concepts_generated=False,
+                       active_stage="Orientation", timings=())
 
     def with_tooling(self, tooling: CustomerToolingRecord) -> "InteractiveWorkflow":
         remaining = tuple(item for item in self.customer_tooling if item.identity != tooling.identity)
@@ -300,10 +351,23 @@ class InteractiveWorkflow:
         result.pop("timings")
         return result
 
+    def has_accepted_manufacturing_orientation(self) -> bool:
+        """Return whether derived interactive evidence belongs to an accepted current frame."""
+        orientation = self.setup.manufacturing_orientation
+        if orientation is None:
+            return False
+        try:
+            orientation.require_accepted_for(self.source_sha256)
+        except ManufacturingOrientationError:
+            return False
+        return True
+
     @classmethod
     def from_dict(cls, data: dict[str, object]) -> "InteractiveWorkflow":
-        return cls(
-            str(data["source_sha256"]), ProcessSetup.from_dict(data["setup"]),
+        source_sha256 = str(data["source_sha256"])
+        setup = ProcessSetup.from_dict(data["setup"])
+        candidate = cls(
+            source_sha256, setup,
             tuple(GeometryAnnotation.from_dict(item) for item in data.get("geometry_annotations", ())),
             tuple(CustomerToolingRecord.from_dict(item) for item in data.get("customer_tooling", ())),
             tuple(data.get("reviewed_findings", ())), bool(data.get("analysis_completed", False)),
@@ -311,6 +375,12 @@ class InteractiveWorkflow:
             tuple(OperationTiming(**item) for item in data.get("timings", ())),
             str(data.get("schema_version", "")),
         )
+        if candidate.has_accepted_manufacturing_orientation():
+            return candidate
+        # Legacy source-coordinate analysis is readable history, not current
+        # manufacturing-frame evidence. Revalidation requires acceptance.
+        return replace(candidate, analysis_completed=False, concepts_generated=False,
+                       active_stage="Orientation", timings=())
 
 
 @dataclass(frozen=True)
@@ -413,12 +483,25 @@ def face_annotation(document: WorkbenchDocument, reference: GeometryReference,
 def _engineering_annotations(product: ProductModel,
                              workflow: InteractiveWorkflow) -> EngineeringAnnotations:
     setup = workflow.setup
+    orientation = setup.manufacturing_orientation
+    if orientation is None:
+        raise InteractiveWorkflowError("analysis requires an accepted manufacturing orientation")
+    try:
+        orientation.require_accepted_for(product.source_sha256)
+    except ManufacturingOrientationError as exc:
+        raise InteractiveWorkflowError(str(exc)) from exc
+    manufacturing_build = setup.manufacturing_build_direction or Vec3(0.0, 0.0, 1.0)
+    manufacturing_load = setup.manufacturing_loading_direction or Vec3(1.0, 0.0, 0.0)
+    manufacturing_unload = setup.manufacturing_unloading_direction or Vec3(-1.0, 0.0, 0.0)
+    build_orientation = orientation.manufacturing_vector_to_source(manufacturing_build)
+    loading_direction = orientation.manufacturing_vector_to_source(manufacturing_load)
+    unloading_direction = orientation.manufacturing_vector_to_source(manufacturing_unload)
     missing = [name for name, value in (
         ("manufacturing process", setup.manufacturing_process),
         ("operation mode", setup.operation_mode),
         ("production quantity", setup.production_quantity),
-        ("build orientation", setup.build_orientation),
-        ("loading direction", setup.loading_direction),
+        ("manufacturing build direction", manufacturing_build),
+        ("manufacturing loading direction", manufacturing_load),
     ) if value is None]
     if missing:
         raise InteractiveWorkflowError("analysis requires explicit " + ", ".join(missing))
@@ -442,8 +525,14 @@ def _engineering_annotations(product: ProductModel,
     assumptions = [
         Assumption("fixture_type", setup.fixture_type or "unknown", "Engineer process setup."),
         Assumption("operation_mode", setup.operation_mode or "unknown", "Engineer process setup."),
-        Assumption("unloading_direction", repr(setup.unloading_direction) if setup.unloading_direction else "unknown",
-                   "Unknown values remain explicit."),
+        Assumption("unloading_direction", repr(unloading_direction),
+                   "Manufacturing unload axis converted through the accepted orientation."),
+        Assumption("manufacturing_orientation", orientation.identity,
+                   "Accepted manufacturing coordinate system drives deterministic analysis."),
+        Assumption("manufacturing_build_axis", repr(manufacturing_build),
+                   "Converted to source coordinates only at the CAD-neutral engine boundary."),
+        Assumption("manufacturing_loading_axis", repr(manufacturing_load),
+                   "Converted to source coordinates only at the CAD-neutral engine boundary."),
         Assumption("operator_access", setup.operator_access or "unknown", "Engineer process setup."),
         Assumption("automation", setup.automation_assumptions or "unknown", "Engineer process setup."),
         Assumption("material_process", setup.material_assumptions or "unknown", "Engineer process setup."),
@@ -456,8 +545,8 @@ def _engineering_annotations(product: ProductModel,
         assumptions.append(Assumption("required_clearance_mm", str(setup.required_clearance_mm),
                                       "Engineer-supplied requirement."))
     return EngineeringAnnotations(
-        product.source_sha256, product.source_name, setup.build_orientation,
-        setup.loading_direction,
+        product.source_sha256, product.source_name, build_orientation,
+        loading_direction,
         f"{setup.operation_mode} {setup.manufacturing_process}", setup.production_quantity,
         critical, permitted, forbidden, welds, setup.shop_capabilities,
         tuple(assumptions),

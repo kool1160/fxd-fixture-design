@@ -7,8 +7,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import PropertyMock, patch
 
-from fxd_geometry import (EngineeringAnnotations, ExportError, OperationsError, ProjectRecovery,
-                          StructuredLog, Vec3, export_project_package, import_step,
+from fxd_geometry import (EngineeringAnnotations, ExportError, InteractiveWorkflow, OperationsError,
+                          ProcessSetup, ProjectRecovery, StructuredLog, Vec3, export_project_package, import_step,
                           load_preferences, save_preferences)
 from fxd_geometry.project import FxdProject
 
@@ -32,11 +32,11 @@ class OperationsTests(unittest.TestCase):
             process_type="manual MIG", production_quantity=1)
         self.project = FxdProject.from_product(self.product, self.annotations)
 
-    def test_project_v3_save_and_true_v1_load_compatibility(self):
+    def test_project_v4_save_and_true_v1_load_compatibility(self):
         with tempfile.TemporaryDirectory() as directory:
             path = self.project.save(Path(directory) / "fixture.fxd.json")
             payload = json.loads(path.read_text())
-            self.assertEqual(payload["schema_version"], 3)
+            self.assertEqual(payload["schema_version"], 4)
             self.assertEqual(FxdProject.load(path).product.source_sha256, self.product.source_sha256)
             payload["format"] = "fxd-neutral-project-v1"
             payload.pop("schema_version")
@@ -63,6 +63,20 @@ class OperationsTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             with self.assertRaises(ExportError):
                 export_project_package(self.project, directory)
+            self.assertEqual(list(Path(directory).iterdir()), [])
+
+    def test_unaccepted_interactive_orientation_blocks_export_before_generation(self):
+        workflow = InteractiveWorkflow(
+            self.product.source_sha256, ProcessSetup("legacy orientation"),
+            analysis_completed=True, concepts_generated=True,
+            schema_version="fxd-interactive-workflow-v1",
+        )
+        project = replace(self.project, workflow=workflow)
+        with tempfile.TemporaryDirectory() as directory, patch(
+                "fxd_geometry.operations.build_fabrication_package") as build:
+            with self.assertRaisesRegex(ExportError, "accepted manufacturing orientation"):
+                export_project_package(project, directory)
+            build.assert_not_called()
             self.assertEqual(list(Path(directory).iterdir()), [])
 
     def test_suppressed_or_corrected_project_cannot_reach_export_generation(self):

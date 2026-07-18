@@ -48,7 +48,15 @@ FXD is in early research and prototyping. It does not yet generate production-ap
 
 ## Local workbench
 
-On Windows, launch the unified PySide6 engineering workbench with:
+On Windows, double-click `launch-fxd.bat` in the repository root. It uses the
+repository `.venv` and does not require a PowerShell execution-policy change.
+Drag a `.step` or `.stp` file onto the launcher to open it directly in FXD.
+
+To add FXD to the desktop, right-click `launch-fxd.bat`, choose **Show more
+options** if necessary, then choose **Send to > Desktop (create shortcut)**.
+You can drag a STEP file onto that shortcut as well.
+
+The PowerShell launcher remains available for command-line use:
 
 ```powershell
 .\scripts\launch-fxd.ps1

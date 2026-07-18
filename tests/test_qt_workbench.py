@@ -16,24 +16,45 @@ from unittest.mock import PropertyMock, patch
 if find_spec("PySide6") is None:
     raise unittest.SkipTest("PySide6 desktop runtime is not installed")
 
-from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QWidget
+from PySide6.QtCore import QPoint, QPointF, Qt, Signal
+from PySide6.QtGui import QWheelEvent
+from PySide6.QtTest import QTest
+from PySide6.QtWidgets import QApplication, QComboBox, QWidget
 
 from fxd_geometry import (
     EngineeringAnnotations,
     ExportError,
     KernelOperationError,
+    InteractiveWorkflow,
     OcpKernel,
+    ProcessSetup,
     RenderDiagnostics,
     Vec3,
     import_step,
+    load_step_for_workbench,
+    product_from_workbench_document,
+    source_orientation,
 )
 from fxd_geometry.project import FxdProject
 from fxd_qt_app import (
     EVIDENCE_PROVISIONAL,
     EVIDENCE_REAL,
     EmbeddedVtkViewport,
+    ADJUSTMENT_STATE_OPTIONS,
+    BASE_STRATEGY_OPTIONS,
+    CLECO_STRATEGY_OPTIONS,
+    CONSTRUCTION_OPTIONS,
+    DIRECTION_OPTIONS,
     FxdWorkbenchWindow,
+    FIXTURE_TYPE_OPTIONS,
+    LIFECYCLE_OPTIONS,
+    OPERATION_MODE_OPTIONS,
+    ORIENTATION_METHOD_OPTIONS,
+    ORIENTATION_ROTATION_OPTIONS,
+    PROCESS_OPTIONS,
+    REFERENCE_PLANE_OPTIONS,
+    ScrollPassthroughComboBox,
+    VOLUME_OPTIONS,
     _load_user32,
     create_application,
 )
@@ -55,6 +76,12 @@ class FakeScene:
 
     def set_navigation_mode(self, mode):
         self.calls.append(("navigation", mode))
+
+    def set_face_picking(self, enabled):
+        self.calls.append(("face_picking", enabled))
+
+    def preview_orientation(self, right, front, up):
+        self.calls.append(("orientation_preview", tuple(right), tuple(front), tuple(up)))
 
     def set_wireframe(self, enabled):
         self.calls.append(("wireframe", enabled))
@@ -82,6 +109,8 @@ class FakeScene:
 
 
 class FakeViewport(QWidget):
+    face_picked = Signal(str)
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.scene = FakeScene()
@@ -138,8 +167,11 @@ class QtWorkbenchTests(unittest.TestCase):
         source.write_bytes(self.kernel.export_step(shape))
         return source
 
-    def _project(self) -> FxdProject:
-        product = import_step(FIXTURE)
+    def _project(self, source: Path = FIXTURE) -> FxdProject:
+        product = (
+            import_step(source) if source == FIXTURE
+            else product_from_workbench_document(load_step_for_workbench(source))
+        )
         annotations = EngineeringAnnotations.for_product(
             product,
             build_orientation=Vec3(0, 0, 1),
@@ -152,6 +184,8 @@ class QtWorkbenchTests(unittest.TestCase):
     def _load_and_annotate_real_product(self, directory: str):
         source = self._real_step(directory)
         self.window.load_step_path(source)
+        self.window.reset_to_source_orientation()
+        self.window.accept_manufacturing_orientation()
         self.window.process_build.setCurrentText("+Z")
         self.window.process_load.setCurrentText("+X")
         self.window.process_unload.setCurrentText("-X")
@@ -170,6 +204,51 @@ class QtWorkbenchTests(unittest.TestCase):
             self.assertFalse(warning.called, warning.call_args)
         return source
 
+    def _show_process_panel(self) -> None:
+        self.window.resize(1366, 768)
+        self.window.workflow_tabs.setCurrentWidget(self.window.process_scroll)
+        self.window.show()
+        self.application.processEvents()
+
+    def _wheel(self, widget: QWidget, *, angle_delta_y: int = -120) -> None:
+        position = widget.rect().center()
+        event = QWheelEvent(
+            QPointF(position),
+            QPointF(widget.mapToGlobal(position)),
+            QPoint(),
+            QPoint(0, angle_delta_y),
+            Qt.MouseButton.NoButton,
+            Qt.KeyboardModifier.NoModifier,
+            Qt.ScrollPhase.ScrollUpdate,
+            False,
+        )
+        QApplication.sendEvent(widget, event)
+        self.application.processEvents()
+
+    def _author_m30_tack_build(self, *, source: Path = FIXTURE):
+        self.window._replace_project(self._project(source))
+        self.window.workflow = InteractiveWorkflow(
+            self.window.project.product.source_sha256,
+            ProcessSetup(
+                "M30 workbench",
+                manufacturing_orientation=source_orientation(
+                    self.window.project.product.source_sha256, accepted=True,
+                ),
+            ),
+            concepts_generated=True,
+        )
+        self.window.process_fixture_type.setCurrentText("Tack or Location Fixture")
+        self.window.process_construction.setCurrentText("Tack or Location Fixture")
+        self.window.process_lifecycle.setCurrentText("Disposable or job-run recut")
+        self.window.process_cleco_strategy.setCurrentText("Separate fixture Cleco holes")
+        self.window.process_job_revision.setText("JOB-REV-A")
+        self.window.process_tack_access.setChecked(True)
+        self.window.process_unload_clearance.setChecked(True)
+        self.window.process_adjustment_state.setCurrentText("Locked production position")
+        self.window.generate_fixture_build_plan()
+        self.window.author_real_fixture_geometry()
+        return self.window.project.fixture_build, self.window.authored_fixture_build
+
     def test_shell_creation_has_one_embedded_viewport_and_no_side_effects(self):
         self.assertIs(self.window.centralWidget().findChild(FakeViewport), self.window.viewport)
         self.assertFalse(self.window.viewport.separate_window_created)
@@ -184,6 +263,393 @@ class QtWorkbenchTests(unittest.TestCase):
         self.assertEqual(self.window.status_validation.text_label.text(), "NOT EVALUATED")
         self.assertEqual(self.window.minimumWidth(), 1180)
         self.assertEqual(self.window.minimumHeight(), 720)
+
+    def test_m30_tack_location_controls_create_and_author_a_fixture_build(self):
+        self.window._replace_project(self._project())
+        self.window.workflow = InteractiveWorkflow(
+            self.window.project.product.source_sha256,
+            ProcessSetup(
+                "M30 workbench",
+                manufacturing_orientation=source_orientation(
+                    self.window.project.product.source_sha256, accepted=True,
+                ),
+            ),
+            concepts_generated=True,
+        )
+        self.window.process_fixture_type.setCurrentText("Tack or Location Fixture")
+        self.window.process_construction.setCurrentText("Tack or Location Fixture")
+        self.window.process_lifecycle.setCurrentText("Disposable or job-run recut")
+        self.window.process_job_revision.setText("JOB-REV-A")
+        self.window.process_tack_access.setChecked(True)
+        self.window.process_unload_clearance.setChecked(True)
+        self.window.process_adjustment_state.setCurrentText("Locked production position")
+        self.window.generate_fixture_build_plan()
+        self.assertIsNotNone(self.window.project.fixture_build)
+        self.assertEqual(self.window.project.fixture_build.requirements.fixture_purpose.value, "tack_location_fixture")
+        self.window.author_real_fixture_geometry()
+        self.assertIsNotNone(self.window.authored_fixture_build)
+        self.assertGreater(self.window.fabrication_components.count(), 0)
+        self.assertIn("REAL OCP B-REP", self.window.fabrication_components.item(0).text())
+
+    def test_m30_authored_geometry_cache_is_cleared_and_identity_gated(self):
+        plan, authored = self._author_m30_tack_build()
+        self.assertIs(self.window._active_authored_fixture_build(), authored)
+
+        with tempfile.TemporaryDirectory() as directory:
+            other_path = Path(directory) / "other.fxd.json"
+            self._project().save(other_path)
+            self.window.load_project_path(other_path)
+            self.assertIsNone(self.window.authored_fixture_build)
+            self.assertFalse(any(
+                item["identity"].startswith("manufacturing:")
+                for item in self.window._review_geometry_items()
+            ))
+
+        with tempfile.TemporaryDirectory() as directory:
+            source = self._real_step(directory)
+            plan, authored = self._author_m30_tack_build(source=source)
+            project_path = Path(directory) / "recover.fxd.json"
+            self.window.save_project_path(project_path)
+            self.window.recover_autosave()
+            self.assertIsNone(self.window.authored_fixture_build)
+
+        plan, authored = self._author_m30_tack_build()
+        self.window.process_job_revision.setText("JOB-REV-B")
+        self.window.generate_fixture_build_plan()
+        self.assertIsNone(self.window.authored_fixture_build)
+        self.assertNotEqual(self.window.project.fixture_build.identity, plan.identity)
+
+        plan, authored = self._author_m30_tack_build()
+        alternate = next(
+            concept.identity for concept in self.window.project.concepts
+            if concept.identity != self.window.project.active_concept
+        )
+        self.window.select_concept(alternate)
+        self.assertIsNone(self.window.authored_fixture_build)
+
+        self.window.authored_fixture_build = authored
+        self.window.project = SimpleNamespace(
+            fixture_build=plan,
+            product=SimpleNamespace(source_sha256="0" * 64),
+        )
+        self.assertIsNone(self.window._active_authored_fixture_build())
+
+    def test_m30_provisional_build_blocks_desktop_export_and_approval(self):
+        clean_validation = SimpleNamespace(
+            blocked=False, status="valid", findings=(), evidence_digest="evidence"
+        )
+        with patch.object(
+            FxdProject, "active_validation", new_callable=PropertyMock,
+            return_value=clean_validation,
+        ):
+            self.window._replace_project(self._project())
+            self.window.workflow = InteractiveWorkflow(
+                self.window.project.product.source_sha256,
+                ProcessSetup(
+                    "M30 workbench",
+                    manufacturing_orientation=source_orientation(
+                        self.window.project.product.source_sha256, accepted=True,
+                    ),
+                ),
+                concepts_generated=True,
+            )
+            self.window.process_fixture_type.setCurrentText("Full weld fixture")
+            self.window.process_construction.setCurrentText("Welded tube-frame")
+            self.window.process_lifecycle.setCurrentText("Full permanent fixture")
+            self.window.process_job_revision.setText("JOB-REV-A")
+            self.window.process_unload_clearance.setChecked(True)
+            self.window.process_adjustment_state.setCurrentText("Locked production position")
+            self.window.generate_fixture_build_plan()
+            self.assertEqual(
+                self.window.project.fixture_build.requirements.fixture_purpose.value,
+                "full_weld_fixture",
+            )
+            self.assertFalse(self.window._actions["export"].isEnabled())
+            self.assertFalse(self.window._actions["approve"].isEnabled())
+            self.assertEqual(self.window._workflow_states()["Export"], "blocked")
+            with patch("fxd_qt_app.QFileDialog.getExistingDirectory") as chooser, patch(
+                "fxd_qt_app.export_project_package"
+            ) as export, patch("fxd_qt_app.QMessageBox.warning") as warning:
+                self.window.export_package()
+            chooser.assert_not_called()
+            export.assert_not_called()
+            warning.assert_called_once()
+
+    def test_m30_process_controls_scroll_at_supported_desktop_size(self):
+        self.window.resize(1366, 768)
+        self.window.workflow_tabs.setCurrentWidget(self.window.process_scroll)
+        self.window.show()
+        self.application.processEvents()
+
+        self.assertIs(self.window.process_scroll.widget(), self.window.process_form_widget)
+        self.assertGreater(self.window.process_scroll.verticalScrollBar().maximum(), 0)
+        self.assertTrue(self.window.process_tack_access.isVisible())
+        self.assertTrue(self.window.process_unload_clearance.isVisible())
+
+    def test_m30_process_selector_exposes_all_fixture_purposes(self):
+        choices = {
+            self.window.process_fixture_type.itemText(index)
+            for index in range(self.window.process_fixture_type.count())
+        }
+        self.assertEqual(choices, set(FIXTURE_TYPE_OPTIONS))
+        self.assertIn("Full weld fixture", choices)
+        self.assertIn("Tack or Location Fixture", choices)
+
+    def test_m30_process_controls_use_locked_deterministic_dropdowns(self):
+        expected = {
+            self.window.process_fixture_type: FIXTURE_TYPE_OPTIONS,
+            self.window.process_method: PROCESS_OPTIONS,
+            self.window.process_mode: OPERATION_MODE_OPTIONS,
+            self.window.process_volume: VOLUME_OPTIONS,
+            self.window.process_build: DIRECTION_OPTIONS,
+            self.window.process_load: DIRECTION_OPTIONS,
+            self.window.process_unload: DIRECTION_OPTIONS,
+            self.window.process_base: BASE_STRATEGY_OPTIONS,
+            self.window.process_construction: CONSTRUCTION_OPTIONS,
+            self.window.process_lifecycle: LIFECYCLE_OPTIONS,
+            self.window.process_cleco_strategy: CLECO_STRATEGY_OPTIONS,
+            self.window.process_adjustment_state: ADJUSTMENT_STATE_OPTIONS,
+            self.window.orientation_method: ORIENTATION_METHOD_OPTIONS,
+            self.window.orientation_reference_plane: REFERENCE_PLANE_OPTIONS,
+            self.window.orientation_rotation: ORIENTATION_ROTATION_OPTIONS,
+        }
+        for control, options in expected.items():
+            with self.subTest(control=control.objectName() or type(control).__name__):
+                self.assertIsInstance(control, QComboBox)
+                self.assertFalse(control.isEditable())
+                self.assertEqual(
+                    tuple(control.itemText(index) for index in range(control.count())), options
+                )
+        self.window.process_fixture_type.setCurrentText("Tack or Location Fixture")
+        self.window.process_construction.setCurrentText("Tack or Location Fixture")
+        self.window.process_lifecycle.setCurrentText("Disposable or job-run recut")
+        self.window.process_cleco_strategy.setCurrentText("Separate fixture Cleco holes")
+        self.assertEqual(self.window.process_fixture_type.currentText(), "Tack or Location Fixture")
+        self.assertEqual(self.window.process_construction.currentText(), "Tack or Location Fixture")
+        self.assertEqual(self.window.process_lifecycle.currentText(), "Disposable or job-run recut")
+        self.assertEqual(self.window.process_cleco_strategy.currentText(), "Separate fixture Cleco holes")
+
+    def test_guided_orientation_uses_direct_bottom_and_front_face_picks(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = self._real_step(directory)
+            original = source.read_bytes()
+            self.window.load_step_path(source)
+            component = self.window.document.assembly.components[0]
+            bottom = component.faces[0]
+            front = next(face for face in component.faces if abs(sum(
+                left * right for left, right in zip(bottom.normal, face.normal)
+            )) < 0.1)
+            parallel = next(face for face in component.faces if face.reference != bottom.reference and abs(sum(
+                left * right for left, right in zip(bottom.normal, face.normal)
+            )) > 0.9)
+
+            self.assertIs(self.window.workflow_tabs.currentWidget(), self.window.orientation_page)
+            self.assertEqual(self.window.orientation_guided_step, 0)
+            self.assertFalse(self.window.analyze_button.isEnabled())
+            self.assertTrue(self.window.orientation_advanced_group.isHidden())
+
+            self.window.viewport.face_picked.emit(bottom.reference)
+            self.application.processEvents()
+            draft = self.window.workflow.setup.manufacturing_orientation
+            self.assertIsNotNone(draft)
+            self.assertFalse(draft.accepted)
+            self.assertIn("Bottom face selected", self.window.orientation_bottom_status.text())
+            self.assertNotIn(bottom.reference, self.window.orientation_bottom_status.text())
+            self.window.accept_guided_bottom_face()
+            self.assertEqual(self.window.orientation_guided_step, 1)
+
+            self.window.viewport.face_picked.emit(parallel.reference)
+            self.application.processEvents()
+            self.assertIn("parallel", self.window.orientation_guided_error.text())
+            self.window.viewport.face_picked.emit(front.reference)
+            self.application.processEvents()
+            self.assertEqual(self.window.orientation_guided_error.text(), "")
+            self.window.preview_guided_orientation()
+            self.assertEqual(self.window.orientation_guided_step, 2)
+            review_ids = next(
+                call[1] for call in reversed(self.window.viewport.scene.calls)
+                if call[0] == "review_geometry"
+            )
+            self.assertIn("orientation:build-plane", review_ids)
+            self.assertIn("orientation:bottom-face", review_ids)
+            self.assertIn("orientation:front-face", review_ids)
+            self.assertIn("orientation:manufacturing-z", review_ids)
+            self.assertIn("orientation:gravity", review_ids)
+            self.assertIn("Source CAD remains unchanged", self.window.orientation_summary.text())
+
+            self.window.accept_guided_orientation()
+            accepted = self.window.workflow.setup.manufacturing_orientation
+            self.assertTrue(accepted.accepted)
+            self.assertIsNotNone(accepted.front_reference)
+            self.assertTrue(self.window.analyze_button.isEnabled())
+            self.assertIs(self.window.workflow_tabs.currentWidget(), self.window.process_scroll)
+            self.assertEqual(source.read_bytes(), original)
+
+    def test_changing_guided_face_or_flip_clears_downstream_state(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = self._real_step(directory)
+            self.window.load_step_path(source)
+            component = self.window.document.assembly.components[0]
+            bottom = component.faces[0]
+            front = next(face for face in component.faces if abs(sum(
+                left * right for left, right in zip(bottom.normal, face.normal)
+            )) < 0.1)
+            self.window.viewport.face_picked.emit(bottom.reference)
+            self.window.accept_guided_bottom_face()
+            self.window.viewport.face_picked.emit(front.reference)
+            self.window.preview_guided_orientation()
+            self.window.accept_guided_orientation()
+            self.window.workflow = replace(
+                self.window.workflow, analysis_completed=True, concepts_generated=True,
+            )
+            self.window.project = self._project(source)
+            self.window.authored_fixture_build = object()
+            self.window.edit_orientation()
+            self.window.flip_guided_bottom_side()
+            self.assertIsNone(self.window.project)
+            self.assertIsNone(self.window.authored_fixture_build)
+            self.assertFalse(self.window.workflow.analysis_completed)
+            self.assertFalse(self.window.workflow.setup.manufacturing_orientation.accepted)
+
+    def test_auto_recommendation_requires_confirmation_and_advanced_stays_collapsed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            self.window.load_step_path(self._real_step(directory))
+            self.assertIsNone(self.window.workflow.setup.manufacturing_orientation)
+            self.assertIn(
+                "This appears to be the primary support face",
+                self.window.orientation_recommendation_text.text(),
+            )
+            self.assertTrue(self.window.orientation_advanced_group.isHidden())
+            self.window.use_recommended_bottom_face()
+            proposal = self.window.workflow.setup.manufacturing_orientation
+            self.assertIsNotNone(proposal)
+            self.assertFalse(proposal.accepted)
+            self.assertEqual(self.window.orientation_guided_step, 1)
+            self.window.orientation_advanced_toggle.setChecked(True)
+            self.assertFalse(self.window.orientation_advanced_group.isHidden())
+            self.assertFalse(self.window.orientation_matrix.text() == "Not defined")
+            self.assertIn("ocp_face=", self.window.orientation_raw_evidence.text())
+
+    def test_guided_orientation_persists_after_analysis_save_and_reopen(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = self._real_step(directory)
+            self.window.load_step_path(source)
+            component = self.window.document.assembly.components[0]
+            bottom = component.faces[0]
+            front = next(face for face in component.faces if abs(sum(
+                left * right for left, right in zip(bottom.normal, face.normal)
+            )) < 0.1)
+            self.window.viewport.face_picked.emit(bottom.reference)
+            self.window.accept_guided_bottom_face()
+            self.window.viewport.face_picked.emit(front.reference)
+            self.window.preview_guided_orientation()
+            self.window.accept_guided_orientation()
+            accepted = self.window.workflow.setup.manufacturing_orientation
+            self.window.analyze_assembly_now()
+            destination = Path(directory) / "guided.fxd.json"
+            self.window.save_project_path(destination)
+            self.window.load_project_path(destination)
+            restored = self.window.workflow.setup.manufacturing_orientation
+            self.assertEqual(restored, accepted)
+            self.assertTrue(restored.accepted)
+            self.assertIsNotNone(restored.front_reference)
+            self.assertTrue(self.window.analyze_button.isEnabled())
+
+    def test_source_replacement_invalidates_manufacturing_orientation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            first = self._real_step(directory)
+            second = Path(directory) / "replacement.step"
+            second.write_bytes(self.kernel.export_step(self.kernel.make_box((0, 0, 0), (40, 20, 8))))
+            self.window.load_step_path(first)
+            self.window.reset_to_source_orientation()
+            self.window.accept_manufacturing_orientation()
+            self.assertTrue(self.window.workflow.setup.manufacturing_orientation.accepted)
+            self.window.load_step_path(second)
+            self.assertIsNone(self.window.workflow.setup.manufacturing_orientation)
+            self.assertFalse(self.window.analyze_button.isEnabled())
+
+    def test_m30_closed_process_dropdown_wheel_scrolls_the_parent_without_changing_input(self):
+        self._show_process_panel()
+        controls = (
+            self.window.process_fixture_type, self.window.process_method, self.window.process_mode,
+            self.window.process_volume, self.window.process_build, self.window.process_load,
+            self.window.process_unload, self.window.process_base, self.window.process_construction,
+            self.window.process_lifecycle, self.window.process_cleco_strategy,
+            self.window.process_adjustment_state,
+        )
+        for control in controls:
+            with self.subTest(control=control.objectName() or control.currentText()):
+                self.assertIsInstance(control, ScrollPassthroughComboBox)
+
+        combo = self.window.process_fixture_type
+        scroll_bar = self.window.process_scroll.verticalScrollBar()
+        scroll_bar.setValue(0)
+        combo.setFocus()
+        selected_before = combo.currentIndex()
+        self._wheel(combo)
+
+        self.assertEqual(combo.currentIndex(), selected_before)
+        self.assertGreater(scroll_bar.value(), 0)
+
+    def test_m30_open_process_dropdown_and_keyboard_selection_remain_available(self):
+        self._show_process_panel()
+        combo = self.window.process_fixture_type
+        target_index = 1
+
+        combo.showPopup()
+        self.application.processEvents()
+        self.assertTrue(combo.view().isVisible())
+        target = combo.view().visualRect(combo.model().index(target_index, 0))
+        QTest.mouseClick(
+            combo.view().viewport(), Qt.MouseButton.LeftButton, pos=target.center()
+        )
+        self.application.processEvents()
+        self.assertEqual(combo.currentIndex(), target_index)
+
+        combo.setCurrentIndex(0)
+        combo.setFocus()
+        QTest.keyClick(combo, Qt.Key.Key_Down)
+        self.application.processEvents()
+        self.assertEqual(combo.currentIndex(), target_index)
+
+    def test_m30_process_form_grows_without_horizontal_clipping(self):
+        self.window.resize(1366, 768)
+        self.window.workflow_dock.raise_()
+        self.window.workflow_tabs.setCurrentWidget(self.window.process_scroll)
+        self.window.show()
+        self.application.processEvents()
+        self.window.resizeDocks(
+            [self.window.workflow_dock], [400], Qt.Orientation.Horizontal
+        )
+        self.application.processEvents()
+        narrow_width = self.window.process_fixture_type.width()
+        self.assertEqual(self.window.process_scroll.horizontalScrollBar().maximum(), 0)
+        self.window.resizeDocks(
+            [self.window.workflow_dock], [520], Qt.Orientation.Horizontal
+        )
+        self.application.processEvents()
+        self.assertGreater(self.window.process_fixture_type.width(), narrow_width)
+        self.assertGreater(self.window.process_construction.width(), narrow_width)
+        self.assertEqual(self.window.process_scroll.horizontalScrollBar().maximum(), 0)
+
+        self.window.resize(1920, 1080)
+        self.application.processEvents()
+        self.assertGreaterEqual(self.window.process_fixture_type.width(), 480)
+        self.assertEqual(self.window.process_scroll.horizontalScrollBar().maximum(), 0)
+
+    def test_m30_process_selection_persists_after_save_and_reopen(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = self._real_step(directory)
+            self._author_m30_tack_build(source=source)
+            destination = Path(directory) / "m30-process.fxd.json"
+            self.window.save_project_path(destination)
+            self.window.load_project_path(destination)
+        self.assertEqual(self.window.process_fixture_type.currentText(), "Tack or Location Fixture")
+        self.assertEqual(self.window.process_construction.currentText(), "Tack or Location Fixture")
+        self.assertEqual(self.window.process_lifecycle.currentText(), "Disposable or job-run recut")
+        self.assertEqual(self.window.process_cleco_strategy.currentText(), "Separate fixture Cleco holes")
+        self.assertEqual(self.window.process_adjustment_state.currentText(), "Locked production position")
+        self.assertEqual(self.window.process_job_revision.text(), "JOB-REV-A")
 
     def test_real_source_identity_badge_is_verified_without_mutating_step(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -231,10 +697,11 @@ class QtWorkbenchTests(unittest.TestCase):
     )
     def test_live_native_worker_embeds_real_source_and_closes_cleanly(self):
         with tempfile.TemporaryDirectory() as directory:
-            source = self._real_step(directory, compound=True)
+            source = self._real_step(directory)
             script = """
 import json
 import sys
+import time
 from fxd_geometry import load_step_for_workbench
 from fxd_qt_app import EmbeddedVtkViewport, create_application
 
@@ -247,6 +714,23 @@ app.processEvents()
 viewport.load_document(document)
 diagnostics = viewport.diagnostics()
 worker = viewport.worker
+picked = []
+viewport.face_picked.connect(picked.append)
+viewport.scene.set_face_picking(True)
+viewport.scene.fit()
+app.processEvents()
+time.sleep(0.25)
+width = max(1, viewport.render_host.width())
+height = max(1, viewport.render_host.height())
+x, y = width // 2, height // 2
+viewport.scene.simulate_face_click_for_acceptance(-1, -1)
+deadline = time.monotonic() + 5.0
+while not picked and time.monotonic() < deadline:
+    app.processEvents()
+    time.sleep(0.02)
+face_identities = {
+    face.reference for component in document.assembly.components for face in component.faces
+}
 result = {
     "native_window": bool(viewport.native_window_id),
     "worker_running": worker is not None and worker.poll() is None,
@@ -258,6 +742,9 @@ result = {
         if document.assembly.components else "source:geometry"
     ),
     "source_unchanged": document.source_bytes == open(sys.argv[1], "rb").read(),
+    "face_picked": bool(picked and picked[0] in face_identities),
+    "picked_values": picked,
+    "face_identity_count": len(face_identities),
 }
 viewport.close_viewport()
 viewport.close()
@@ -280,6 +767,7 @@ print(json.dumps(result, sort_keys=True))
             self.assertGreater(result["triangles"], 0)
             self.assertTrue(result["selection_mapped"])
             self.assertTrue(result["source_unchanged"])
+            self.assertTrue(result["face_picked"], result)
             self.assertTrue(result["worker_closed"])
 
     def test_real_step_populates_tree_properties_and_preserves_source(self):
