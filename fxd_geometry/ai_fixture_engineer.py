@@ -35,6 +35,12 @@ from .workbench import WorkbenchDocument
 PROPOSAL_SCHEMA = "fxd-fixture-proposal-v1"
 PROPOSAL_REQUEST_SCHEMA = "fxd-fixture-proposal-request-v1"
 PROMPT_CONTRACT_VERSION = "fxd-fixture-engineer-prompt-v1"
+OPENAI_PROMPT_CONTRACT_VERSION = "fxd-fixture-engineer-openai-responses-prompt-v1"
+OPENAI_RESPONSES_ENDPOINT = "https://api.openai.com/v1/responses"
+OPENAI_MAX_CONTEXT_BYTES = 512_000
+OPENAI_MAX_RESPONSE_BYTES = 1_000_000
+OPENAI_MAX_TIMEOUT_SECONDS = 60.0
+OPENAI_MAX_OUTPUT_TOKENS = 4_096
 
 
 class FixtureProposalError(ValueError):
@@ -505,6 +511,199 @@ class StaticAiProvider:
         return json.loads(json.dumps(self.response))
 
 
+def _strict_object(properties: dict[str, object]) -> dict[str, object]:
+    """Return the strict object form required by OpenAI Structured Outputs."""
+    return {
+        "type": "object",
+        "properties": properties,
+        "required": list(properties),
+        "additionalProperties": False,
+    }
+
+
+def _openai_proposal_response_schema() -> dict[str, object]:
+    """Schema bridge for the existing proposal parser; no new proposal model."""
+    text = {"type": "string"}
+    nullable_text = {"type": ["string", "null"]}
+    text_list = {"type": "array", "items": text}
+    evidence = _strict_object({"identity": text, "kind": text, "summary": text})
+    editable_parameter = _strict_object({
+        "name": text,
+        "value": {"type": ["string", "number", "boolean", "null"]},
+        "units": nullable_text,
+        "choices": text_list,
+    })
+    geometry_reference = _strict_object({
+        "component_identity": text,
+        "body_identity": nullable_text,
+        "face_identity": nullable_text,
+        "edge_identity": nullable_text,
+    })
+    recommendation = _strict_object({
+        "recommendation_id": text,
+        "recommendation_type": {
+            "type": "string", "enum": [item.value for item in RecommendationType],
+        },
+        "title": text,
+        "engineering_reason": text,
+        "source_evidence": {"type": "array", "items": evidence},
+        "assumptions": text_list,
+        "confidence": {"type": "number"},
+        "deterministic_checks": text_list,
+        "validation_status": text,
+        "unresolved_risks": text_list,
+        "editable_parameters": {"type": "array", "items": editable_parameter},
+        "downstream_dependencies": text_list,
+        "geometry_reference": {
+            "type": ["object", "null"],
+            "properties": geometry_reference["properties"],
+            "required": geometry_reference["required"],
+            "additionalProperties": False,
+        },
+        "fixture_feature_identity": nullable_text,
+        "decision": {"type": "string", "enum": [RecommendationDecision.PROPOSED.value]},
+        "engineer_note": {"type": "string", "enum": [""]},
+    })
+    return _strict_object({
+        "schema_version": {"type": "string", "enum": [PROPOSAL_SCHEMA]},
+        "source_sha256": text,
+        "manufacturing_orientation_identity": text,
+        "engineering_context_identity": text,
+        "concept_name": text,
+        "fixture_purpose": text,
+        "base_strategy": text,
+        "lifecycle": text,
+        "complexity_class": text,
+        "assumptions": text_list,
+        "recommendations": {"type": "array", "items": recommendation},
+        "alternative_summary": nullable_text,
+    })
+
+
+class OpenAiResponsesProvider:
+    """OpenAI Responses adapter that returns the existing typed proposal payload.
+
+    It deliberately sends compact FXD context only. Geometry, source bytes,
+    credentials, and project files never cross this provider boundary.
+    """
+
+    identity = "openai"
+    prompt_contract_version = OPENAI_PROMPT_CONTRACT_VERSION
+
+    def __init__(self, api_key: str, model: str) -> None:
+        self._api_key = api_key
+        self.engine_identifier = model
+
+    @property
+    def available(self) -> bool:
+        return bool(self._api_key and self.engine_identifier)
+
+    @classmethod
+    def from_environment(cls) -> AiFixtureProvider:
+        api_key = os.environ.get("OPENAI_API_KEY", "").strip()
+        model = (os.environ.get("FXD_OPENAI_MODEL", "").strip()
+                 or os.environ.get("FXD_AI_MODEL", "").strip())
+        if not api_key or not model:
+            return UnavailableAiProvider()
+        return cls(api_key, model)
+
+    @staticmethod
+    def _failure_for_status(status: int) -> FixtureProposalError:
+        if status in {401, 403}:
+            return FixtureProposalError("OpenAI authentication is unavailable")
+        if status == 404:
+            return FixtureProposalError("OpenAI model or endpoint is unavailable")
+        if status == 429:
+            return FixtureProposalError("OpenAI request limit prevented proposal generation")
+        return FixtureProposalError("OpenAI Responses request failed")
+
+    @staticmethod
+    def _extract_output(raw: object) -> dict[str, object]:
+        if not isinstance(raw, dict):
+            raise FixtureProposalError("OpenAI response was malformed")
+        if raw.get("status") == "incomplete":
+            raise FixtureProposalError("OpenAI response was incomplete")
+        output = raw.get("output")
+        if not isinstance(output, list):
+            raise FixtureProposalError("OpenAI response contained no structured output")
+        for item in output:
+            if not isinstance(item, dict):
+                continue
+            content = item.get("content")
+            if not isinstance(content, list):
+                continue
+            for part in content:
+                if not isinstance(part, dict):
+                    continue
+                if part.get("type") == "refusal":
+                    raise FixtureProposalError("OpenAI response was refused")
+                if part.get("type") == "output_text" and isinstance(part.get("text"), str):
+                    try:
+                        proposal = json.loads(part["text"])
+                    except json.JSONDecodeError as exc:
+                        raise FixtureProposalError(
+                            "OpenAI response did not contain a JSON proposal"
+                        ) from exc
+                    if isinstance(proposal, dict):
+                        return proposal
+                    raise FixtureProposalError("OpenAI JSON proposal was not an object")
+        raise FixtureProposalError("OpenAI response contained no JSON proposal")
+
+    def generate(self, request: AiProposalRequest, *, timeout_seconds: float,
+                 cancellation: CancellationToken) -> dict[str, object]:
+        cancellation.raise_if_cancelled()
+        request_text = json.dumps(
+            request.to_dict(), sort_keys=True, separators=(",", ":"), ensure_ascii=True,
+        )
+        if len(request_text.encode("utf-8")) > OPENAI_MAX_CONTEXT_BYTES:
+            raise FixtureProposalError("OpenAI proposal context exceeds the configured safe limit")
+        payload = {
+            "model": self.engine_identifier,
+            "input": [
+                {"role": "system", "content": (
+                    "Return one FXD fixture proposal object. AI is assistive only; "
+                    "FXD deterministic validation remains authoritative. Use only "
+                    "provided identities and evidence, state uncertainty in the "
+                    "typed fields, and never claim approval, certification, or safety."
+                )},
+                {"role": "user", "content": request_text},
+            ],
+            "text": {"format": {
+                "type": "json_schema",
+                "name": "fxd_fixture_proposal_v1",
+                "schema": _openai_proposal_response_schema(),
+                "strict": True,
+            }},
+            "max_output_tokens": OPENAI_MAX_OUTPUT_TOKENS,
+            "store": False,
+        }
+        http_request = Request(
+            OPENAI_RESPONSES_ENDPOINT,
+            data=json.dumps(payload, separators=(",", ":"), ensure_ascii=True).encode("utf-8"),
+            method="POST",
+            headers={"Authorization": "Bearer " + self._api_key,
+                     "Content-Type": "application/json"},
+        )
+        bounded_timeout = min(max(float(timeout_seconds), 0.1), OPENAI_MAX_TIMEOUT_SECONDS)
+        try:
+            with urlopen(http_request, timeout=bounded_timeout) as response:
+                response_bytes = response.read()
+        except TimeoutError as exc:
+            raise TimeoutError("OpenAI fixture proposal timed out") from exc
+        except HTTPError as exc:
+            raise self._failure_for_status(exc.code) from exc
+        except (URLError, OSError) as exc:
+            raise FixtureProposalError("OpenAI Responses request was unavailable") from exc
+        if len(response_bytes) > OPENAI_MAX_RESPONSE_BYTES:
+            raise FixtureProposalError("OpenAI response exceeded the configured safe limit")
+        try:
+            raw = json.loads(response_bytes.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise FixtureProposalError("OpenAI response was malformed") from exc
+        cancellation.raise_if_cancelled()
+        return self._extract_output(raw)
+
+
 class HttpJsonAiProvider:
     """Provider-neutral JSON-over-HTTP adapter configured only through environment."""
 
@@ -521,10 +720,18 @@ class HttpJsonAiProvider:
 
     @classmethod
     def from_environment(cls) -> AiFixtureProvider:
+        provider_name = os.environ.get("FXD_AI_PROVIDER", "").strip().lower()
+        openai_configured = bool(
+            os.environ.get("OPENAI_API_KEY", "").strip()
+            or os.environ.get("FXD_OPENAI_MODEL", "").strip()
+        )
+        if provider_name in {"openai", "openai-responses"} or (
+                not provider_name and openai_configured):
+            return OpenAiResponsesProvider.from_environment()
         endpoint = os.environ.get("FXD_AI_ENDPOINT", "").strip()
         api_key = os.environ.get("FXD_AI_API_KEY", "").strip()
         model = os.environ.get("FXD_AI_MODEL", "").strip()
-        provider = os.environ.get("FXD_AI_PROVIDER", "http-json").strip() or "http-json"
+        provider = provider_name or "http-json"
         if not all((endpoint, api_key, model)):
             return UnavailableAiProvider()
         return cls(endpoint, api_key, model, identity=provider)
@@ -1099,7 +1306,7 @@ def proposal_from_ai_response(data: dict[str, object], request: AiProposalReques
             raise FixtureProposalError("AI proposal references unknown fixture feature")
     provenance = ProposalProvenance(
         ProposalSource.AI, provider.identity, provider.engine_identifier,
-        PROMPT_CONTRACT_VERSION, PROPOSAL_SCHEMA,
+        getattr(provider, "prompt_contract_version", PROMPT_CONTRACT_VERSION), PROPOSAL_SCHEMA,
         datetime.now(timezone.utc).isoformat(), ProviderState.SUCCESS,
         "AI proposal passed strict response-contract validation.",
     )

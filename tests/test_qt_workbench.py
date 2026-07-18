@@ -529,6 +529,8 @@ class QtWorkbenchTests(unittest.TestCase):
         self.assertNotIn("face:", normal_text)
         self.assertNotIn("proposal-", normal_text)
         self.assertIn("Proposal identity:", self.window.proposal_technical_details.text())
+        self.assertIn("Mode: Deterministic baseline", self.window.proposal_technical_details.text())
+        self.assertIn("Fallback used: Yes", self.window.proposal_technical_details.text())
         self.assertEqual(self.window.document.source_bytes, original)
 
     def test_stale_background_proposal_completion_is_discarded_after_source_replacement(self):

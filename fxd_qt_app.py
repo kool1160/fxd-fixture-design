@@ -2007,9 +2007,10 @@ class FxdWorkbenchWindow(QMainWindow):
             else None,
         )
         state = "STALE - " + stale if stale else proposal.validation_status.upper()
+        ai_assisted = proposal.provenance.source.value == "ai"
         source_label = (
-            "AI-generated fixture proposal" if proposal.provenance.source.value == "ai"
-            else "Deterministic baseline proposal; AI assistance unavailable"
+            "AI-assisted fixture proposal; deterministic validation remains authoritative"
+            if ai_assisted else "Deterministic baseline proposal; AI assistance unavailable"
         )
         self.proposal_status.setText(
             f"{source_label}. Provider state: {proposal.provenance.provider_state.value}."
@@ -2036,7 +2037,9 @@ class FxdWorkbenchWindow(QMainWindow):
             f"Source SHA-256: {proposal.source_sha256}\n"
             f"Orientation identity: {proposal.manufacturing_orientation_identity}\n"
             f"Provider: {proposal.provenance.provider_identity}\n"
-            f"Engine: {proposal.provenance.engine_identifier}\n"
+            f"Mode: {'AI-assisted' if ai_assisted else 'Deterministic baseline'}\n"
+            f"Model: {proposal.provenance.engine_identifier}\n"
+            f"Fallback used: {'No' if ai_assisted else 'Yes'}\n"
             f"Prompt contract: {proposal.provenance.prompt_contract_version}\n"
             f"Response contract: {proposal.provenance.response_contract_version}"
         )

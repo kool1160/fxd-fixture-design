@@ -1,9 +1,11 @@
 from dataclasses import replace
 from hashlib import sha256
 import json
+import os
 from pathlib import Path
 import tempfile
 import unittest
+from urllib.error import HTTPError
 from unittest.mock import patch
 
 from fxd_geometry import (
@@ -11,7 +13,7 @@ from fxd_geometry import (
     CustomerToolingRecord,
     FixtureBuildRequirements, FixtureLifecycle, FixtureProposal,
     FixtureProposalError, FixturePurpose, GeometryReference,
-    HttpJsonAiProvider,
+    HttpJsonAiProvider, OpenAiResponsesProvider,
     InteractiveWorkflow, MissingIntentError, OcpKernel, ProcessSetup,
     ProposalCancelled, ProposalSource, ProviderState, RecommendationDecision,
     RecommendationType, StaticAiProvider, Vec3, ai_response_from_proposal,
@@ -32,6 +34,20 @@ class _TimeoutProvider:
 
     def generate(self, request, *, timeout_seconds, cancellation):
         raise TimeoutError("bounded provider timeout")
+
+
+class _JsonHttpResponse:
+    def __init__(self, payload):
+        self._payload = json.dumps(payload).encode("utf-8")
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        return False
+
+    def read(self):
+        return self._payload
 
 
 class AiFixtureEngineerTests(unittest.TestCase):
@@ -213,6 +229,8 @@ class AiFixtureEngineerTests(unittest.TestCase):
             "FXD_AI_API_KEY": "test-secret-not-persisted",
             "FXD_AI_MODEL": "fixture-model-v1",
             "FXD_AI_PROVIDER": "configured-test-provider",
+            "OPENAI_API_KEY": "",
+            "FXD_OPENAI_MODEL": "",
         }, clear=False):
             provider = HttpJsonAiProvider.from_environment()
         self.assertTrue(provider.available)
@@ -222,6 +240,129 @@ class AiFixtureEngineerTests(unittest.TestCase):
             "test-secret-not-persisted",
             json.dumps(build_ai_request(self.fallback.project).to_dict(), sort_keys=True),
         )
+
+    def test_openai_configuration_requires_explicit_credentials_and_model(self):
+        with patch.dict("os.environ", {
+            "FXD_AI_PROVIDER": "openai",
+            "OPENAI_API_KEY": "",
+            "FXD_OPENAI_MODEL": "",
+            "FXD_AI_MODEL": "",
+        }, clear=False):
+            provider = OpenAiResponsesProvider.from_environment()
+            default_provider = HttpJsonAiProvider.from_environment()
+        self.assertFalse(provider.available)
+        self.assertEqual(provider.identity, "unavailable")
+        self.assertFalse(default_provider.available)
+        with patch.dict("os.environ", {
+            "FXD_AI_PROVIDER": "openai",
+            "OPENAI_API_KEY": "configuration-only-secret",
+            "FXD_OPENAI_MODEL": "account-configured-model",
+            "FXD_AI_MODEL": "",
+        }, clear=False):
+            configured = HttpJsonAiProvider.from_environment()
+        self.assertIsInstance(configured, OpenAiResponsesProvider)
+        self.assertEqual(configured.engine_identifier, "account-configured-model")
+
+    def test_openai_responses_adapter_uses_strict_compact_payload_and_safe_provenance(self):
+        response = ai_response_from_proposal(self.fallback.proposal)
+        captured = {}
+
+        def respond(http_request, timeout):
+            captured["url"] = http_request.full_url
+            captured["timeout"] = timeout
+            captured["payload"] = json.loads(http_request.data.decode("utf-8"))
+            return _JsonHttpResponse({
+                "status": "completed",
+                "output": [{"type": "message", "content": [{
+                    "type": "output_text", "text": json.dumps(response),
+                }]}],
+            })
+
+        provider = OpenAiResponsesProvider("unit-test-key-must-not-persist", "configured-model")
+        with patch("fxd_geometry.ai_fixture_engineer.urlopen", side_effect=respond):
+            outcome = generate_fixture_proposal(
+                self.document, self.workflow, provider=provider, timeout_seconds=999,
+            )
+        payload = captured["payload"]
+        encoded_payload = json.dumps(payload, sort_keys=True)
+        self.assertEqual(captured["url"], "https://api.openai.com/v1/responses")
+        self.assertEqual(captured["timeout"], 60.0)
+        self.assertEqual(payload["model"], "configured-model")
+        self.assertFalse(payload["store"])
+        self.assertEqual(len(payload["input"]), 2)
+        self.assertEqual(payload["max_output_tokens"], 4096)
+        self.assertEqual(payload["text"]["format"]["type"], "json_schema")
+        self.assertTrue(payload["text"]["format"]["strict"])
+        schema = payload["text"]["format"]["schema"]
+        self.assertFalse(schema["additionalProperties"])
+        self.assertEqual(set(schema["required"]), set(schema["properties"]))
+        self.assertIn("deterministic validation remains authoritative", payload["input"][0]["content"])
+        self.assertNotIn("source_step_base64", encoded_payload)
+        self.assertNotIn("source_bytes", encoded_payload)
+        self.assertNotIn("unit-test-key-must-not-persist", encoded_payload)
+        self.assertEqual(outcome.provider_state, ProviderState.SUCCESS)
+        self.assertEqual(outcome.proposal.provenance.provider_identity, "openai")
+        self.assertEqual(outcome.proposal.provenance.engine_identifier, "configured-model")
+        self.assertEqual(
+            outcome.proposal.provenance.prompt_contract_version,
+            "fxd-fixture-engineer-openai-responses-prompt-v1",
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / "openai-provenance.fxd.json"
+            outcome.project.save(target)
+            persisted = target.read_text(encoding="utf-8")
+            restored = FxdProject.load(target)
+        self.assertNotIn("unit-test-key-must-not-persist", persisted)
+        self.assertEqual(restored.fixture_proposal.provenance.provider_identity, "openai")
+        self.assertEqual(restored.fixture_proposal.provenance.engine_identifier, "configured-model")
+        self.assertEqual(self.source.read_bytes(), self.original)
+
+    def test_openai_refusal_timeout_and_authentication_fail_closed_without_secret(self):
+        provider = OpenAiResponsesProvider("openai-secret-never-displayed", "configured-model")
+        cases = (
+            (
+                _JsonHttpResponse({"status": "completed", "output": [{
+                    "type": "message", "content": [{"type": "refusal", "refusal": "private"}],
+                }]}),
+                "refused",
+            ),
+            (TimeoutError("provider timed out"), "timed out"),
+            (
+                HTTPError("https://api.openai.com/v1/responses", 401, "private", None, None),
+                "authentication",
+            ),
+        )
+        for side_effect, expected in cases:
+            handler = (
+                (lambda *args, response=side_effect, **kwargs: response)
+                if isinstance(side_effect, _JsonHttpResponse) else side_effect
+            )
+            with self.subTest(expected=expected), patch(
+                    "fxd_geometry.ai_fixture_engineer.urlopen", side_effect=handler):
+                outcome = generate_fixture_proposal(
+                    self.document, self.workflow, provider=provider,
+                )
+            self.assertEqual(outcome.provider_state, ProviderState.FAILED)
+            self.assertEqual(outcome.proposal.provenance.source,
+                             ProposalSource.DETERMINISTIC_FALLBACK)
+            self.assertIn(expected, outcome.message)
+            self.assertNotIn("openai-secret-never-displayed", outcome.message)
+
+    @unittest.skipUnless(
+        os.environ.get("FXD_OPENAI_LIVE_SMOKE") == "1"
+        and os.environ.get("OPENAI_API_KEY")
+        and os.environ.get("FXD_OPENAI_MODEL"),
+        "requires FXD_OPENAI_LIVE_SMOKE=1, OPENAI_API_KEY, and FXD_OPENAI_MODEL",
+    )
+    def test_opt_in_openai_live_smoke_uses_one_bounded_request(self):
+        provider = OpenAiResponsesProvider.from_environment()
+        self.assertTrue(provider.available)
+        outcome = generate_fixture_proposal(
+            self.document, self.workflow, provider=provider, timeout_seconds=45,
+        )
+        self.assertEqual(outcome.provider_state, ProviderState.SUCCESS)
+        self.assertEqual(outcome.proposal.provenance.source, ProposalSource.AI)
+        self.assertEqual(self.source.read_bytes(), self.original)
 
     def test_deterministic_validation_wins_and_guided_issues_are_actionable(self):
         proposal = self.fallback.proposal
