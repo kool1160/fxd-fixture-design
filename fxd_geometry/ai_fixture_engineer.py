@@ -719,6 +719,24 @@ def build_ai_request(project: FxdProject) -> AiProposalRequest:
                          "reference": item.reference.__dict__, "area_mm2": item.surface_area_mm2,
                          "normal": item.normal.__dict__}
                         for item in workflow.geometry_annotations],
+        "customer_tooling": [{
+            "identity": item.identity,
+            "kind": item.kind,
+            "manufacturer": item.manufacturer,
+            "part_number": item.part_number,
+            "revision": item.revision,
+            "source_sha256": item.source_sha256,
+            "mounting_direction": (
+                item.mounting_direction.__dict__ if item.mounting_direction else None
+            ),
+            "working_direction": (
+                item.working_direction.__dict__ if item.working_direction else None
+            ),
+            "stroke_mm": item.stroke_mm,
+            "reach_mm": item.reach_mm,
+            "force_n": item.force_n,
+            "verified": item.verified,
+        } for item in sorted(workflow.customer_tooling, key=lambda value: value.identity)],
         "placements": [item.to_dict() for item in project.placement.placements]
         if project.placement else [],
         "fixture_candidates": [{"identity": item.identity, "kind": item.kind,

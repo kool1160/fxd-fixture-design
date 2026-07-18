@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 from fxd_geometry import (
     AdjustmentState, CancellationToken, ClecoStrategy, ConstructionMethod,
+    CustomerToolingRecord,
     FixtureBuildRequirements, FixtureLifecycle, FixtureProposal,
     FixtureProposalError, FixturePurpose, GeometryReference,
     HttpJsonAiProvider,
@@ -373,6 +374,32 @@ class AiFixtureEngineerTests(unittest.TestCase):
         self.assertIn("stale fixture proposal", project_export_block_reason(stale))
         with self.assertRaisesRegex(ProjectFormatError, "stale fixture proposal"):
             stale.decide("approve_for_review")
+
+    def test_customer_tooling_change_marks_proposal_stale_without_exposing_path(self):
+        tooling = CustomerToolingRecord(
+            "tooling:test-toggle", "pneumatic toggle clamp",
+            manufacturer="Test Tooling", part_number="TC-100", revision="A",
+            source_path="C:/private/tooling/toggle.step", source_sha256="a" * 64,
+            mounting_direction=Vec3(0, 0, 1), working_direction=Vec3(0, 0, -1),
+            stroke_mm=12.0, reach_mm=85.0, force_n=1200.0, verified=True,
+        )
+        changed_workflow = self.fallback.project.workflow.with_tooling(tooling)
+        stale = self.fallback.project.with_workflow(changed_workflow)
+        request = build_ai_request(stale)
+        encoded = json.dumps(request.to_dict(), sort_keys=True)
+        self.assertIn("tooling:test-toggle", encoded)
+        self.assertIn('"force_n": 1200.0', encoded)
+        self.assertNotIn("C:/private/tooling", encoded)
+        self.assertNotIn("source_path", encoded)
+        self.assertEqual(
+            stale.fixture_proposal.stale_reason(
+                stale.product.source_sha256,
+                changed_workflow.setup.manufacturing_orientation.identity,
+                proposal_engineering_context_identity(stale),
+            ),
+            "manufacturing intent or engineering context changed",
+        )
+        self.assertIn("stale fixture proposal", project_export_block_reason(stale))
 
     def test_source_sha_mismatch_cannot_be_attached_or_loaded(self):
         payload = self.fallback.proposal.to_dict()

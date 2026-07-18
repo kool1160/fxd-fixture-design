@@ -40,9 +40,10 @@ configuration only from the process environment:
 
 Credentials are not written to projects, diagnostics, prompts, or repository
 files. Requests contain compact structured identities, bounds, intent,
-orientation axes, annotations, placements, deterministic candidates, findings,
-and alternatives. STEP bytes, base64 source geometry, unrestricted project
-dumps, customer credentials, and hidden chain-of-thought are excluded.
+orientation axes, annotations, sanitized customer-tooling evidence, placements,
+deterministic candidates, findings, and alternatives. Tooling source paths, STEP
+bytes, base64 source geometry, unrestricted project dumps, customer credentials,
+and hidden chain-of-thought are excluded.
 
 Provider calls are bounded by a caller-visible timeout and cooperative
 cancellation. Missing configuration produces the explicit state `ai_unavailable`.
@@ -62,7 +63,7 @@ timestamp, recommendations, guided issues, engineer decisions and edits,
 overall decision, and regeneration history.
 
 A source mismatch fails attachment or load closed. An orientation, manufacturing-
-intent, annotation, placement, concept, or upstream deterministic-evidence
+intent, annotation, customer-tooling, placement, concept, or upstream deterministic-evidence
 mismatch keeps the old proposal visible as stale. Visible intent controls are
 persisted before an asynchronous request is bound, and a completion is discarded
 if that governed context changes while the request runs. Stale proposals and
