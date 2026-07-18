@@ -142,6 +142,12 @@ class AiFixtureEngineerTests(unittest.TestCase):
         unknown_type = ai_response_from_proposal(self.fallback.proposal)
         unknown_type["recommendations"][0]["recommendation_type"] = "imaginary_fixture_rule"
         cases.append(unknown_type)
+        provider_decision = ai_response_from_proposal(self.fallback.proposal)
+        provider_decision["recommendations"][0]["decision"] = "accepted"
+        cases.append(provider_decision)
+        provider_note = ai_response_from_proposal(self.fallback.proposal)
+        provider_note["recommendations"][0]["engineer_note"] = "provider-authored review"
+        cases.append(provider_note)
         for response in cases:
             with self.subTest(response=list(response)):
                 outcome = generate_fixture_proposal(

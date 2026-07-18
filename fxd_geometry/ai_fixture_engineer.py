@@ -934,6 +934,11 @@ def proposal_from_ai_response(data: dict[str, object], request: AiProposalReques
     except (KeyError, TypeError, ValueError) as exc:
         raise FixtureProposalError(f"AI recommendations are malformed: {exc}") from exc
     for recommendation in recommendations:
+        if (recommendation.decision != RecommendationDecision.PROPOSED
+                or recommendation.engineer_note):
+            raise FixtureProposalError(
+                "AI proposal may not author engineer recommendation decisions"
+            )
         for evidence in recommendation.source_evidence:
             if evidence.identity not in request.known_identities:
                 raise FixtureProposalError(
@@ -972,17 +977,17 @@ def proposal_from_ai_response(data: dict[str, object], request: AiProposalReques
 
 
 _SUBSYSTEM_ROUTE = {
-    "locating": ("Locators & Supports", "proposal_recommendations"),
-    "placement": ("Locators & Supports", "proposal_recommendations"),
-    "clamp": ("Clamps", "proposal_recommendations"),
-    "access": ("Weld & Access", "proposal_recommendations"),
-    "weld": ("Weld & Access", "proposal_recommendations"),
-    "structure": ("Base Structure", "proposal_recommendations"),
+    "locating": ("Proposal", "proposal_recommendations"),
+    "placement": ("Proposal", "proposal_recommendations"),
+    "clamp": ("Proposal", "proposal_recommendations"),
+    "access": ("Proposal", "proposal_recommendations"),
+    "weld": ("Proposal", "proposal_recommendations"),
+    "structure": ("Proposal", "proposal_recommendations"),
     "manufacturing": ("Manufacturing Intent", "process_fixture_type"),
-    "tolerance": ("Datums", "proposal_recommendations"),
+    "tolerance": ("Proposal", "proposal_recommendations"),
     "geometry": ("Validation", "engineering_findings"),
     "fabrication": ("Manufacturing Intent", "process_lifecycle"),
-    "concept": ("Concepts", "proposal_recommendations"),
+    "concept": ("Proposal", "proposal_recommendations"),
 }
 
 

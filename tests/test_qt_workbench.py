@@ -557,12 +557,21 @@ class QtWorkbenchTests(unittest.TestCase):
         self.assertIn("blocking issues", self.window.guided_validation_summary.text())
         self.assertIn("warnings requiring review", self.window.guided_validation_summary.text())
         self.assertGreater(self.window.guided_issues.count(), 0)
-        self.window.guided_issues.setCurrentRow(0)
+        routed_row = next(
+            index for index in range(self.window.guided_issues.count())
+            if self.window._guided_issue_records[str(
+                self.window.guided_issues.item(index).data(Qt.ItemDataRole.UserRole)
+            )].fix_target == "proposal_recommendations"
+        )
+        self.window.guided_issues.setCurrentRow(routed_row)
         self.application.processEvents()
         self.assertIn("What is wrong:", self.window.guided_issue_explanation.text())
         issue = self.window._selected_guided_issue()
         self.window.fix_selected_guided_issue()
         self.assertEqual(self.window._ui_active_stage, issue.workflow_section)
+        self.assertEqual(issue.workflow_section, "Proposal")
+        self.assertEqual(self.window.workflow_tabs.currentIndex(), 2)
+        self.assertFalse(self.window.proposal_recommendations.isHidden())
 
     def test_stale_orientation_keeps_proposal_visible_and_disables_acceptance(self):
         with tempfile.TemporaryDirectory() as directory:
