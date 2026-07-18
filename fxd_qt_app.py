@@ -1858,9 +1858,31 @@ class FxdWorkbenchWindow(QMainWindow):
             self._proposal_cancellation.cancel()
             self.proposal_status.setText("Cancelling fixture proposal generation safely...")
 
+    def _invalidate_pending_proposal_generation(self) -> None:
+        """Discard completions tied to a source or project being replaced."""
+        self._proposal_request += 1
+        if self._proposal_cancellation is not None:
+            self._proposal_cancellation.cancel()
+        self._proposal_cancellation = None
+        self._proposal_tasks.clear()
+        self.proposal_cancel.setVisible(False)
+
     def _proposal_completed(self, outcome: object, request_id: int) -> None:
         self._proposal_tasks.pop(request_id, None)
         if request_id != self._proposal_request:
+            return
+        if (self.document is None
+                or outcome.project.product.source_sha256 != self.document.source_sha256
+                or outcome.project.product.source_bytes != self.document.source_bytes
+                or (self.project is not None
+                    and outcome.project.product.source_sha256
+                    != self.project.product.source_sha256)):
+            self._proposal_cancellation = None
+            self.proposal_cancel.setVisible(False)
+            self.proposal_generate.setEnabled(True)
+            self.statusBar().showMessage(
+                "Discarded fixture proposal generated for a replaced source model."
+            )
             return
         self._proposal_cancellation = None
         self.proposal_cancel.setVisible(False)
@@ -2494,6 +2516,7 @@ class FxdWorkbenchWindow(QMainWindow):
             self.load_step_path(Path(name))
 
     def load_step_path(self, source: Path) -> None:
+        self._invalidate_pending_proposal_generation()
         try:
             before = source.read_bytes()
             before_digest = sha256(before).hexdigest()
@@ -2548,6 +2571,7 @@ class FxdWorkbenchWindow(QMainWindow):
             self.load_project_path(Path(name))
 
     def load_project_path(self, source: Path) -> None:
+        self._invalidate_pending_proposal_generation()
         self._replace_project(FxdProject.load(source))
         self.workflow = self.project.workflow
         self.project_path = source

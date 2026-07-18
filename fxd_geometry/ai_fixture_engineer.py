@@ -928,6 +928,19 @@ def proposal_from_ai_response(data: dict[str, object], request: AiProposalReques
         raise FixtureProposalError("AI proposal source SHA-256 mismatch")
     if data["manufacturing_orientation_identity"] != request.manufacturing_orientation_identity:
         raise FixtureProposalError("AI proposal manufacturing orientation mismatch")
+    top_string_fields = (
+        "concept_name", "fixture_purpose", "base_strategy", "lifecycle",
+        "complexity_class",
+    )
+    if any(not isinstance(data[field], str) or not data[field].strip()
+           for field in top_string_fields):
+        raise FixtureProposalError("AI proposal contains malformed text fields")
+    if (not isinstance(data["assumptions"], list)
+            or any(not isinstance(value, str) for value in data["assumptions"])):
+        raise FixtureProposalError("AI proposal assumptions must be a list of strings")
+    if (data["alternative_summary"] is not None
+            and not isinstance(data["alternative_summary"], str)):
+        raise FixtureProposalError("AI proposal alternative summary is malformed")
     recommendation_fields = {
         "recommendation_id", "recommendation_type", "title", "engineering_reason",
         "source_evidence", "assumptions", "confidence", "deterministic_checks",
@@ -949,22 +962,65 @@ def proposal_from_ai_response(data: dict[str, object], request: AiProposalReques
                 raise FixtureProposalError(
                     "AI recommendation does not match the strict nested schema"
                 )
+            string_fields = (
+                "recommendation_id", "recommendation_type", "title",
+                "engineering_reason", "validation_status", "decision", "engineer_note",
+            )
+            if any(not isinstance(item[field], str) for field in string_fields):
+                raise FixtureProposalError("AI recommendation contains malformed text fields")
+            if (not item["recommendation_id"].strip() or not item["title"].strip()
+                    or not item["engineering_reason"].strip()):
+                raise FixtureProposalError("AI recommendation contains empty required text")
+            if (isinstance(item["confidence"], bool)
+                    or not isinstance(item["confidence"], (int, float))):
+                raise FixtureProposalError("AI recommendation confidence must be numeric")
+            for field in (
+                    "assumptions", "deterministic_checks", "unresolved_risks",
+                    "downstream_dependencies"):
+                if (not isinstance(item[field], list)
+                        or any(not isinstance(value, str) for value in item[field])):
+                    raise FixtureProposalError(
+                        f"AI recommendation {field} must be a list of strings"
+                    )
+            if (item["fixture_feature_identity"] is not None
+                    and not isinstance(item["fixture_feature_identity"], str)):
+                raise FixtureProposalError("AI fixture feature identity is malformed")
             if (not isinstance(item["source_evidence"], list)
                     or any(not isinstance(value, dict) or set(value) != evidence_fields
                            for value in item["source_evidence"])):
                 raise FixtureProposalError("AI evidence does not match the strict nested schema")
+            if any(any(not isinstance(value[field], str) or not value[field].strip()
+                       for field in evidence_fields)
+                   for value in item["source_evidence"]):
+                raise FixtureProposalError("AI evidence fields must be non-empty strings")
             if (not isinstance(item["editable_parameters"], list)
                     or any(not isinstance(value, dict) or set(value) != parameter_fields
                            for value in item["editable_parameters"])):
                 raise FixtureProposalError(
                     "AI editable parameters do not match the strict nested schema"
                 )
+            for parameter in item["editable_parameters"]:
+                if not isinstance(parameter["name"], str) or not parameter["name"].strip():
+                    raise FixtureProposalError("AI editable parameter name is malformed")
+                if (parameter["units"] is not None
+                        and not isinstance(parameter["units"], str)):
+                    raise FixtureProposalError("AI editable parameter units are malformed")
+                if (not isinstance(parameter["choices"], list)
+                        or any(not isinstance(value, str) for value in parameter["choices"])):
+                    raise FixtureProposalError("AI editable parameter choices are malformed")
             reference = item["geometry_reference"]
             if reference is not None and (
                     not isinstance(reference, dict) or set(reference) != reference_fields):
                 raise FixtureProposalError(
                     "AI geometry reference does not match the strict nested schema"
                 )
+            if reference is not None:
+                if (not isinstance(reference["component_identity"], str)
+                        or not reference["component_identity"].strip()
+                        or any(reference[field] is not None
+                               and not isinstance(reference[field], str)
+                               for field in ("body_identity", "face_identity", "edge_identity"))):
+                    raise FixtureProposalError("AI geometry reference identities are malformed")
         recommendations = tuple(ProposalRecommendation.from_dict(item)
                                 for item in raw_recommendations)
     except FixtureProposalError:
@@ -1070,7 +1126,7 @@ def validate_fixture_proposal(project: FxdProject,
             f"{missing.value.replace('_', ' ').title()} recommendation is missing",
             "The proposal does not contain a required fixture-engineering recommendation.",
             "A complete proposal must address locating, support, clamping, structure, and removal.",
-            "Concepts", "proposal_recommendations", affected=missing.value,
+            "Proposal", "proposal_recommendations", affected=missing.value,
         ))
     setup = workflow.setup if workflow else None
     if setup is not None and setup.manufacturing_loading_direction is None:

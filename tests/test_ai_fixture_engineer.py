@@ -159,6 +159,15 @@ class AiFixtureEngineerTests(unittest.TestCase):
                         if item["editable_parameters"])
         editable["editable_parameters"][0]["unsupported_units_claim"] = True
         cases.append(nested_parameter)
+        malformed_assumptions = ai_response_from_proposal(self.fallback.proposal)
+        malformed_assumptions["recommendations"][0]["assumptions"] = "needs review"
+        cases.append(malformed_assumptions)
+        malformed_checks = ai_response_from_proposal(self.fallback.proposal)
+        malformed_checks["recommendations"][0]["deterministic_checks"] = "validation"
+        cases.append(malformed_checks)
+        malformed_top_level = ai_response_from_proposal(self.fallback.proposal)
+        malformed_top_level["assumptions"] = "review required"
+        cases.append(malformed_top_level)
         for response in cases:
             with self.subTest(response=list(response)):
                 outcome = generate_fixture_proposal(
@@ -218,6 +227,21 @@ class AiFixtureEngineerTests(unittest.TestCase):
         ))
         self.assertTrue(any(item.validation_status.value == "blocked"
                             for item in proposal.recommendations))
+        project = self.fallback.project
+        for recommendation in tuple(
+                item for item in project.fixture_proposal.recommendations
+                if item.recommendation_type == RecommendationType.CLAMP):
+            project = project.decide_proposal_recommendation(
+                recommendation.recommendation_id, RecommendationDecision.SUPPRESSED,
+                "exercise missing-category correction routing",
+            )
+        missing = next(
+            item for item in project.fixture_proposal.guided_issues
+            if item.rule_id == "proposal_recommendation_missing"
+            and item.affected_identity == RecommendationType.CLAMP.value
+        )
+        self.assertEqual(missing.workflow_section, "Proposal")
+        self.assertEqual(missing.fix_target, "proposal_recommendations")
 
     def test_recommendation_decision_and_edit_are_audited_and_clear_downstream_state(self):
         requirements = FixtureBuildRequirements(

@@ -515,6 +515,38 @@ class QtWorkbenchTests(unittest.TestCase):
         self.assertIn("Proposal identity:", self.window.proposal_technical_details.text())
         self.assertEqual(self.window.document.source_bytes, original)
 
+    def test_stale_background_proposal_completion_is_discarded_after_source_replacement(self):
+        with tempfile.TemporaryDirectory() as directory:
+            first = self._real_step(directory)
+            self.window.load_step_path(first)
+            component = self.window.document.assembly.components[0]
+            bottom = component.faces[0]
+            front = next(face for face in component.faces if abs(sum(
+                left * right for left, right in zip(bottom.normal, face.normal)
+            )) < 0.1)
+            self.window.viewport.face_picked.emit(bottom.reference)
+            self.window.accept_guided_bottom_face()
+            self.window.viewport.face_picked.emit(front.reference)
+            self.window.preview_guided_orientation()
+            self.window.accept_guided_orientation()
+            self.window.apply_proposal_recommended_intent()
+            old_outcome = self.window.generate_fixture_proposal_now()
+            old_request = self.window._proposal_request
+            replacement = Path(directory) / "replacement.step"
+            replacement.write_bytes(self.kernel.export_step(
+                self.kernel.make_box((0, 0, 0), (35, 18, 12))
+            ))
+            self.window.load_step_path(replacement)
+            replacement_sha = self.window.document.source_sha256
+            self.window._proposal_completed(old_outcome, old_request)
+            self.assertEqual(self.window.document.source_sha256, replacement_sha)
+            self.assertIsNone(self.window.project)
+            self.window._proposal_request = old_request
+            self.window._proposal_completed(old_outcome, old_request)
+            self.assertEqual(self.window.document.source_sha256, replacement_sha)
+            self.assertIsNone(self.window.project)
+            self.assertIn("replaced source", self.window.statusBar().currentMessage())
+
     def test_proposal_selection_highlights_evidence_and_decision_is_audited(self):
         with tempfile.TemporaryDirectory() as directory:
             self.window.load_step_path(self._real_step(directory))
