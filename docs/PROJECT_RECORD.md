@@ -469,3 +469,40 @@ the source SHA-256. Milestone 30 remains Pending until hosted kernel acceptance,
 independent review, full Windows visual acceptance, user engineering acceptance,
 and merge. It does not claim released fabrication detail, thermal or robot
 simulation, structural adequacy, safety certification, or production approval.
+
+## 2026-07-18 - Milestone 31 local implementation evidence
+
+Milestone 31 adds the provider-neutral `fxd-fixture-proposal-v1` request,
+response, provenance, recommendation, validation, edit, and audit contracts. A
+configured environment-only HTTP provider receives compact engineering summaries
+without STEP bytes; malformed, unknown-identity, source-mismatched, or
+orientation-mismatched output is quarantined. When AI is unavailable, the same
+workflow uses an explicitly labeled deterministic baseline. Existing
+deterministic placement, concept, access, weld, validation, approval, and export
+engines remain authoritative and fail closed.
+
+The schema-v5 project record persists the proposal separately from immutable
+source CAD and manufacturing orientation, remains backward compatible through
+v1, and preserves engineer accept, reject, suppress, edit, regeneration, and
+stale-state evidence. The Qt workbench adds the Proposal step, minimum-intent
+confirmation, per-recommendation highlights and explanations, guided validation
+with correction routing, and dismissible/reopenable first-run guidance.
+
+Local evidence: Python 3.12.10, OCP 7.9.3.1, PySide6 6.8.3, and VTK 9.6.2;
+14 focused AI fixture tests, 44 focused Qt/workbench tests, 14 project and export
+persistence tests, 36 manufacturing-orientation/interactive/kernel tests, and
+274 full-suite tests pass with zero failures, errors, or skips. `compileall`,
+`git diff --check`, launcher dependency checking, and `scripts/ci.sh` pass; the
+governed CI validates 20 milestones and its real OCP proof.
+
+A locally generated, nonconfidential OCP STEP box was loaded through the native
+`vtkWin32OpenGLRenderWindow`. Bottom and front planar faces were picked directly
+and displayed with distinct highlights; preview, Fit View, orientation acceptance,
+minimum-intent confirmation, deterministic fallback generation, recommendation
+highlighting, guided issue explanation, correction routing, and post-resize
+repaint were exercised. The source SHA-256 remained
+`2A9EAC1BCEBD809EEC6DF40BA07D3576E6D1926AE7DA3D2AC0BC88F010CEAF94`.
+
+Milestone 31 remains pending hosted acceptance, fresh independent review, user
+Windows visual acceptance, engineering acceptance, and explicit merge authority.
+No production fixture approval or physical adequacy claim is made.

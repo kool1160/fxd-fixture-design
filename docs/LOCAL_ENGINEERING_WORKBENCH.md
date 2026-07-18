@@ -121,16 +121,44 @@ rewriting source CAD.
 See `docs/MANUFACTURING_ORIENTATION_CONTRACT.md` for persistence, transform,
 validation, and limitation details.
 
+### AI Fixture Engineer proposal
+
+After orientation acceptance, the workbench opens **Proposal** and presents the
+prominent **Generate Fixture Proposal** action. Missing essential intent is
+shown as a short interview with a reason and visible recommended answer for each
+question. FXD never applies those answers silently. The proposal view labels AI,
+offline fallback, timeout/failure, cancellation, and stale states separately.
+
+Normal review lists recommendation category, title, engineer decision, and
+deterministic status without raw face IDs or matrices. Selecting a
+recommendation highlights its mapped source face or generated fixture feature
+and explains the engineering reason, confidence, assumptions, checks, and
+unresolved risk. Accept, reject, suppress, edit, regenerate, and overall review
+decisions are audited. Provider, engine, contract, SHA, orientation, and proposal
+identities remain under **Technical proposal details**.
+
+The Validation tab summarizes blocking issues and warnings in plain language.
+**Fix this** navigates to the mapped workflow section and evidence; **More
+details** exposes rule and technical evidence. A failed or stale workflow stage
+opens its related guided findings. The first-run proposal guide can be dismissed,
+disabled, and reopened from **Help > Fixture proposal guide**.
+
+Projects persist this evidence in schema v5. Source or orientation mismatch
+makes the proposal stale and blocks approval/export while leaving the old review
+visible. See `docs/AI_FIXTURE_PROPOSAL_CONTRACT.md`.
+
 Supported parameter, move, resize, replacement, suppression/restore, and saved
 revision restoration operations create deterministic project revisions, revoke
 prior review approval, regenerate concepts, and rerun validation. Private local
 tooling records can retain supplied manufacturer, part number, revision,
 directions, stroke, reach, force, and explicit verified/unverified state after
-the selected CAD passes the real OCP import path. Project schema v3
+the selected CAD passes the real OCP import path. Project schema v5
 persists process setup, exact annotations, tooling verification state, finding
-reviews, active concept, visibility, revisions, and timing evidence. V1 and v2
-projects remain readable. Invalid concepts remain blocked from review export;
+reviews, proposal provenance and audit history, active concept, visibility,
+revisions, and timing evidence. V1 through v4 projects remain readable. Invalid
+concepts and stale or blocked proposals remain blocked from review export;
 provisional output retains the engineering-review-only boundary.
 
-Milestone 28 remains Pending until local fixture-engineer visual review,
-hosted validation, independent review, and merge.
+Milestone 30 was squash-merged through PR #52 at `edf65bb`. Milestone 31 remains
+Pending until hosted validation, independent review, user Windows visual
+acceptance, engineering acceptance, and merge.

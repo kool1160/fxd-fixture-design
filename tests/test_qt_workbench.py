@@ -19,7 +19,7 @@ if find_spec("PySide6") is None:
 from PySide6.QtCore import QPoint, QPointF, Qt, Signal
 from PySide6.QtGui import QWheelEvent
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QComboBox, QWidget
+from PySide6.QtWidgets import QApplication, QCheckBox, QComboBox, QPushButton, QWidget
 
 from fxd_geometry import (
     EngineeringAnnotations,
@@ -257,7 +257,7 @@ class QtWorkbenchTests(unittest.TestCase):
 
     def test_brand_shell_uses_shared_assets_and_accessible_engineering_states(self):
         self.assertIn("SOURCE CAD \u00b7 READ-ONLY", self.window.source_badge.text())
-        self.assertEqual(self.window.workflow_rail.count(), 18)
+        self.assertEqual(self.window.workflow_rail.count(), 19)
         self.assertFalse(self.window._actions["import"].icon().isNull())
         self.assertFalse(self.window._actions["approve"].isEnabled())
         self.assertEqual(self.window.status_validation.text_label.text(), "NOT EVALUATED")
@@ -482,8 +482,135 @@ class QtWorkbenchTests(unittest.TestCase):
             self.assertTrue(accepted.accepted)
             self.assertIsNotNone(accepted.front_reference)
             self.assertTrue(self.window.analyze_button.isEnabled())
-            self.assertIs(self.window.workflow_tabs.currentWidget(), self.window.process_scroll)
+            self.assertIs(self.window.workflow_tabs.currentWidget(), self.window.proposal_page)
             self.assertEqual(source.read_bytes(), original)
+
+    def test_fixture_proposal_step_generates_offline_baseline_and_hides_raw_ids(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = self._real_step(directory)
+            original = source.read_bytes()
+            self.window.load_step_path(source)
+            component = self.window.document.assembly.components[0]
+            bottom = component.faces[0]
+            front = next(face for face in component.faces if abs(sum(
+                left * right for left, right in zip(bottom.normal, face.normal)
+            )) < 0.1)
+            self.window.viewport.face_picked.emit(bottom.reference)
+            self.window.accept_guided_bottom_face()
+            self.window.viewport.face_picked.emit(front.reference)
+            self.window.preview_guided_orientation()
+            self.window.accept_guided_orientation()
+            self.window.apply_proposal_recommended_intent()
+            outcome = self.window.generate_fixture_proposal_now()
+        self.assertIsNotNone(self.window.project.fixture_proposal)
+        self.assertEqual(outcome.provider_state.value, "ai_unavailable")
+        self.assertIn("Deterministic baseline proposal", self.window.proposal_status.text())
+        self.assertGreater(self.window.proposal_recommendations.count(), 0)
+        normal_text = "\n".join(
+            self.window.proposal_recommendations.item(index).text()
+            for index in range(self.window.proposal_recommendations.count())
+        )
+        self.assertNotIn("face:", normal_text)
+        self.assertNotIn("proposal-", normal_text)
+        self.assertIn("Proposal identity:", self.window.proposal_technical_details.text())
+        self.assertEqual(self.window.document.source_bytes, original)
+
+    def test_proposal_selection_highlights_evidence_and_decision_is_audited(self):
+        with tempfile.TemporaryDirectory() as directory:
+            self.window.load_step_path(self._real_step(directory))
+            component = self.window.document.assembly.components[0]
+            bottom = component.faces[0]
+            front = next(face for face in component.faces if abs(sum(
+                left * right for left, right in zip(bottom.normal, face.normal)
+            )) < 0.1)
+            self.window.viewport.face_picked.emit(bottom.reference)
+            self.window.accept_guided_bottom_face()
+            self.window.viewport.face_picked.emit(front.reference)
+            self.window.preview_guided_orientation()
+            self.window.accept_guided_orientation()
+            self.window.apply_proposal_recommended_intent()
+            self.window.generate_fixture_proposal_now()
+        self.window.proposal_recommendations.setCurrentRow(0)
+        self.application.processEvents()
+        self.assertIn("Why proposed:", self.window.proposal_explanation.text())
+        self.assertTrue(any(call[0] == "select" for call in self.window.viewport.scene.calls))
+        before = self.window.project.fixture_proposal.proposal_identity
+        self.window.proposal_reject_recommendation.click()
+        self.assertNotEqual(self.window.project.fixture_proposal.proposal_identity, before)
+        self.assertTrue(self.window.project.fixture_proposal.audit_history)
+
+    def test_guided_validation_summary_and_fix_navigation_are_plain_language(self):
+        with tempfile.TemporaryDirectory() as directory:
+            self.window.load_step_path(self._real_step(directory))
+            component = self.window.document.assembly.components[0]
+            bottom = component.faces[0]
+            front = next(face for face in component.faces if abs(sum(
+                left * right for left, right in zip(bottom.normal, face.normal)
+            )) < 0.1)
+            self.window.viewport.face_picked.emit(bottom.reference)
+            self.window.accept_guided_bottom_face()
+            self.window.viewport.face_picked.emit(front.reference)
+            self.window.preview_guided_orientation()
+            self.window.accept_guided_orientation()
+            self.window.apply_proposal_recommended_intent()
+            self.window.generate_fixture_proposal_now()
+        self.assertIn("blocking issues", self.window.guided_validation_summary.text())
+        self.assertIn("warnings requiring review", self.window.guided_validation_summary.text())
+        self.assertGreater(self.window.guided_issues.count(), 0)
+        self.window.guided_issues.setCurrentRow(0)
+        self.application.processEvents()
+        self.assertIn("What is wrong:", self.window.guided_issue_explanation.text())
+        issue = self.window._selected_guided_issue()
+        self.window.fix_selected_guided_issue()
+        self.assertEqual(self.window._ui_active_stage, issue.workflow_section)
+
+    def test_stale_orientation_keeps_proposal_visible_and_disables_acceptance(self):
+        with tempfile.TemporaryDirectory() as directory:
+            self.window.load_step_path(self._real_step(directory))
+            component = self.window.document.assembly.components[0]
+            bottom = component.faces[0]
+            front = next(face for face in component.faces if abs(sum(
+                left * right for left, right in zip(bottom.normal, face.normal)
+            )) < 0.1)
+            self.window.viewport.face_picked.emit(bottom.reference)
+            self.window.accept_guided_bottom_face()
+            self.window.viewport.face_picked.emit(front.reference)
+            self.window.preview_guided_orientation()
+            self.window.accept_guided_orientation()
+            self.window.apply_proposal_recommended_intent()
+            self.window.generate_fixture_proposal_now()
+        prior_identity = self.window.project.fixture_proposal.proposal_identity
+        self.window.edit_orientation()
+        self.window.flip_guided_bottom_side()
+        self.window._refresh_all()
+        self.assertIsNotNone(self.window.project)
+        self.assertTrue(any(
+            issue.rule_id == "proposal_stale"
+            for issue in self.window.project.fixture_proposal.guided_issues
+        ))
+        self.assertNotEqual(self.window.project.fixture_proposal.proposal_identity, prior_identity)
+        self.assertGreater(self.window.proposal_recommendations.count(), 0)
+        self.assertIn("STALE", self.window.proposal_summary.text())
+        self.assertFalse(self.window.proposal_accept.isEnabled())
+
+    def test_first_run_guide_can_be_disabled_and_reopened(self):
+        self.window.settings.remove("guide/fixture_proposal_dismissed")
+        self.window.show_first_run_guide(True)
+        dialog = self.window._first_run_dialog
+        self.assertTrue(dialog.isVisible())
+        never = next(item for item in dialog.findChildren(QCheckBox)
+                     if "show this again" in item.text())
+        dismiss = next(item for item in dialog.findChildren(QPushButton)
+                       if item.text() == "Dismiss")
+        never.setChecked(True)
+        dismiss.click()
+        self.assertTrue(self.window.settings.value(
+            "guide/fixture_proposal_dismissed", False, type=bool
+        ))
+        self.window.show_first_run_guide(True)
+        self.assertTrue(self.window._first_run_dialog.isVisible())
+        self.window._first_run_dialog.close()
+        self.window.settings.remove("guide/fixture_proposal_dismissed")
 
     def test_changing_guided_face_or_flip_clears_downstream_state(self):
         with tempfile.TemporaryDirectory() as directory:

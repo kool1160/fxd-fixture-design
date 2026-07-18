@@ -127,7 +127,7 @@ class SourceCadBadge(QToolButton):
 
 WORKFLOW_STEPS = (
     "Project", "Import", "Assembly", "Manufacturing Intent", "Orientation",
-    "Datums", "Locators & Supports", "Clamps", "Base Structure",
+    "Proposal", "Datums", "Locators & Supports", "Clamps", "Base Structure",
     "Weld & Access", "Concepts", "Validation", "Cost & Volume",
     "Review & Approval", "Export", "Component Library",
     "Rules & Preferences", "Project History",

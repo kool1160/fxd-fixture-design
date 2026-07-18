@@ -32,11 +32,11 @@ class OperationsTests(unittest.TestCase):
             process_type="manual MIG", production_quantity=1)
         self.project = FxdProject.from_product(self.product, self.annotations)
 
-    def test_project_v4_save_and_true_v1_load_compatibility(self):
+    def test_project_v5_save_and_true_v1_load_compatibility(self):
         with tempfile.TemporaryDirectory() as directory:
             path = self.project.save(Path(directory) / "fixture.fxd.json")
             payload = json.loads(path.read_text())
-            self.assertEqual(payload["schema_version"], 4)
+            self.assertEqual(payload["schema_version"], 5)
             self.assertEqual(FxdProject.load(path).product.source_sha256, self.product.source_sha256)
             payload["format"] = "fxd-neutral-project-v1"
             payload.pop("schema_version")

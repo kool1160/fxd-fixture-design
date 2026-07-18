@@ -65,7 +65,9 @@ from fxd_ui import (
 from fxd_ui.theme.tokens import COLORS
 from fxd_geometry import (
     AdjustmentState,
+    AiFixtureProvider,
     AnnotationRole,
+    CancellationToken,
     ConstructionMethod,
     FixtureLifecycle,
     FixturePurpose,
@@ -78,9 +80,12 @@ from fxd_geometry import (
     KernelOperationError,
     ManufacturingOrientation,
     ManufacturingOrientationError,
+    MissingIntentError,
     OcpKernel,
     OperationTiming,
     ProcessSetup,
+    ProviderState,
+    RecommendationDecision,
     OrientationMethod,
     ReferencePlane,
     RenderDiagnostics,
@@ -88,11 +93,14 @@ from fxd_geometry import (
     author_fixture_build,
     WorkbenchDocument,
     analyze_engineering_workflow,
+    apply_recommended_intent,
     compare_concepts,
     face_annotation,
     load_step_for_workbench,
     product_from_workbench_document,
     generate_fixture_build_plan as generate_m30_fixture_build_plan,
+    generate_fixture_proposal,
+    minimal_intent_questions,
     orientation_from_face,
     orientation_from_faces,
     orientation_from_plane,
@@ -206,6 +214,38 @@ class _AnalysisTask(QRunnable):
             self.signals.completed.emit(project, self.request_id, self.document.source_bytes)
         except Exception as exc:
             logger.exception("background deterministic engineering analysis failed")
+            self.signals.failed.emit(str(exc), self.request_id)
+
+
+class _ProposalSignals(QObject):
+    completed = Signal(object, int)
+    failed = Signal(str, int)
+
+
+class _ProposalTask(QRunnable):
+    """Run the provider-neutral proposal pipeline without blocking Qt."""
+
+    def __init__(self, document: WorkbenchDocument, workflow: InteractiveWorkflow,
+                 request_id: int, provider: AiFixtureProvider | None,
+                 cancellation: CancellationToken, prior_proposal: object | None = None) -> None:
+        super().__init__()
+        self.document = document
+        self.workflow = workflow
+        self.request_id = request_id
+        self.provider = provider
+        self.cancellation = cancellation
+        self.prior_proposal = prior_proposal
+        self.signals = _ProposalSignals()
+
+    def run(self) -> None:
+        try:
+            outcome = generate_fixture_proposal(
+                self.document, self.workflow, provider=self.provider,
+                cancellation=self.cancellation, prior_proposal=self.prior_proposal,
+            )
+            self.signals.completed.emit(outcome, self.request_id)
+        except Exception as exc:
+            logger.exception("background fixture proposal generation failed")
             self.signals.failed.emit(str(exc), self.request_id)
 
 
@@ -552,7 +592,8 @@ class FxdWorkbenchWindow(QMainWindow):
 
     def __init__(self, *,
                  viewport_factory: Callable[..., EmbeddedVtkViewport] = EmbeddedVtkViewport,
-                 kernel: OcpKernel | None = None) -> None:
+                 kernel: OcpKernel | None = None,
+                 ai_provider: AiFixtureProvider | None = None) -> None:
         super().__init__()
         self.setObjectName("fxdEngineeringWorkbench")
         self.setWindowTitle("FXD - Engineering Workbench - review only")
@@ -582,6 +623,14 @@ class FxdWorkbenchWindow(QMainWindow):
         self.analysis_pool.setMaxThreadCount(1)
         self._analysis_request = 0
         self._analysis_tasks: dict[int, _AnalysisTask] = {}
+        self._proposal_request = 0
+        self._proposal_tasks: dict[int, _ProposalTask] = {}
+        self._proposal_cancellation: CancellationToken | None = None
+        self.ai_provider = ai_provider
+        self._proposal_records: dict[str, object] = {}
+        self._guided_issue_records: dict[str, object] = {}
+        self._active_guided_issue: str | None = None
+        self._guided_fix_signal: tuple[object, object] | None = None
         self.log = StructuredLog(Path.home() / ".fxd" / "diagnostics.jsonl")
         self.kernel = kernel or OcpKernel()
         self.viewport = viewport_factory(self)
@@ -618,14 +667,22 @@ class FxdWorkbenchWindow(QMainWindow):
         self.statusBar().showMessage("Open a legally shareable STEP file or FXD project.")
         self._set_property("Evidence", EVIDENCE_PROVISIONAL)
         self._refresh_shell_state()
+        if self._settings_enabled:
+            QTimer.singleShot(0, self.show_first_run_guide)
 
     def _replace_project(self, project: FxdProject | None) -> None:
         """Replace project state and invalidate geometry authored for the old revision."""
         self.project = project
         self.authored_fixture_build = None
+        project_orientation = (
+            project.workflow.setup.manufacturing_orientation
+            if project is not None and project.workflow is not None else None
+        )
         if (self.orientation_draft is not None and (
                 project is None
-                or self.orientation_draft.source_sha256 != project.product.source_sha256)):
+                or self.orientation_draft.source_sha256 != project.product.source_sha256
+                or project_orientation is None
+                or self.orientation_draft.identity != project_orientation.identity)):
             self.orientation_draft = None
             self.orientation_face_reference = None
             self.orientation_front_reference = None
@@ -877,6 +934,136 @@ class FxdWorkbenchWindow(QMainWindow):
         scroll.setWidget(host)
         return scroll
 
+    def _build_proposal_page(self) -> QScrollArea:
+        scroll = QScrollArea(self.workflow_tabs)
+        scroll.setObjectName("fixtureProposalWorkflow")
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        host = QWidget(scroll)
+        layout = QVBoxLayout(host)
+        layout.setContentsMargins(14, 14, 14, 14)
+        layout.setSpacing(10)
+
+        heading = QLabel("AI Fixture Engineer", host)
+        heading.setProperty("sectionHeading", True)
+        introduction = QLabel(
+            "Generate one editable fixture proposal from the accepted manufacturing "
+            "orientation and deterministic FXD engineering evidence. AI proposes; "
+            "engineering validation remains authoritative.", host,
+        )
+        introduction.setWordWrap(True)
+        self.proposal_status = QLabel(
+            "Accept manufacturing orientation to begin.", host,
+        )
+        self.proposal_status.setWordWrap(True)
+        self.proposal_status.setObjectName("fixtureProposalStatus")
+        self.proposal_generate = QPushButton("Generate Fixture Proposal", host)
+        self.proposal_generate.setObjectName("generateFixtureProposal")
+        self.proposal_generate.setProperty("role", "primary")
+        self.proposal_generate.clicked.connect(self.generate_fixture_proposal_action)
+        self.proposal_cancel = QPushButton("Cancel generation", host)
+        self.proposal_cancel.clicked.connect(self.cancel_fixture_proposal)
+        self.proposal_cancel.setVisible(False)
+
+        self.proposal_interview = QGroupBox("Essential intent confirmation", host)
+        interview_layout = QVBoxLayout(self.proposal_interview)
+        self.proposal_questions = QListWidget(self.proposal_interview)
+        self.proposal_questions.setObjectName("proposalIntentQuestions")
+        self.proposal_use_recommended = QPushButton(
+            "Use these recommended answers", self.proposal_interview,
+        )
+        self.proposal_use_recommended.clicked.connect(self.apply_proposal_recommended_intent)
+        interview_layout.addWidget(self.proposal_questions)
+        interview_layout.addWidget(self.proposal_use_recommended)
+
+        self.proposal_summary = QLabel("No fixture proposal has been generated.", host)
+        self.proposal_summary.setWordWrap(True)
+        self.proposal_recommendations = QListWidget(host)
+        self.proposal_recommendations.setObjectName("fixtureProposalRecommendations")
+        self.proposal_recommendations.itemSelectionChanged.connect(
+            self._proposal_selection_changed
+        )
+        self.proposal_explanation = QLabel(
+            "Select a recommendation to review why it was proposed, its assumptions, "
+            "confidence, deterministic checks, and unresolved risk.", host,
+        )
+        self.proposal_explanation.setWordWrap(True)
+
+        review_actions = QHBoxLayout()
+        self.proposal_accept_recommendation = QPushButton("Accept", host)
+        self.proposal_reject_recommendation = QPushButton("Reject", host)
+        self.proposal_suppress_recommendation = QPushButton("Suppress", host)
+        self.proposal_accept_recommendation.clicked.connect(
+            lambda: self._decide_selected_recommendation(RecommendationDecision.ACCEPTED)
+        )
+        self.proposal_reject_recommendation.clicked.connect(
+            lambda: self._decide_selected_recommendation(RecommendationDecision.REJECTED)
+        )
+        self.proposal_suppress_recommendation.clicked.connect(
+            lambda: self._decide_selected_recommendation(RecommendationDecision.SUPPRESSED)
+        )
+        review_actions.addWidget(self.proposal_accept_recommendation)
+        review_actions.addWidget(self.proposal_reject_recommendation)
+        review_actions.addWidget(self.proposal_suppress_recommendation)
+
+        edit_form = QFormLayout()
+        self.proposal_edit_parameter = self._combo((), editable=False)
+        self.proposal_edit_value = QLineEdit(host)
+        self.proposal_edit_note = QLineEdit(host)
+        self.proposal_edit_note.setPlaceholderText("Engineer reason for the proposal revision")
+        self.proposal_apply_edit = QPushButton("Edit recommendation", host)
+        self.proposal_apply_edit.clicked.connect(self._edit_selected_recommendation)
+        edit_form.addRow("Editable parameter:", self.proposal_edit_parameter)
+        edit_form.addRow("New value:", self.proposal_edit_value)
+        edit_form.addRow("Reason:", self.proposal_edit_note)
+        edit_form.addRow(self.proposal_apply_edit)
+
+        decision_actions = QHBoxLayout()
+        self.proposal_accept = QPushButton("Accept for Engineering Review", host)
+        self.proposal_reject = QPushButton("Reject Proposal", host)
+        self.proposal_accept.clicked.connect(
+            lambda: self._decide_fixture_proposal("accepted_for_engineering_review")
+        )
+        self.proposal_reject.clicked.connect(
+            lambda: self._decide_fixture_proposal("rejected")
+        )
+        decision_actions.addWidget(self.proposal_accept)
+        decision_actions.addWidget(self.proposal_reject)
+
+        self.proposal_technical_toggle = QToolButton(host)
+        self.proposal_technical_toggle.setText("Technical proposal details")
+        self.proposal_technical_toggle.setCheckable(True)
+        self.proposal_technical_toggle.setArrowType(Qt.ArrowType.RightArrow)
+        self.proposal_technical_details = QLabel("", host)
+        self.proposal_technical_details.setWordWrap(True)
+        self.proposal_technical_details.setProperty("technical", True)
+        self.proposal_technical_details.setVisible(False)
+        self.proposal_technical_toggle.toggled.connect(
+            lambda shown: (
+                self.proposal_technical_toggle.setArrowType(
+                    Qt.ArrowType.DownArrow if shown else Qt.ArrowType.RightArrow
+                ),
+                self.proposal_technical_details.setVisible(shown),
+            )
+        )
+
+        layout.addWidget(heading)
+        layout.addWidget(introduction)
+        layout.addWidget(self.proposal_status)
+        layout.addWidget(self.proposal_generate)
+        layout.addWidget(self.proposal_cancel)
+        layout.addWidget(self.proposal_interview)
+        layout.addWidget(self.proposal_summary)
+        layout.addWidget(self.proposal_recommendations, 1)
+        layout.addWidget(self.proposal_explanation)
+        layout.addLayout(review_actions)
+        layout.addLayout(edit_form)
+        layout.addLayout(decision_actions)
+        layout.addWidget(self.proposal_technical_toggle)
+        layout.addWidget(self.proposal_technical_details)
+        scroll.setWidget(host)
+        return scroll
+
     def _build_workflow_dock(self) -> None:
         dock = QDockWidget("Fixture Engineering Workflow", self)
         dock.setObjectName("workflowDock")
@@ -901,6 +1088,9 @@ class FxdWorkbenchWindow(QMainWindow):
 
         self.orientation_page = self._build_orientation_page()
         self.workflow_tabs.addTab(self.orientation_page, "Orientation")
+
+        self.proposal_page = self._build_proposal_page()
+        self.workflow_tabs.addTab(self.proposal_page, "Proposal")
 
         # M30 adds governed construction inputs; keep the complete review form
         # reachable at the supported 1366 x 768 desktop size.
@@ -1221,6 +1411,34 @@ class FxdWorkbenchWindow(QMainWindow):
             lambda: self.record_decision("reject")
         )
         validation_layout.addWidget(self.approval_gate)
+        self.guided_validation_summary = QLabel(
+            "Generate a fixture proposal to see guided validation findings.", validation_page,
+        )
+        self.guided_validation_summary.setObjectName("guidedValidationSummary")
+        self.guided_validation_summary.setWordWrap(True)
+        self.guided_issues = QListWidget(validation_page)
+        self.guided_issues.setObjectName("guidedValidationIssues")
+        self.guided_issues.itemSelectionChanged.connect(self._guided_issue_selection_changed)
+        self.guided_issue_explanation = QLabel("", validation_page)
+        self.guided_issue_explanation.setWordWrap(True)
+        guided_actions = QHBoxLayout()
+        self.guided_fix = QPushButton("Fix this", validation_page)
+        self.guided_fix.clicked.connect(self.fix_selected_guided_issue)
+        self.guided_more = QToolButton(validation_page)
+        self.guided_more.setText("More details")
+        self.guided_more.setCheckable(True)
+        guided_actions.addWidget(self.guided_fix)
+        guided_actions.addWidget(self.guided_more)
+        self.guided_technical_details = QLabel("", validation_page)
+        self.guided_technical_details.setWordWrap(True)
+        self.guided_technical_details.setProperty("technical", True)
+        self.guided_technical_details.setVisible(False)
+        self.guided_more.toggled.connect(self.guided_technical_details.setVisible)
+        validation_layout.addWidget(self.guided_validation_summary)
+        validation_layout.addWidget(self.guided_issues, 1)
+        validation_layout.addWidget(self.guided_issue_explanation)
+        validation_layout.addLayout(guided_actions)
+        validation_layout.addWidget(self.guided_technical_details)
         validation_layout.addStretch(1)
         tabs.addTab(validation_page, "Validation")
         dock.setWidget(tabs)
@@ -1439,7 +1657,13 @@ class FxdWorkbenchWindow(QMainWindow):
             "generate", "Generate concepts", self.generate_concepts,
             icon_name="generate-concepts",
         )
-        engineering_menu.addActions([edit_orientation_action, analyze_action, generate_action])
+        proposal_action = self._action(
+            "generate_proposal", "Generate Fixture Proposal",
+            self.generate_fixture_proposal_action, icon_name="generate-concepts",
+        )
+        engineering_menu.addActions([
+            edit_orientation_action, proposal_action, analyze_action, generate_action,
+        ])
 
         findings_action = self._action(
             "findings", "Review findings", self.focus_findings,
@@ -1478,6 +1702,9 @@ class FxdWorkbenchWindow(QMainWindow):
             "benchmark", "Run visible render benchmark", self.show_renderer_benchmark
         ))
         help_menu.addSeparator()
+        help_menu.addAction(self._action(
+            "first_run_guide", "Fixture proposal guide", lambda: self.show_first_run_guide(True)
+        ))
         help_menu.addAction(self._action("about", "About FXD", self.show_about))
 
         toolbar = QToolBar("Main", self)
@@ -1495,7 +1722,9 @@ class FxdWorkbenchWindow(QMainWindow):
             self._actions["view_top"], wireframe, transparency,
         ])
         toolbar.addSeparator()
-        toolbar.addActions([edit_orientation_action, analyze_action, generate_action, findings_action])
+        toolbar.addActions([
+            edit_orientation_action, proposal_action, analyze_action, generate_action, findings_action,
+        ])
         toolbar.addSeparator()
         toolbar.addActions([approve_action, reject_action])
         self.addToolBar(toolbar)
@@ -1507,11 +1736,11 @@ class FxdWorkbenchWindow(QMainWindow):
         self._ui_active_stage = stage
         tab_for_stage = {
             "Project": 0, "Import": 0, "Assembly": 0,
-            "Manufacturing Intent": 2, "Orientation": 1,
-            "Datums": 3, "Locators & Supports": 3, "Clamps": 3,
-            "Base Structure": 4, "Weld & Access": 4, "Concepts": 4,
-            "Cost & Volume": 4, "Component Library": 6,
-            "Rules & Preferences": 6, "Project History": 7,
+            "Manufacturing Intent": 3, "Orientation": 1, "Proposal": 2,
+            "Datums": 4, "Locators & Supports": 4, "Clamps": 4,
+            "Base Structure": 5, "Weld & Access": 5, "Concepts": 5,
+            "Cost & Volume": 5, "Component Library": 7,
+            "Rules & Preferences": 7, "Project History": 8,
         }
         if stage in {"Validation", "Review & Approval", "Export"}:
             review = self.findChild(QDockWidget, "reviewDock")
@@ -1525,6 +1754,21 @@ class FxdWorkbenchWindow(QMainWindow):
                 workflow_dock.show()
                 workflow_dock.raise_()
             self.workflow_tabs.setCurrentIndex(tab_for_stage.get(stage, 0))
+        state = self._workflow_states().get(stage)
+        if state in {"blocked", "stale"} and self.project is not None:
+            matching = [
+                index for index in range(self.guided_issues.count())
+                if (issue := self._guided_issue_records.get(str(
+                    self.guided_issues.item(index).data(Qt.ItemDataRole.UserRole)
+                ))) is not None and issue.workflow_section == stage
+            ]
+            if matching:
+                review = self.findChild(QDockWidget, "reviewDock")
+                if review is not None:
+                    review.show()
+                    review.raise_()
+                self.review_tabs.setCurrentIndex(2)
+                self.guided_issues.setCurrentRow(matching[0])
         self._set_orientation_pick_mode(
             stage == "Orientation" and self.orientation_guided_step in {0, 1}
         )
@@ -1557,6 +1801,370 @@ class FxdWorkbenchWindow(QMainWindow):
             review.show()
             review.raise_()
         self.review_tabs.setCurrentIndex(1)
+
+    def generate_fixture_proposal_now(self, provider: AiFixtureProvider | None = None):
+        """Synchronous seam used by focused tests and non-threaded integrations."""
+        if self.document is None or self.workflow is None:
+            raise InteractiveWorkflowError("import a STEP model before generating a proposal")
+        outcome = generate_fixture_proposal(
+            self.document, self.workflow,
+            provider=provider if provider is not None else self.ai_provider,
+            prior_proposal=self.project.fixture_proposal if self.project else None,
+        )
+        self.workflow = outcome.project.workflow
+        self._replace_project(outcome.project)
+        self._show_active_concept_geometry()
+        self._refresh_all()
+        return outcome
+
+    def generate_fixture_proposal_action(self) -> None:
+        if self.document is None or self.workflow is None:
+            self.statusBar().showMessage("Import a STEP model before generating a fixture proposal.")
+            return
+        if not self.workflow.has_accepted_manufacturing_orientation():
+            self.statusBar().showMessage(
+                "Accept manufacturing orientation before generating a fixture proposal."
+            )
+            self._navigate_stage("Orientation")
+            return
+        questions = minimal_intent_questions(self.workflow)
+        if questions:
+            self._populate_proposal()
+            self.proposal_status.setText(
+                "Confirm the essential manufacturing intent below before generation."
+            )
+            self.proposal_interview.setVisible(True)
+            return
+        self._proposal_request += 1
+        request_id = self._proposal_request
+        cancellation = CancellationToken.create()
+        self._proposal_cancellation = cancellation
+        task = _ProposalTask(
+            self.document, self.workflow, request_id, self.ai_provider, cancellation,
+            self.project.fixture_proposal if self.project else None,
+        )
+        self._proposal_tasks[request_id] = task
+        task.signals.completed.connect(self._proposal_completed)
+        task.signals.failed.connect(self._proposal_failed)
+        self.proposal_generate.setEnabled(False)
+        self.proposal_cancel.setVisible(True)
+        self.proposal_status.setText(
+            "Generating proposal. Source geometry remains local and unchanged."
+        )
+        self.analysis_pool.start(task)
+
+    def cancel_fixture_proposal(self) -> None:
+        if self._proposal_cancellation is not None:
+            self._proposal_cancellation.cancel()
+            self.proposal_status.setText("Cancelling fixture proposal generation safely...")
+
+    def _proposal_completed(self, outcome: object, request_id: int) -> None:
+        self._proposal_tasks.pop(request_id, None)
+        if request_id != self._proposal_request:
+            return
+        self._proposal_cancellation = None
+        self.proposal_cancel.setVisible(False)
+        self.proposal_generate.setEnabled(True)
+        self.workflow = outcome.project.workflow
+        self._replace_project(outcome.project)
+        self._show_active_concept_geometry()
+        self._refresh_all()
+        self.statusBar().showMessage(outcome.message)
+
+    def _proposal_failed(self, message: str, request_id: int) -> None:
+        self._proposal_tasks.pop(request_id, None)
+        if request_id != self._proposal_request:
+            return
+        self._proposal_cancellation = None
+        self.proposal_cancel.setVisible(False)
+        self.proposal_generate.setEnabled(True)
+        if "cancel" in message.lower():
+            self.proposal_status.setText(
+                "Proposal generation cancelled; existing project state was not changed."
+            )
+            self.statusBar().showMessage("Fixture proposal generation cancelled safely.")
+        else:
+            self.proposal_status.setText(f"Proposal generation failed: {message}")
+            self.statusBar().showMessage("Fixture proposal generation failed safely.")
+
+    def apply_proposal_recommended_intent(self) -> None:
+        if self.workflow is None:
+            return
+        self.workflow = apply_recommended_intent(self.workflow)
+        self._set_process_setup(self.workflow.setup)
+        if self.project is not None:
+            self._replace_project(self.project.with_workflow(self.workflow))
+        self._populate_proposal()
+        self.proposal_status.setText(
+            "Recommended answers applied visibly. Review them, then generate the proposal."
+        )
+
+    def _populate_proposal(self) -> None:
+        self.proposal_questions.clear()
+        questions = minimal_intent_questions(self.workflow) if self.workflow else ()
+        for question in questions:
+            answer = json.dumps(question.recommended_answer, sort_keys=True)
+            self.proposal_questions.addItem(
+                f"{question.prompt}\nWhy: {question.why_it_matters}\n"
+                f"Recommended: {answer}{' ' + question.units if question.units else ''}"
+            )
+        self.proposal_interview.setVisible(bool(questions))
+        self._proposal_records.clear()
+        self.proposal_recommendations.clear()
+        proposal = self.project.fixture_proposal if self.project else None
+        orientation = self.workflow.setup.manufacturing_orientation if self.workflow else None
+        orientation_identity = orientation.identity if orientation else None
+        orientation_ready = bool(
+            self.workflow and self.workflow.has_accepted_manufacturing_orientation()
+        )
+        self.proposal_generate.setEnabled(orientation_ready and not self._proposal_tasks)
+        if proposal is None:
+            self.proposal_summary.setText("No fixture proposal has been generated.")
+            self.proposal_status.setText(
+                "Ready to generate from accepted manufacturing orientation."
+                if orientation_ready else "Accept manufacturing orientation to begin."
+            )
+            self.proposal_accept.setEnabled(False)
+            self.proposal_reject.setEnabled(False)
+            self.proposal_technical_details.setText("")
+            return
+        stale = proposal.stale_reason(self.project.product.source_sha256, orientation_identity)
+        state = "STALE - " + stale if stale else proposal.validation_status.upper()
+        source_label = (
+            "AI-generated fixture proposal" if proposal.provenance.source.value == "ai"
+            else "Deterministic baseline proposal; AI assistance unavailable"
+        )
+        self.proposal_status.setText(
+            f"{source_label}. Provider state: {proposal.provenance.provider_state.value}."
+        )
+        self.proposal_summary.setText(
+            f"{proposal.concept_name}\nPurpose: {proposal.fixture_purpose}\n"
+            f"Base: {proposal.base_strategy} | Lifecycle: {proposal.lifecycle}\n"
+            f"Validation: {state} | {proposal.blocker_count} blockers | "
+            f"{proposal.warning_count} warnings\nDecision: {proposal.proposal_decision}"
+        )
+        for recommendation in proposal.recommendations:
+            self._proposal_records[recommendation.recommendation_id] = recommendation
+            item = QListWidgetItem(
+                f"{recommendation.recommendation_type.value.replace('_', ' ').title()} | "
+                f"{recommendation.title}\n{recommendation.decision.value.replace('_', ' ').title()} | "
+                f"{recommendation.validation_status.value.replace('_', ' ').title()}"
+            )
+            item.setData(Qt.ItemDataRole.UserRole, recommendation.recommendation_id)
+            self.proposal_recommendations.addItem(item)
+        self.proposal_accept.setEnabled(not stale and proposal.blocker_count == 0)
+        self.proposal_reject.setEnabled(not stale)
+        self.proposal_technical_details.setText(
+            f"Proposal identity: {proposal.proposal_identity}\n"
+            f"Source SHA-256: {proposal.source_sha256}\n"
+            f"Orientation identity: {proposal.manufacturing_orientation_identity}\n"
+            f"Provider: {proposal.provenance.provider_identity}\n"
+            f"Engine: {proposal.provenance.engine_identifier}\n"
+            f"Prompt contract: {proposal.provenance.prompt_contract_version}\n"
+            f"Response contract: {proposal.provenance.response_contract_version}"
+        )
+
+    def _selected_proposal_recommendation(self):
+        selected = self.proposal_recommendations.selectedItems()
+        if not selected:
+            return None
+        return self._proposal_records.get(str(selected[0].data(Qt.ItemDataRole.UserRole)))
+
+    def _proposal_selection_changed(self) -> None:
+        recommendation = self._selected_proposal_recommendation()
+        self.proposal_edit_parameter.clear()
+        if recommendation is None:
+            return
+        assumptions = "; ".join(recommendation.assumptions) or "None recorded"
+        risks = "; ".join(recommendation.unresolved_risks) or "None recorded"
+        checks = "; ".join(recommendation.deterministic_checks)
+        self.proposal_explanation.setText(
+            f"Why proposed: {recommendation.engineering_reason}\n"
+            f"Confidence: {recommendation.confidence:.0%}\n"
+            f"Assumptions: {assumptions}\nDeterministic checks: {checks}\n"
+            f"Unresolved risk: {risks}"
+        )
+        for parameter in recommendation.editable_parameters:
+            self.proposal_edit_parameter.addItem(parameter.name)
+        if recommendation.editable_parameters:
+            self.proposal_edit_value.setText(json.dumps(
+                recommendation.editable_parameters[0].value, sort_keys=True,
+            ))
+        identity = recommendation.fixture_feature_identity
+        if identity is None and recommendation.geometry_reference is not None:
+            identity = recommendation.geometry_reference.face_identity
+        if identity and self._scene() is not None:
+            self._scene().select(identity)
+
+    def _decide_selected_recommendation(self, decision: RecommendationDecision) -> None:
+        recommendation = self._selected_proposal_recommendation()
+        if recommendation is None or self.project is None:
+            self.statusBar().showMessage("Select a proposal recommendation first.")
+            return
+        try:
+            self._replace_project(self.project.decide_proposal_recommendation(
+                recommendation.recommendation_id, decision,
+                "Engineer decision recorded in proposal review.",
+            ))
+        except (ProjectFormatError, ValueError) as exc:
+            self.statusBar().showMessage(str(exc))
+            return
+        self.workflow = self.project.workflow
+        self._refresh_all()
+
+    def _edit_selected_recommendation(self) -> None:
+        recommendation = self._selected_proposal_recommendation()
+        if recommendation is None or self.project is None:
+            self.statusBar().showMessage("Select an editable proposal recommendation first.")
+            return
+        name = self.proposal_edit_parameter.currentText()
+        if not name:
+            self.statusBar().showMessage("Selected recommendation has no editable parameters.")
+            return
+        raw = self.proposal_edit_value.text().strip()
+        try:
+            value = json.loads(raw)
+        except json.JSONDecodeError:
+            value = raw
+        try:
+            self._replace_project(self.project.edit_proposal_recommendation(
+                recommendation.recommendation_id, {name: value},
+                self.proposal_edit_note.text().strip() or "Engineer edited proposal parameter.",
+            ))
+        except (ProjectFormatError, ValueError) as exc:
+            self.statusBar().showMessage(str(exc))
+            return
+        self.workflow = self.project.workflow
+        self._refresh_all()
+
+    def _decide_fixture_proposal(self, decision: str) -> None:
+        if self.project is None or self.project.fixture_proposal is None:
+            return
+        try:
+            self._replace_project(self.project.decide_fixture_proposal(decision))
+        except (ProjectFormatError, ValueError) as exc:
+            self.statusBar().showMessage(str(exc))
+            return
+        self.workflow = self.project.workflow
+        self._refresh_all()
+
+    def _populate_guided_validation(self) -> None:
+        self.guided_issues.clear()
+        self._guided_issue_records.clear()
+        proposal = self.project.fixture_proposal if self.project else None
+        if proposal is None:
+            self.guided_validation_summary.setText(
+                "Generate a fixture proposal to see guided validation findings."
+            )
+            self.guided_fix.setEnabled(False)
+            return
+        if proposal.blocker_count:
+            title = "Validation failed"
+        elif proposal.warning_count:
+            title = "Validation requires engineering review"
+        else:
+            title = "Validation passed"
+        self.guided_validation_summary.setText(
+            f"{title}\n{proposal.blocker_count} blocking issues\n"
+            f"{proposal.warning_count} warnings requiring review"
+        )
+        for issue in proposal.guided_issues:
+            self._guided_issue_records[issue.issue_id] = issue
+            item = QListWidgetItem(
+                f"{issue.severity.upper()} | {issue.title}\n"
+                f"{issue.what_is_wrong}"
+            )
+            item.setData(Qt.ItemDataRole.UserRole, issue.issue_id)
+            self.guided_issues.addItem(item)
+        self.guided_fix.setEnabled(bool(proposal.guided_issues))
+
+    def _selected_guided_issue(self):
+        selected = self.guided_issues.selectedItems()
+        if not selected:
+            return None
+        return self._guided_issue_records.get(str(selected[0].data(Qt.ItemDataRole.UserRole)))
+
+    def _guided_issue_selection_changed(self) -> None:
+        issue = self._selected_guided_issue()
+        if issue is None:
+            return
+        self._active_guided_issue = issue.issue_id
+        self.guided_issue_explanation.setText(
+            f"What is wrong: {issue.what_is_wrong}\n"
+            f"Why it matters: {issue.why_it_matters}\n"
+            f"Affected item: {issue.affected_identity or 'workflow evidence'}\n"
+            f"Where to fix it: {issue.workflow_section}"
+        )
+        self.guided_technical_details.setText(
+            f"Rule: {issue.rule_id}\n" + "\n".join(issue.technical_details)
+        )
+        if issue.affected_identity and self._scene() is not None:
+            self._scene().select(issue.affected_identity)
+
+    def fix_selected_guided_issue(self) -> None:
+        issue = self._selected_guided_issue()
+        if issue is None:
+            self.statusBar().showMessage("Select a guided validation issue first.")
+            return
+        self._navigate_stage(issue.workflow_section)
+        control = getattr(self, issue.fix_target, None)
+        if isinstance(control, QWidget):
+            control.setFocus(Qt.FocusReason.OtherFocusReason)
+            scroll = control.parentWidget()
+            while scroll is not None and not isinstance(scroll, QScrollArea):
+                scroll = scroll.parentWidget()
+            if isinstance(scroll, QScrollArea):
+                scroll.ensureWidgetVisible(control)
+            signal = None
+            if isinstance(control, QComboBox):
+                signal = control.currentTextChanged
+            elif isinstance(control, QLineEdit):
+                signal = control.editingFinished
+            elif isinstance(control, (QSpinBox, QDoubleSpinBox)):
+                signal = control.valueChanged
+            elif isinstance(control, QCheckBox):
+                signal = control.toggled
+            if signal is not None:
+                if self._guided_fix_signal is not None:
+                    old_signal, old_callback = self._guided_fix_signal
+                    try:
+                        old_signal.disconnect(old_callback)
+                    except (RuntimeError, TypeError):
+                        pass
+                callback = lambda *_args, identity=issue.issue_id: self._guided_correction_changed(identity)
+                signal.connect(callback)
+                self._guided_fix_signal = (signal, callback)
+        if issue.affected_identity and self._scene() is not None:
+            self._scene().select(issue.affected_identity)
+        self.statusBar().showMessage(
+            f"Fix {issue.title} in {issue.workflow_section}; validation re-evaluates after the change."
+        )
+
+    def _guided_correction_changed(self, issue_identity: str) -> None:
+        if self._guided_fix_signal is not None:
+            signal, callback = self._guided_fix_signal
+            self._guided_fix_signal = None
+            try:
+                signal.disconnect(callback)
+            except (RuntimeError, TypeError):
+                pass
+        if self.workflow is None or self.project is None or self.project.fixture_proposal is None:
+            return
+        setup = self._capture_process_setup(persist=False)
+        self.workflow = replace(self.workflow, setup=setup)
+        self._replace_project(self.project.with_workflow(self.workflow))
+        self._refresh_all()
+        remaining = [
+            index for index in range(self.guided_issues.count())
+            if self.guided_issues.item(index).data(Qt.ItemDataRole.UserRole) == issue_identity
+        ]
+        if remaining:
+            self.guided_issues.setCurrentRow(remaining[0])
+        elif self.guided_issues.count():
+            self.guided_issues.setCurrentRow(0)
+        self.statusBar().showMessage(
+            "Deterministic proposal validation re-evaluated; next unresolved issue selected."
+        )
 
     def _restore_layout(self) -> None:
         if not self._settings_enabled:
@@ -1592,7 +2200,7 @@ class FxdWorkbenchWindow(QMainWindow):
 
     def _workflow_states(self) -> dict[str, str]:
         states = {name: "not started" for name in (
-            "Project", "Import", "Assembly", "Manufacturing Intent", "Orientation",
+            "Project", "Import", "Assembly", "Manufacturing Intent", "Orientation", "Proposal",
             "Datums", "Locators & Supports", "Clamps", "Base Structure",
             "Weld & Access", "Concepts", "Validation", "Cost & Volume",
             "Review & Approval", "Export", "Component Library",
@@ -1615,6 +2223,17 @@ class FxdWorkbenchWindow(QMainWindow):
             "complete" if orientation and source_sha256 and orientation.accepted
             and not orientation.is_stale_for(source_sha256) else "warning"
         )
+        proposal = self.project.fixture_proposal if self.project else None
+        if proposal is None:
+            states["Proposal"] = "available" if states["Orientation"] == "complete" else "not started"
+        else:
+            proposal_stale = proposal.stale_reason(
+                self.project.product.source_sha256, orientation.identity if orientation else None,
+            )
+            states["Proposal"] = (
+                "stale" if proposal_stale else "blocked" if proposal.blocker_count else
+                "warning" if proposal.warning_count else "complete"
+            )
         has_annotations = bool(self.workflow and self.workflow.geometry_annotations)
         states["Datums"] = "complete" if has_annotations else "available"
         analyzed = bool(self.workflow and self.workflow.analysis_completed
@@ -1651,6 +2270,15 @@ class FxdWorkbenchWindow(QMainWindow):
                 ) else "available"
             )
             states["Project History"] = "complete" if self.project.revisions else "available"
+            if proposal is not None:
+                for issue in proposal.guided_issues:
+                    section = issue.workflow_section
+                    if section not in states:
+                        continue
+                    if issue.severity == "error":
+                        states[section] = "blocked"
+                    elif issue.severity == "warning" and states[section] != "blocked":
+                        states[section] = "warning"
         states["Component Library"] = (
             "complete" if self.workflow and self.workflow.customer_tooling else "available"
         )
@@ -1660,7 +2288,7 @@ class FxdWorkbenchWindow(QMainWindow):
     def _populate_workflow_rail(self) -> None:
         stage_map = {
             "Product": "Project", "Datums and intent": "Datums",
-            "Concepts": "Concepts", "Validation": "Validation",
+            "Concepts": "Concepts", "Proposal": "Proposal", "Validation": "Validation",
         }
         active = self._ui_active_stage
         if active is None and self.workflow is not None:
@@ -1736,6 +2364,10 @@ class FxdWorkbenchWindow(QMainWindow):
             "recover": self.project_path is not None,
             "fit": self.document is not None,
             "edit_orientation": self.document is not None and self.workflow is not None,
+            "generate_proposal": bool(
+                self.document is not None and self.workflow is not None
+                and self.workflow.has_accepted_manufacturing_orientation()
+            ),
             "analyze": self.document is not None and self.workflow is not None
             and self.workflow.setup.manufacturing_orientation is not None
             and self.workflow.setup.manufacturing_orientation.accepted
@@ -1755,6 +2387,75 @@ class FxdWorkbenchWindow(QMainWindow):
                 "Export the current engineering review package"
             )
         self._populate_workflow_rail()
+
+    def show_first_run_guide(self, force: bool = False) -> None:
+        if not force and bool(self.settings.value("guide/fixture_proposal_dismissed", False, type=bool)):
+            return
+        existing = getattr(self, "_first_run_dialog", None)
+        if existing is not None and existing.isVisible():
+            existing.raise_()
+            existing.activateWindow()
+            return
+        dialog = QDialog(self)
+        dialog.setObjectName("fixtureProposalFirstRunGuide")
+        dialog.setWindowTitle("FXD Fixture Proposal Guide")
+        dialog.setModal(False)
+        dialog.setMinimumWidth(560)
+        layout = QVBoxLayout(dialog)
+        pages = QStackedWidget(dialog)
+        for title, message in (
+            ("1. Orient the product",
+             "Select fixture-down and operator-front faces. FXD stores manufacturing XYZ separately; source CAD remains unchanged."),
+            ("2. Generate one proposal",
+             "Confirm only missing essential intent, then generate. A configured AI provider may propose; the deterministic baseline remains available offline."),
+            ("3. Review and validate",
+             "Accept, reject, suppress, or edit each recommendation. Fix blockers through guided navigation before approval or export."),
+        ):
+            page = QWidget(pages)
+            page_layout = QVBoxLayout(page)
+            heading = QLabel(title, page)
+            heading.setProperty("sectionHeading", True)
+            body = QLabel(message, page)
+            body.setWordWrap(True)
+            page_layout.addWidget(heading)
+            page_layout.addWidget(body)
+            page_layout.addStretch(1)
+            pages.addWidget(page)
+        controls = QHBoxLayout()
+        back = QPushButton("Back", dialog)
+        next_button = QPushButton("Next", dialog)
+        dismiss = QPushButton("Dismiss", dialog)
+        never = QCheckBox("Don't show this again", dialog)
+
+        def update_buttons() -> None:
+            back.setEnabled(pages.currentIndex() > 0)
+            next_button.setText("Finish" if pages.currentIndex() == pages.count() - 1 else "Next")
+
+        def advance() -> None:
+            if pages.currentIndex() == pages.count() - 1:
+                close_guide()
+            else:
+                pages.setCurrentIndex(pages.currentIndex() + 1)
+                update_buttons()
+
+        def close_guide() -> None:
+            if never.isChecked():
+                self.settings.setValue("guide/fixture_proposal_dismissed", True)
+            dialog.close()
+
+        back.clicked.connect(lambda: (pages.setCurrentIndex(pages.currentIndex() - 1), update_buttons()))
+        next_button.clicked.connect(advance)
+        dismiss.clicked.connect(close_guide)
+        controls.addWidget(never)
+        controls.addStretch(1)
+        controls.addWidget(back)
+        controls.addWidget(next_button)
+        controls.addWidget(dismiss)
+        layout.addWidget(pages)
+        layout.addLayout(controls)
+        update_buttons()
+        self._first_run_dialog = dialog
+        dialog.show()
 
     def show_about(self) -> None:
         dialog = QDialog(self)
@@ -1950,6 +2651,8 @@ class FxdWorkbenchWindow(QMainWindow):
         self._populate_tree()
         self._populate_properties()
         self._populate_findings()
+        self._populate_proposal()
+        self._populate_guided_validation()
         self._populate_workflow()
         self._refresh_shell_state()
 
@@ -2412,9 +3115,9 @@ class FxdWorkbenchWindow(QMainWindow):
         self._preview_orientation_camera(orientation)
         self._refresh_guided_orientation()
         self.statusBar().showMessage(
-            "Manufacturing orientation accepted. Continue with Process, then Analyze Assembly."
+            "Manufacturing orientation accepted. Generate a fixture proposal next."
         )
-        self._navigate_stage("Manufacturing Intent")
+        self._navigate_stage("Proposal")
 
     def _refresh_guided_orientation(self) -> None:
         if not hasattr(self, "orientation_steps"):
@@ -2595,6 +3298,7 @@ class FxdWorkbenchWindow(QMainWindow):
 
     def _commit_orientation(self, orientation: ManufacturingOrientation | None) -> None:
         """Persist a draft or accepted orientation and revoke dependent engineering evidence."""
+        prior_project = self.project
         self.orientation_draft = orientation
         if self.workflow is None:
             return
@@ -2610,7 +3314,10 @@ class FxdWorkbenchWindow(QMainWindow):
             self.workflow, setup=setup, analysis_completed=False, concepts_generated=False,
             active_stage="Orientation", timings=(),
         )
-        self._replace_project(None)
+        if prior_project is not None and prior_project.fixture_proposal is not None:
+            self._replace_project(prior_project.with_workflow(self.workflow))
+        else:
+            self._replace_project(None)
         self._show_active_concept_geometry()
         self._refresh_all()
 

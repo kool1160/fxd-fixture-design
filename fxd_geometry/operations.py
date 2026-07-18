@@ -107,6 +107,18 @@ def project_export_block_reason(project: FxdProject) -> str | None:
             "interactive workflow requires an accepted manufacturing orientation "
             "for the current source before export"
         )
+    proposal = getattr(project, "fixture_proposal", None)
+    if proposal is not None:
+        orientation = workflow.setup.manufacturing_orientation if workflow else None
+        stale = proposal.stale_reason(
+            project.product.source_sha256, orientation.identity if orientation else None,
+        )
+        if stale:
+            return f"stale fixture proposal cannot be exported: {stale}"
+        if proposal.blocker_count:
+            return "fixture proposal has deterministic blockers and cannot be exported"
+        if proposal.proposal_decision != "accepted_for_engineering_review":
+            return "fixture proposal must be accepted for engineering review before export"
     if project.active_validation.blocked:
         return "invalid deterministic validation result cannot be exported"
     if project.suppressed_features:
