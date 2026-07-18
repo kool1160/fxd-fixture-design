@@ -1268,8 +1268,10 @@ def decide_recommendation(proposal: FixtureProposal, recommendation_id: str,
         decision.value, recommendation_id, note,
         datetime.now(timezone.utc).isoformat(), proposal.proposal_identity,
     )
-    candidate = replace(proposal, proposal_identity="", recommendations=recommendations,
-                        audit_history=proposal.audit_history + (event,))
+    candidate = replace(
+        proposal, proposal_identity="", recommendations=recommendations,
+        audit_history=proposal.audit_history + (event,), proposal_decision="pending",
+    )
     return _finalize(candidate)
 
 

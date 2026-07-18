@@ -33,6 +33,7 @@ from fxd_geometry import (
     generate_fixture_proposal,
     import_step,
     load_step_for_workbench,
+    minimal_intent_questions,
     product_from_workbench_document,
     source_orientation,
 )
@@ -501,6 +502,13 @@ class QtWorkbenchTests(unittest.TestCase):
             self.window.viewport.face_picked.emit(front.reference)
             self.window.preview_guided_orientation()
             self.window.accept_guided_orientation()
+            unanswered = minimal_intent_questions(self.window.workflow)
+            self.assertTrue(unanswered)
+            with patch.object(self.window.analysis_pool, "start") as start:
+                self.window.generate_fixture_proposal_action()
+            start.assert_not_called()
+            self.assertEqual(minimal_intent_questions(self.window.workflow), unanswered)
+            self.assertFalse(self.window.proposal_interview.isHidden())
             self.window.apply_proposal_recommended_intent()
             outcome = self.window.generate_fixture_proposal_now()
         self.assertIsNotNone(self.window.project.fixture_proposal)

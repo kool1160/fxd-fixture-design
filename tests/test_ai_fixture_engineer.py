@@ -262,7 +262,10 @@ class AiFixtureEngineerTests(unittest.TestCase):
         plan = generate_fixture_build_plan(
             self.fallback.project.product, self.fallback.project.active, requirements,
         )
-        project = self.fallback.project.with_fixture_build(plan)
+        project = self.fallback.project.decide_fixture_proposal(
+            "rejected", "exercise post-decision recommendation review",
+        )
+        project = project.with_fixture_build(plan)
         project = project.with_drawing_intent({"drawing": "stale"})
         project = project.with_optimization_intent({"cost": "stale"})
         recommendation = next(
@@ -276,6 +279,7 @@ class AiFixtureEngineerTests(unittest.TestCase):
                        if item.recommendation_id == recommendation.recommendation_id)
         self.assertEqual(changed.decision, RecommendationDecision.REJECTED)
         self.assertTrue(decided.fixture_proposal.audit_history)
+        self.assertEqual(decided.fixture_proposal.proposal_decision, "pending")
         self.assertIsNone(decided.drawing_intent)
         self.assertIsNone(decided.optimization_intent)
         self.assertIsNone(decided.fixture_build)

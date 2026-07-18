@@ -1834,7 +1834,6 @@ class FxdWorkbenchWindow(QMainWindow):
             )
             self._navigate_stage("Orientation")
             return
-        self._persist_process_setup_from_controls()
         questions = minimal_intent_questions(self.workflow)
         if questions:
             self._populate_proposal()
@@ -1843,6 +1842,7 @@ class FxdWorkbenchWindow(QMainWindow):
             )
             self.proposal_interview.setVisible(True)
             return
+        self._persist_process_setup_from_controls()
         self._proposal_request += 1
         request_id = self._proposal_request
         cancellation = CancellationToken.create()
