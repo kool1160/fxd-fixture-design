@@ -15,7 +15,8 @@ from fxd_geometry import (
     InteractiveWorkflow, MissingIntentError, OcpKernel, ProcessSetup,
     ProposalCancelled, ProposalSource, ProviderState, RecommendationDecision,
     RecommendationType, StaticAiProvider, Vec3, ai_response_from_proposal,
-    apply_recommended_intent, build_ai_request, generate_fixture_proposal,
+    analyze_engineering_workflow, apply_recommended_intent, build_ai_request,
+    generate_fixture_proposal,
     generate_fixture_build_plan, load_step_for_workbench, minimal_intent_questions,
     orientation_from_faces, proposal_engineering_context_identity,
     reference_plane_orientation, ReferencePlane,
@@ -296,10 +297,24 @@ class AiFixtureEngineerTests(unittest.TestCase):
     def test_generation_preserves_existing_project_edits_and_decisions(self):
         feature = self.fallback.project.active.fixture.features[0]
         edited = self.fallback.project.suppress(feature.identity, "engineer suppression")
-        regenerated = generate_fixture_proposal(
-            self.document, edited.workflow, current_project=edited,
-            prior_proposal=edited.fixture_proposal,
-        ).project
+        changed_workflow = replace(
+            edited.workflow,
+            setup=replace(
+                edited.workflow.setup,
+                production_quantity=edited.workflow.setup.production_quantity + 1,
+            ),
+            analysis_completed=False,
+        )
+        edited = edited.with_workflow(changed_workflow)
+        with patch(
+            "fxd_geometry.ai_fixture_engineer.analyze_engineering_workflow",
+            wraps=analyze_engineering_workflow,
+        ) as analyze:
+            regenerated = generate_fixture_proposal(
+                self.document, edited.workflow, current_project=edited,
+                prior_proposal=edited.fixture_proposal,
+            ).project
+        analyze.assert_called_once()
         self.assertEqual(regenerated.active_concept, edited.active_concept)
         self.assertEqual(regenerated.edit_log, edited.edit_log)
         self.assertEqual(regenerated.suppressed_features, edited.suppressed_features)
@@ -420,9 +435,11 @@ class AiFixtureEngineerTests(unittest.TestCase):
         unverified_project = self.fallback.project.with_workflow(
             self.fallback.project.workflow.with_tooling(unverified)
         )
+        unverified_request = build_ai_request(unverified_project)
         self.assertNotIn(
-            unverified.identity, build_ai_request(unverified_project).known_identities,
+            unverified.identity, unverified_request.known_identities,
         )
+        self.assertNotIn(unverified.identity, json.dumps(unverified_request.to_dict()))
 
     def test_source_sha_mismatch_cannot_be_attached_or_loaded(self):
         payload = self.fallback.proposal.to_dict()

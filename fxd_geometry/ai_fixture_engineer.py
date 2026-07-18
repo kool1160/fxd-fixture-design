@@ -28,7 +28,7 @@ from .interactive_workflow import (
 )
 from .manufacturing_orientation import ManufacturingOrientationError
 from .placement import PlacementRole
-from .project import FxdProject
+from .project import FxdProject, ProjectFormatError
 from .workbench import WorkbenchDocument
 
 
@@ -740,7 +740,8 @@ def build_ai_request(project: FxdProject) -> AiProposalRequest:
             "reach_mm": item.reach_mm,
             "force_n": item.force_n,
             "verified": item.verified,
-        } for item in sorted(workflow.customer_tooling, key=lambda value: value.identity)],
+        } for item in sorted(workflow.customer_tooling, key=lambda value: value.identity)
+          if item.verified],
         "placements": [item.to_dict() for item in project.placement.placements]
         if project.placement else [],
         "fixture_candidates": [{"identity": item.identity, "kind": item.kind,
@@ -1312,6 +1313,60 @@ def decide_proposal(proposal: FixtureProposal, decision: str, note: str = "") ->
     ))
 
 
+def _reanalyze_preserving_authored_state(
+    document: WorkbenchDocument, workflow: InteractiveWorkflow,
+    current_project: FxdProject,
+) -> FxdProject:
+    """Re-run deterministic engines, then replay reviewable authored project state."""
+    prepared = _infer_minimum_annotations(document, workflow)
+    project = analyze_engineering_workflow(document, prepared)
+    target = current_project.active_concept
+    if target not in {item.identity for item in project.concepts}:
+        objective = current_project.active.objective
+        target = next(
+            (item.identity for item in project.concepts if item.objective == objective),
+            "",
+        )
+    if not target:
+        raise FixtureProposalError(
+            "deterministic reanalysis cannot preserve the selected fixture concept"
+        )
+    project = project.with_concept(target)
+    try:
+        for edit in current_project.edit_log:
+            if edit.operation in {"suppress", "unsuppress"}:
+                project = project.suppress(edit.target, edit.reason)
+            elif edit.operation == "correction":
+                project = project.correct(edit.target, str(edit.value), edit.reason)
+            elif edit.operation == "set_parameter":
+                project = project.edit_parameter(edit.target, edit.value, edit.reason)
+            elif edit.operation in {"move", "resize", "replace"}:
+                project = project.edit_feature(
+                    edit.target, edit.operation, edit.value, edit.reason,
+                )
+            else:
+                raise FixtureProposalError(
+                    f"unsupported authored project edit {edit.operation!r}"
+                )
+    except ProjectFormatError as exc:
+        raise FixtureProposalError(
+            f"deterministic reanalysis cannot preserve authored project edits: {exc}"
+        ) from exc
+    if project.suppressed_features != current_project.suppressed_features:
+        raise FixtureProposalError(
+            "deterministic reanalysis cannot reproduce authored suppression state"
+        )
+    revisions = {
+        item.revision_id: item
+        for item in current_project.revisions + project.revisions
+    }
+    return replace(
+        project, hidden_layers=current_project.hidden_layers,
+        decisions=current_project.decisions,
+        revisions=tuple(revisions.values()), approved_revision=None,
+    )
+
+
 def generate_fixture_proposal(
     document: WorkbenchDocument, workflow: InteractiveWorkflow,
     *, provider: AiFixtureProvider | None = None, allow_fallback: bool = True,
@@ -1339,11 +1394,13 @@ def generate_fixture_proposal(
             raise FixtureProposalError(
                 "current project does not match the immutable STEP source"
             )
-        prepared = replace(
-            workflow, analysis_completed=True, concepts_generated=True,
-            active_stage="Proposal",
+        project = _reanalyze_preserving_authored_state(
+            document, workflow, current_project,
         )
-        project = current_project.with_workflow(prepared)
+        prepared = replace(
+            project.workflow, concepts_generated=True, active_stage="Proposal",
+        )
+        project = project.with_workflow(prepared)
     else:
         prepared = _infer_minimum_annotations(document, workflow)
         project = analyze_engineering_workflow(document, prepared)
