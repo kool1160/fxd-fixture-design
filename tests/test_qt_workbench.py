@@ -16,7 +16,7 @@ from unittest.mock import PropertyMock, patch
 if find_spec("PySide6") is None:
     raise unittest.SkipTest("PySide6 desktop runtime is not installed")
 
-from PySide6.QtCore import QPoint, QPointF, Qt
+from PySide6.QtCore import QPoint, QPointF, Qt, Signal
 from PySide6.QtGui import QWheelEvent
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QComboBox, QWidget
@@ -77,6 +77,12 @@ class FakeScene:
     def set_navigation_mode(self, mode):
         self.calls.append(("navigation", mode))
 
+    def set_face_picking(self, enabled):
+        self.calls.append(("face_picking", enabled))
+
+    def preview_orientation(self, right, front, up):
+        self.calls.append(("orientation_preview", tuple(right), tuple(front), tuple(up)))
+
     def set_wireframe(self, enabled):
         self.calls.append(("wireframe", enabled))
 
@@ -103,6 +109,8 @@ class FakeScene:
 
 
 class FakeViewport(QWidget):
+    face_picked = Signal(str)
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.scene = FakeScene()
@@ -421,44 +429,131 @@ class QtWorkbenchTests(unittest.TestCase):
         self.assertEqual(self.window.process_lifecycle.currentText(), "Disposable or job-run recut")
         self.assertEqual(self.window.process_cleco_strategy.currentText(), "Separate fixture Cleco holes")
 
-    def test_manufacturing_orientation_face_preview_acceptance_and_staleness(self):
+    def test_guided_orientation_uses_direct_bottom_and_front_face_picks(self):
         with tempfile.TemporaryDirectory() as directory:
             source = self._real_step(directory)
             original = source.read_bytes()
             self.window.load_step_path(source)
-            category = next(
-                self.window.tree.topLevelItem(index)
-                for index in range(self.window.tree.topLevelItemCount())
-                if self.window.tree.topLevelItem(index).text(0) == "Components"
-            )
-            self.window.tree.setCurrentItem(category.child(0).child(0))
+            component = self.window.document.assembly.components[0]
+            bottom = component.faces[0]
+            front = next(face for face in component.faces if abs(sum(
+                left * right for left, right in zip(bottom.normal, face.normal)
+            )) < 0.1)
+            parallel = next(face for face in component.faces if face.reference != bottom.reference and abs(sum(
+                left * right for left, right in zip(bottom.normal, face.normal)
+            )) > 0.9)
+
+            self.assertIs(self.window.workflow_tabs.currentWidget(), self.window.orientation_page)
+            self.assertEqual(self.window.orientation_guided_step, 0)
+            self.assertFalse(self.window.analyze_button.isEnabled())
+            self.assertTrue(self.window.orientation_advanced_group.isHidden())
+
+            self.window.viewport.face_picked.emit(bottom.reference)
             self.application.processEvents()
-            self.window.select_build_down_face()
             draft = self.window.workflow.setup.manufacturing_orientation
             self.assertIsNotNone(draft)
             self.assertFalse(draft.accepted)
-            self.assertIn("Selected planar OCP face", self.window.orientation_selected_face.text())
+            self.assertIn("Bottom face selected", self.window.orientation_bottom_status.text())
+            self.assertNotIn(bottom.reference, self.window.orientation_bottom_status.text())
+            self.window.accept_guided_bottom_face()
+            self.assertEqual(self.window.orientation_guided_step, 1)
+
+            self.window.viewport.face_picked.emit(parallel.reference)
+            self.application.processEvents()
+            self.assertIn("parallel", self.window.orientation_guided_error.text())
+            self.window.viewport.face_picked.emit(front.reference)
+            self.application.processEvents()
+            self.assertEqual(self.window.orientation_guided_error.text(), "")
+            self.window.preview_guided_orientation()
+            self.assertEqual(self.window.orientation_guided_step, 2)
             review_ids = next(
                 call[1] for call in reversed(self.window.viewport.scene.calls)
                 if call[0] == "review_geometry"
             )
             self.assertIn("orientation:build-plane", review_ids)
-            self.assertIn("orientation:selected-face", review_ids)
+            self.assertIn("orientation:bottom-face", review_ids)
+            self.assertIn("orientation:front-face", review_ids)
             self.assertIn("orientation:manufacturing-z", review_ids)
             self.assertIn("orientation:gravity", review_ids)
+            self.assertIn("Source CAD remains unchanged", self.window.orientation_summary.text())
 
-            self.window.accept_manufacturing_orientation()
+            self.window.accept_guided_orientation()
             accepted = self.window.workflow.setup.manufacturing_orientation
             self.assertTrue(accepted.accepted)
+            self.assertIsNotNone(accepted.front_reference)
             self.assertTrue(self.window.analyze_button.isEnabled())
+            self.assertIs(self.window.workflow_tabs.currentWidget(), self.window.process_scroll)
+            self.assertEqual(source.read_bytes(), original)
+
+    def test_changing_guided_face_or_flip_clears_downstream_state(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = self._real_step(directory)
+            self.window.load_step_path(source)
+            component = self.window.document.assembly.components[0]
+            bottom = component.faces[0]
+            front = next(face for face in component.faces if abs(sum(
+                left * right for left, right in zip(bottom.normal, face.normal)
+            )) < 0.1)
+            self.window.viewport.face_picked.emit(bottom.reference)
+            self.window.accept_guided_bottom_face()
+            self.window.viewport.face_picked.emit(front.reference)
+            self.window.preview_guided_orientation()
+            self.window.accept_guided_orientation()
+            self.window.workflow = replace(
+                self.window.workflow, analysis_completed=True, concepts_generated=True,
+            )
+            self.window.project = self._project(source)
             self.window.authored_fixture_build = object()
-            self.window.orientation_flip_normal.setChecked(True)
-            self.application.processEvents()
+            self.window.edit_orientation()
+            self.window.flip_guided_bottom_side()
             self.assertIsNone(self.window.project)
             self.assertIsNone(self.window.authored_fixture_build)
             self.assertFalse(self.window.workflow.analysis_completed)
             self.assertFalse(self.window.workflow.setup.manufacturing_orientation.accepted)
-            self.assertEqual(source.read_bytes(), original)
+
+    def test_auto_recommendation_requires_confirmation_and_advanced_stays_collapsed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            self.window.load_step_path(self._real_step(directory))
+            self.assertIsNone(self.window.workflow.setup.manufacturing_orientation)
+            self.assertIn(
+                "This appears to be the primary support face",
+                self.window.orientation_recommendation_text.text(),
+            )
+            self.assertTrue(self.window.orientation_advanced_group.isHidden())
+            self.window.use_recommended_bottom_face()
+            proposal = self.window.workflow.setup.manufacturing_orientation
+            self.assertIsNotNone(proposal)
+            self.assertFalse(proposal.accepted)
+            self.assertEqual(self.window.orientation_guided_step, 1)
+            self.window.orientation_advanced_toggle.setChecked(True)
+            self.assertFalse(self.window.orientation_advanced_group.isHidden())
+            self.assertFalse(self.window.orientation_matrix.text() == "Not defined")
+            self.assertIn("ocp_face=", self.window.orientation_raw_evidence.text())
+
+    def test_guided_orientation_persists_after_analysis_save_and_reopen(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = self._real_step(directory)
+            self.window.load_step_path(source)
+            component = self.window.document.assembly.components[0]
+            bottom = component.faces[0]
+            front = next(face for face in component.faces if abs(sum(
+                left * right for left, right in zip(bottom.normal, face.normal)
+            )) < 0.1)
+            self.window.viewport.face_picked.emit(bottom.reference)
+            self.window.accept_guided_bottom_face()
+            self.window.viewport.face_picked.emit(front.reference)
+            self.window.preview_guided_orientation()
+            self.window.accept_guided_orientation()
+            accepted = self.window.workflow.setup.manufacturing_orientation
+            self.window.analyze_assembly_now()
+            destination = Path(directory) / "guided.fxd.json"
+            self.window.save_project_path(destination)
+            self.window.load_project_path(destination)
+            restored = self.window.workflow.setup.manufacturing_orientation
+            self.assertEqual(restored, accepted)
+            self.assertTrue(restored.accepted)
+            self.assertIsNotNone(restored.front_reference)
+            self.assertTrue(self.window.analyze_button.isEnabled())
 
     def test_source_replacement_invalidates_manufacturing_orientation(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -602,10 +697,11 @@ class QtWorkbenchTests(unittest.TestCase):
     )
     def test_live_native_worker_embeds_real_source_and_closes_cleanly(self):
         with tempfile.TemporaryDirectory() as directory:
-            source = self._real_step(directory, compound=True)
+            source = self._real_step(directory)
             script = """
 import json
 import sys
+import time
 from fxd_geometry import load_step_for_workbench
 from fxd_qt_app import EmbeddedVtkViewport, create_application
 
@@ -618,6 +714,23 @@ app.processEvents()
 viewport.load_document(document)
 diagnostics = viewport.diagnostics()
 worker = viewport.worker
+picked = []
+viewport.face_picked.connect(picked.append)
+viewport.scene.set_face_picking(True)
+viewport.scene.fit()
+app.processEvents()
+time.sleep(0.25)
+width = max(1, viewport.render_host.width())
+height = max(1, viewport.render_host.height())
+x, y = width // 2, height // 2
+viewport.scene.simulate_face_click_for_acceptance(-1, -1)
+deadline = time.monotonic() + 5.0
+while not picked and time.monotonic() < deadline:
+    app.processEvents()
+    time.sleep(0.02)
+face_identities = {
+    face.reference for component in document.assembly.components for face in component.faces
+}
 result = {
     "native_window": bool(viewport.native_window_id),
     "worker_running": worker is not None and worker.poll() is None,
@@ -629,6 +742,9 @@ result = {
         if document.assembly.components else "source:geometry"
     ),
     "source_unchanged": document.source_bytes == open(sys.argv[1], "rb").read(),
+    "face_picked": bool(picked and picked[0] in face_identities),
+    "picked_values": picked,
+    "face_identity_count": len(face_identities),
 }
 viewport.close_viewport()
 viewport.close()
@@ -651,6 +767,7 @@ print(json.dumps(result, sort_keys=True))
             self.assertGreater(result["triangles"], 0)
             self.assertTrue(result["selection_mapped"])
             self.assertTrue(result["source_unchanged"])
+            self.assertTrue(result["face_picked"], result)
             self.assertTrue(result["worker_closed"])
 
     def test_real_step_populates_tree_properties_and_preserves_source(self):

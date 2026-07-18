@@ -1,4 +1,5 @@
 from dataclasses import replace
+from hashlib import sha256
 from pathlib import Path
 import tempfile
 import unittest
@@ -12,6 +13,7 @@ from fxd_geometry import (
     Vec3,
     load_step_for_workbench,
     orientation_from_face,
+    orientation_from_faces,
     orientation_from_plane,
     recommend_orientations,
     reference_plane_orientation,
@@ -111,6 +113,58 @@ class ManufacturingOrientationTests(unittest.TestCase):
         orientation = source_orientation(self.document.source_sha256)
         self.assertFalse(orientation.accepted)
         self.assertTrue(orientation.with_acceptance(True).accepted)
+
+    def _reference_for_normal(self, normal: tuple[float, float, float]) -> GeometryReference:
+        face = next(face for face in self.component.faces if all(
+            abs(actual - expected) < 1e-7
+            for actual, expected in zip(face.normal, normal)
+        ))
+        return GeometryReference(
+            self.component.reference,
+            "body:" + sha256(self.component.reference.encode()).hexdigest()[:20],
+            face.reference,
+        )
+
+    def test_two_face_guided_orientation_derives_right_handed_manufacturing_frame(self):
+        bottom = self._reference_for_normal((0.0, 0.0, -1.0))
+        front = self._reference_for_normal((0.0, -1.0, 0.0))
+        orientation = orientation_from_faces(
+            self.document, bottom, front, flip_bottom=True, accepted=True,
+        )
+        self.assertEqual(orientation.selected_reference, bottom)
+        self.assertEqual(orientation.front_reference, front)
+        self.assertEqual(orientation.manufacturing_z_source, Vec3(0.0, 0.0, 1.0))
+        self.assertEqual(orientation.operator_front_source, Vec3(0.0, -1.0, 0.0))
+        self.assertEqual(orientation.manufacturing_x_source, Vec3(-1.0, 0.0, 0.0))
+        point = Vec3(11.0, 7.0, 3.0)
+        self.assertEqual(
+            orientation.manufacturing_point_to_source(
+                orientation.source_point_to_manufacturing(point)
+            ),
+            point,
+        )
+        self.assertEqual(type(orientation).from_dict(orientation.to_dict()), orientation)
+        self.assertEqual(self.source.read_bytes(), self.original)
+
+    def test_two_face_guided_orientation_rejects_parallel_bottom_and_front(self):
+        bottom = self._reference_for_normal((0.0, 0.0, -1.0))
+        parallel_front = self._reference_for_normal((0.0, 0.0, 1.0))
+        with self.assertRaisesRegex(ManufacturingOrientationError, "parallel"):
+            orientation_from_faces(self.document, bottom, parallel_front)
+
+    def test_flipping_bottom_side_reverses_guided_up_without_changing_source(self):
+        bottom = self._reference_for_normal((0.0, 0.0, -1.0))
+        front = self._reference_for_normal((1.0, 0.0, 0.0))
+        first = orientation_from_faces(self.document, bottom, front)
+        flipped = orientation_from_faces(self.document, bottom, front, flip_bottom=True)
+        dot = sum(
+            left * right for left, right in zip(
+                first.manufacturing_z_source.__dict__.values(),
+                flipped.manufacturing_z_source.__dict__.values(),
+            )
+        )
+        self.assertAlmostEqual(dot, -1.0)
+        self.assertEqual(self.source.read_bytes(), self.original)
 
 
 if __name__ == "__main__":

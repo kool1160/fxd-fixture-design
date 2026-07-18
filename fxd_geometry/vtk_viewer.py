@@ -37,7 +37,7 @@ class VtkSceneController:
             from vtkmodules.vtkCommonCore import vtkPoints
             from vtkmodules.vtkCommonDataModel import vtkCellArray, vtkPolyData, vtkTriangle
             from vtkmodules.vtkInteractionStyle import vtkInteractorStyleImage, vtkInteractorStyleTrackballCamera
-            from vtkmodules.vtkRenderingCore import vtkActor, vtkPolyDataMapper, vtkRenderer
+            from vtkmodules.vtkRenderingCore import vtkActor, vtkCellPicker, vtkPolyDataMapper, vtkRenderer
         except Exception as exc:
             raise VtkViewerUnavailable(str(exc)) from exc
 
@@ -64,6 +64,9 @@ class VtkSceneController:
         self.review_actor_identities: set[str] = set()
         self.selection_aliases: dict[str, str] = {}
         self.selected_identity: str | None = None
+        self._face_for_cell: dict[tuple[str, int], str] = {}
+        self._cell_picker = vtkCellPicker()
+        self._cell_picker.SetTolerance(0.0005)
 
         component_for_face = {
             face.reference: component.reference
@@ -93,6 +96,9 @@ class VtkSceneController:
                             )
                         cell.GetPointIds().SetId(local, offset + index)
                     cells.InsertNextCell(cell)
+                    self._face_for_cell[(identity, cells.GetNumberOfCells() - 1)] = (
+                        mesh.face_reference
+                    )
             geometry = vtkPolyData()
             geometry.SetPoints(points)
             geometry.SetPolys(cells)
@@ -349,6 +355,53 @@ class VtkSceneController:
         camera.SetViewUp(*view_up)
         self.renderer.ResetCameraClippingRange()
         self.render()
+
+    def preview_orientation(
+        self,
+        right: tuple[float, float, float],
+        front: tuple[float, float, float],
+        up: tuple[float, float, float],
+    ) -> None:
+        """Align only the review camera; immutable source actors are not transformed."""
+        def normalized(value: tuple[float, float, float], label: str) -> tuple[float, float, float]:
+            if len(value) != 3 or not all(math.isfinite(item) for item in value):
+                raise ValueError(f"{label} must contain three finite values")
+            length = math.sqrt(sum(item * item for item in value))
+            if length <= 1e-9:
+                raise ValueError(f"{label} must be non-zero")
+            return tuple(item / length for item in value)
+
+        right = normalized(right, "manufacturing right")
+        front = normalized(front, "manufacturing front")
+        up = normalized(up, "manufacturing up")
+        camera = self.renderer.GetActiveCamera()
+        self.renderer.ResetCamera()
+        focal = camera.GetFocalPoint()
+        distance = max(camera.GetDistance(), 1.0)
+        camera.SetPosition(*(
+            focal[index]
+            + distance * front[index]
+            + 0.20 * distance * right[index]
+            + 0.25 * distance * up[index]
+            for index in range(3)
+        ))
+        camera.SetFocalPoint(*focal)
+        camera.SetViewUp(*up)
+        camera.OrthogonalizeViewUp()
+        self.renderer.ResetCameraClippingRange()
+        self.render()
+
+    def pick_face(self, display_x: int, display_y: int) -> str | None:
+        """Return the exact source OCP face mapped to a picked tessellation cell."""
+        if self._cell_picker.Pick(display_x, display_y, 0.0, self.renderer) == 0:
+            return None
+        actor = self._cell_picker.GetActor()
+        identity = next((key for key, candidate in self.actors.items()
+                         if candidate == actor and key in self.source_actor_identities), None)
+        cell_id = int(self._cell_picker.GetCellId())
+        if identity is None or cell_id < 0:
+            return None
+        return self._face_for_cell.get((identity, cell_id))
 
     def select(self, identity: str | None, *, focus: bool = False) -> bool:
         for key, actor in self.actors.items():

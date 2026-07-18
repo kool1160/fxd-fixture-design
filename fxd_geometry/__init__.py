@@ -80,6 +80,7 @@ from .manufacturing_orientation import (
     OrientationRecommendation,
     ReferencePlane,
     orientation_from_face,
+    orientation_from_faces,
     orientation_from_plane,
     recommend_orientations,
     reference_plane_orientation,
@@ -146,7 +147,7 @@ __all__ += ["WORKFLOW_SCHEMA", "AnnotationRole", "ConceptComparison", "CustomerT
             "face_annotation", "product_from_workbench_document", "tooling_record_from_file"]
 __all__ += ["CoordinateSystem", "ManufacturingOrientation", "ManufacturingOrientationError",
             "OrientationMethod", "OrientationRecommendation", "ReferencePlane",
-            "orientation_from_face", "orientation_from_plane", "recommend_orientations",
+            "orientation_from_face", "orientation_from_faces", "orientation_from_plane", "recommend_orientations",
             "reference_plane_orientation", "source_orientation"]
 __all__ += ["M30_SCHEMA", "RULE_CATALOG", "RULES_BY_ID", "AdjustmentState", "AuthoredFixtureAssembly",
             "AuthoredFixtureComponent", "BuildComponentRole", "ClecoSpec", "ClecoStrategy",

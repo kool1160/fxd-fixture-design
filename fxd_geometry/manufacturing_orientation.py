@@ -15,7 +15,8 @@ if TYPE_CHECKING:
     from .workbench import WorkbenchDocument
 
 
-ORIENTATION_SCHEMA = "fxd-manufacturing-orientation-v1"
+ORIENTATION_SCHEMA = "fxd-manufacturing-orientation-v2"
+_LEGACY_ORIENTATION_SCHEMA = "fxd-manufacturing-orientation-v1"
 _EPSILON = 1e-9
 
 
@@ -94,6 +95,22 @@ def _axis_basis(normal: Vec3, rotation_degrees: float) -> tuple[Vec3, Vec3, Vec3
 def _transform_matrices(origin: Vec3, normal: Vec3,
                         rotation_degrees: float) -> tuple[tuple[float, ...], tuple[float, ...]]:
     x_axis, y_axis, z_axis = _axis_basis(normal, rotation_degrees)
+    return _transform_matrices_from_axes(origin, x_axis, y_axis, z_axis)
+
+
+def _transform_matrices_from_axes(
+    origin: Vec3, x_axis: Vec3, y_axis: Vec3, z_axis: Vec3,
+) -> tuple[tuple[float, ...], tuple[float, ...]]:
+    """Build an inverse-checked frame from explicit right-handed source axes."""
+    x_axis = _unit(x_axis, "manufacturing X axis")
+    y_axis = _unit(y_axis, "manufacturing Y axis")
+    z_axis = _unit(z_axis, "manufacturing Z axis")
+    if any(abs(_dot(left, right)) > 1e-7 for left, right in (
+        (x_axis, y_axis), (x_axis, z_axis), (y_axis, z_axis),
+    )) or _dot(_cross(x_axis, y_axis), z_axis) < 1.0 - 1e-7:
+        raise ManufacturingOrientationError(
+            "manufacturing axes must be right-handed and orthonormal"
+        )
     source_to_manufacturing = (
         x_axis.x, x_axis.y, x_axis.z, -_dot(x_axis, origin),
         y_axis.x, y_axis.y, y_axis.z, -_dot(y_axis, origin),
@@ -176,6 +193,9 @@ class ManufacturingOrientation:
     explanation: tuple[str, ...] = ()
     evidence: tuple[str, ...] = ()
     schema_version: str = ORIENTATION_SCHEMA
+    front_reference: GeometryReference | None = None
+    front_plane_origin_mm: Vec3 | None = None
+    front_plane_normal_source: Vec3 | None = None
 
     def __post_init__(self) -> None:
         if not re.fullmatch(r"[0-9a-f]{64}", self.source_sha256):
@@ -190,7 +210,23 @@ class ManufacturingOrientation:
         _unit(self.plane_normal_source, "plane normal")
         if not math.isfinite(self.rotation_degrees):
             raise ManufacturingOrientationError("rotation about build normal must be finite")
-        if self.schema_version != ORIENTATION_SCHEMA:
+        if self.front_reference is not None and not self.front_reference.face_identity:
+            raise ManufacturingOrientationError("orientation front reference must identify an exact face")
+        if (self.front_plane_origin_mm is None) != (self.front_plane_normal_source is None):
+            raise ManufacturingOrientationError(
+                "front-plane origin and normal evidence must be stored together"
+            )
+        if self.front_reference is not None and self.front_plane_normal_source is None:
+            raise ManufacturingOrientationError(
+                "a selected front face requires plane origin and normal evidence"
+            )
+        if self.front_plane_normal_source is not None:
+            front = _unit(self.front_plane_normal_source, "front-plane normal")
+            if abs(_dot(front, self.effective_normal_source)) >= 1.0 - 1e-7:
+                raise ManufacturingOrientationError(
+                    "bottom and front faces are parallel; select a front face whose normal is not parallel to the bottom face"
+                )
+        if self.schema_version not in {ORIENTATION_SCHEMA, _LEGACY_ORIENTATION_SCHEMA}:
             raise ManufacturingOrientationError("unsupported manufacturing orientation schema")
         for matrix, label in ((self.source_to_manufacturing, "source-to-manufacturing"),
                               (self.manufacturing_to_source, "manufacturing-to-source")):
@@ -220,11 +256,18 @@ class ManufacturingOrientation:
         return _unit(_apply(self.manufacturing_to_source, Vec3(0.0, 0.0, 1.0), vector=True), "manufacturing Z axis")
 
     @property
+    def operator_front_source(self) -> Vec3:
+        """Manufacturing +Y points toward the selected operator/front side."""
+        return self.manufacturing_y_source
+
+    @property
     def identity(self) -> str:
         payload = repr((self.source_sha256, self.method.value, self.reference_plane.value,
                         self.selected_reference, self.plane_origin_mm, self.plane_normal_source,
                         self.flip_normal, self.rotation_degrees, self.source_to_manufacturing,
-                        self.manufacturing_to_source, self.accepted, self.explanation, self.evidence)).encode()
+                        self.manufacturing_to_source, self.accepted, self.explanation, self.evidence,
+                        self.front_reference, self.front_plane_origin_mm,
+                        self.front_plane_normal_source)).encode()
         return "orientation-" + sha256(payload).hexdigest()[:16]
 
     def is_stale_for(self, source_sha256: str) -> bool:
@@ -250,10 +293,18 @@ class ManufacturingOrientation:
 
     def with_acceptance(self, accepted: bool) -> "ManufacturingOrientation":
         return ManufacturingOrientation(
-            self.source_sha256, self.method, self.reference_plane, self.selected_reference,
-            self.plane_origin_mm, self.plane_normal_source, self.flip_normal, self.rotation_degrees,
-            self.source_coordinate_system, self.source_to_manufacturing, self.manufacturing_to_source,
-            accepted, self.explanation, self.evidence, self.schema_version,
+            source_sha256=self.source_sha256, method=self.method,
+            reference_plane=self.reference_plane, selected_reference=self.selected_reference,
+            plane_origin_mm=self.plane_origin_mm,
+            plane_normal_source=self.plane_normal_source, flip_normal=self.flip_normal,
+            rotation_degrees=self.rotation_degrees,
+            source_coordinate_system=self.source_coordinate_system,
+            source_to_manufacturing=self.source_to_manufacturing,
+            manufacturing_to_source=self.manufacturing_to_source, accepted=accepted,
+            explanation=self.explanation, evidence=self.evidence,
+            schema_version=self.schema_version, front_reference=self.front_reference,
+            front_plane_origin_mm=self.front_plane_origin_mm,
+            front_plane_normal_source=self.front_plane_normal_source,
         )
 
     def to_dict(self) -> dict[str, object]:
@@ -269,11 +320,21 @@ class ManufacturingOrientation:
             "manufacturing_to_source": list(self.manufacturing_to_source),
             "accepted": self.accepted, "explanation": list(self.explanation),
             "evidence": list(self.evidence), "schema_version": self.schema_version,
+            "front_reference": self.front_reference.__dict__ if self.front_reference else None,
+            "front_plane_origin_mm": (
+                self.front_plane_origin_mm.__dict__ if self.front_plane_origin_mm else None
+            ),
+            "front_plane_normal_source": (
+                self.front_plane_normal_source.__dict__ if self.front_plane_normal_source else None
+            ),
         }
 
     @classmethod
     def from_dict(cls, data: dict[str, object]) -> "ManufacturingOrientation":
         reference = data.get("selected_reference")
+        front_reference = data.get("front_reference")
+        front_origin = data.get("front_plane_origin_mm")
+        front_normal = data.get("front_plane_normal_source")
         return cls(
             str(data["source_sha256"]), OrientationMethod(data["method"]),
             ReferencePlane(data["reference_plane"]), GeometryReference(**reference) if reference else None,
@@ -284,6 +345,9 @@ class ManufacturingOrientation:
             tuple(float(value) for value in data["manufacturing_to_source"]),
             bool(data.get("accepted", False)), tuple(data.get("explanation", ())),
             tuple(data.get("evidence", ())), str(data.get("schema_version", ORIENTATION_SCHEMA)),
+            GeometryReference(**front_reference) if front_reference else None,
+            Vec3(**front_origin) if front_origin else None,
+            Vec3(**front_normal) if front_normal else None,
         )
 
 
@@ -387,6 +451,94 @@ def orientation_from_face(document: "WorkbenchDocument", reference: GeometryRefe
             f"ocp_face={face.reference}", f"area_mm2={face.area_mm2}",
             f"normal={face.normal}", "surface_type=plane",
         ),
+    )
+
+
+def _document_face(document: "WorkbenchDocument", reference: GeometryReference, label: str):
+    if not reference.face_identity:
+        raise ManufacturingOrientationError(f"select an exact planar {label} face")
+    face = next((face for component in document.assembly.components
+                 if component.reference == reference.component_identity
+                 for face in component.faces if face.reference == reference.face_identity), None)
+    if face is None:
+        raise ManufacturingOrientationError(
+            f"selected {label} face is not mapped to imported OCP assembly evidence"
+        )
+    if not face.is_planar:
+        raise ManufacturingOrientationError(
+            f"selected {label} face is not planar; select a planar model face"
+        )
+    return face
+
+
+def orientation_from_faces(
+    document: "WorkbenchDocument",
+    bottom_reference: GeometryReference,
+    front_reference: GeometryReference,
+    *,
+    flip_bottom: bool = False,
+    accepted: bool = False,
+    method: OrientationMethod = OrientationMethod.SELECT_PLANAR_FACE,
+) -> ManufacturingOrientation:
+    """Derive manufacturing XYZ from fixture-down and operator-front planar faces.
+
+    Manufacturing +Z points away from the accepted fixture-down side and +Y points
+    toward the operator/front face. +X is derived to keep the frame right-handed.
+    Source geometry is never transformed.
+    """
+    bottom = _document_face(document, bottom_reference, "bottom")
+    front = _document_face(document, front_reference, "front")
+    if bottom_reference == front_reference:
+        raise ManufacturingOrientationError(
+            "bottom and front must be two different planar faces"
+        )
+    raw_up = _unit(Vec3(*bottom.normal), "bottom-face normal")
+    up = _scale(raw_up, -1.0) if flip_bottom else raw_up
+    raw_front = _unit(Vec3(*front.normal), "front-face normal")
+    projected_front = _subtract(raw_front, _scale(up, _dot(raw_front, up)))
+    if _length(projected_front) <= 1e-7:
+        raise ManufacturingOrientationError(
+            "Bottom and front faces are parallel. Select a front face whose normal points across, not up or down."
+        )
+    operator_front = _unit(projected_front, "manufacturing front direction")
+    right = _unit(_cross(operator_front, up), "manufacturing right direction")
+    operator_front = _unit(_cross(up, right), "manufacturing front direction")
+    origin = Vec3(*bottom.center_mm)
+    source_to_manufacturing, manufacturing_to_source = _transform_matrices_from_axes(
+        origin, right, operator_front, up,
+    )
+    return ManufacturingOrientation(
+        source_sha256=document.source_sha256,
+        method=method,
+        reference_plane=ReferencePlane.SELECTED_PLANAR_FACE,
+        selected_reference=bottom_reference,
+        plane_origin_mm=origin,
+        plane_normal_source=raw_up,
+        flip_normal=flip_bottom,
+        rotation_degrees=0.0,
+        source_coordinate_system=CoordinateSystem.source(),
+        source_to_manufacturing=source_to_manufacturing,
+        manufacturing_to_source=manufacturing_to_source,
+        accepted=accepted,
+        explanation=(
+            "The selected bottom face defines fixture-down and manufacturing +Z.",
+            "The selected front face defines operator side and manufacturing +Y.",
+            "Manufacturing +X is derived automatically as a right-handed axis.",
+            "Source STEP geometry and coordinates remain unchanged.",
+        ),
+        evidence=(
+            f"bottom_ocp_face={bottom.reference}",
+            f"bottom_area_mm2={bottom.area_mm2}",
+            f"bottom_normal={bottom.normal}",
+            f"front_ocp_face={front.reference}",
+            f"front_area_mm2={front.area_mm2}",
+            f"front_normal={front.normal}",
+            "surface_type=plane",
+            "manufacturing_y=operator_front",
+        ),
+        front_reference=front_reference,
+        front_plane_origin_mm=Vec3(*front.center_mm),
+        front_plane_normal_source=Vec3(*front.normal),
     )
 
 

@@ -29,6 +29,7 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QFormLayout,
     QFrame,
+    QGroupBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -40,10 +41,12 @@ from PySide6.QtWidgets import (
     QScrollArea,
     QSizePolicy,
     QSpinBox,
+    QStackedWidget,
     QTabWidget,
     QTableWidget,
     QTableWidgetItem,
     QToolBar,
+    QToolButton,
     QTreeWidget,
     QTreeWidgetItem,
     QVBoxLayout,
@@ -91,6 +94,7 @@ from fxd_geometry import (
     product_from_workbench_document,
     generate_fixture_build_plan as generate_m30_fixture_build_plan,
     orientation_from_face,
+    orientation_from_faces,
     orientation_from_plane,
     recommend_orientations,
     reference_plane_orientation,
@@ -214,6 +218,7 @@ class VtkWorkerSceneProxy:
         self.messages = messages
         self.ready = ready
         self._request_id = 0
+        self._responses: dict[int, dict[str, object]] = {}
 
     def _send(self, command: str, **values: object) -> None:
         if self.process.poll() is not None or self.process.stdin is None:
@@ -242,6 +247,21 @@ class VtkWorkerSceneProxy:
 
     def set_navigation_mode(self, mode: str) -> None:
         self._send("set_navigation_mode", mode=mode)
+
+    def set_face_picking(self, enabled: bool) -> None:
+        self._send("set_face_picking", enabled=enabled)
+
+    def set_size(self, width: int, height: int) -> None:
+        self._send("set_size", width=int(width), height=int(height))
+
+    def preview_orientation(self, right, front, up) -> None:
+        self._send(
+            "preview_orientation", right=list(right), front=list(front), up=list(up)
+        )
+
+    def simulate_face_click_for_acceptance(self, x: int, y: int) -> None:
+        """Exercise the native interactor event path in Windows acceptance tests."""
+        self._send("simulate_face_click_for_acceptance", x=int(x), y=int(y))
 
     def select(self, identity: str) -> bool:
         self._send("select", identity=identity)
@@ -274,20 +294,41 @@ class VtkWorkerSceneProxy:
         self._send("benchmark", frames=frames, request_id=request_id)
         deadline = monotonic() + 30.0
         while monotonic() < deadline:
+            response = self._responses.pop(request_id, None)
+            if response is not None:
+                if response.get("event") == "error":
+                    raise RuntimeError(str(response.get("message", "VTK benchmark failed")))
+                return self.diagnostics(
+                    average_render_ms=float(response["average_render_ms"]),
+                    frames_per_second=float(response["frames_per_second"]),
+                )
             try:
                 message = self.messages.get(timeout=0.25)
             except Empty:
                 if self.process.poll() is not None:
                     raise RuntimeError("native VTK worker exited during benchmark")
                 continue
-            if message.get("event") == "error":
-                raise RuntimeError(str(message.get("message", "VTK benchmark failed")))
-            if message.get("request_id") == request_id:
-                return self.diagnostics(
-                    average_render_ms=float(message["average_render_ms"]),
-                    frames_per_second=float(message["frames_per_second"]),
-                )
+            self._route_message(message)
         raise TimeoutError("native VTK benchmark did not respond")
+
+    def _route_message(self, message: dict[str, object]) -> dict[str, object] | None:
+        request_id = message.get("request_id")
+        if isinstance(request_id, int):
+            self._responses[request_id] = message
+            return None
+        return message
+
+    def poll_events(self) -> tuple[dict[str, object], ...]:
+        events: list[dict[str, object]] = []
+        while True:
+            try:
+                message = self.messages.get_nowait()
+            except Empty:
+                break
+            event = self._route_message(message)
+            if event is not None:
+                events.append(event)
+        return tuple(events)
 
     def close(self) -> None:
         if self.process.poll() is None:
@@ -301,6 +342,8 @@ class VtkWorkerSceneProxy:
 
 class EmbeddedVtkViewport(QFrame):
     """A supervised Win32 VTK render child embedded in the Qt workbench."""
+
+    face_picked = Signal(str)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -321,6 +364,13 @@ class EmbeddedVtkViewport(QFrame):
         self.scene: VtkWorkerSceneProxy | None = None
         self.initialization_error: str | None = None
         self.separate_window_created = False
+        self._message_timer = QTimer(self)
+        self._message_timer.setInterval(20)
+        self._message_timer.timeout.connect(self._poll_worker_messages)
+        self._resize_timer = QTimer(self)
+        self._resize_timer.setSingleShot(True)
+        self._resize_timer.setInterval(16)
+        self._resize_timer.timeout.connect(self._apply_native_resize)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self.render_host)
@@ -342,6 +392,7 @@ class EmbeddedVtkViewport(QFrame):
             ready = self._wait_for_ready(self.worker)
             self.scene = VtkWorkerSceneProxy(self.worker, self.messages, ready)
             self._embed_native_window()
+            self._message_timer.start()
             self.initialization_error = None
         except Exception as exc:
             self.clear()
@@ -398,6 +449,8 @@ class EmbeddedVtkViewport(QFrame):
         raise TimeoutError("native VTK worker did not initialize")
 
     def clear(self) -> None:
+        self._message_timer.stop()
+        self._resize_timer.stop()
         if self.scene is not None:
             self.scene.close()
         elif self.worker is not None and self.worker.poll() is None:
@@ -406,6 +459,15 @@ class EmbeddedVtkViewport(QFrame):
         self.scene = None
         self.worker = None
         self.native_window_id = None
+
+    def _poll_worker_messages(self) -> None:
+        if self.scene is None:
+            return
+        for message in self.scene.poll_events():
+            if message.get("event") == "face_picked":
+                self.face_picked.emit(str(message.get("face_identity") or ""))
+            elif message.get("event") in {"error", "fatal"}:
+                logger.error("VTK worker event: %s", message.get("message", "unknown error"))
 
     def diagnostics(self) -> RenderDiagnostics | None:
         return self.scene.diagnostics() if self.scene else None
@@ -470,14 +532,19 @@ class EmbeddedVtkViewport(QFrame):
         width = max(1, round(self.render_host.width() * ratio))
         height = max(1, round(self.render_host.height() * ratio))
         self.user32.MoveWindow(
-            self.native_window_id, 0, 0, width, height, True
+            self.native_window_id, 0, 0, width, height, False
         )
+        if self.scene is not None:
+            self.scene.set_size(width, height)
 
-    def resizeEvent(self, event: QResizeEvent) -> None:  # noqa: N802 - Qt API name
-        super().resizeEvent(event)
+    def _apply_native_resize(self) -> None:
         self._resize_native_window()
         if self.scene is not None:
             self.scene.render()
+
+    def resizeEvent(self, event: QResizeEvent) -> None:  # noqa: N802 - Qt API name
+        super().resizeEvent(event)
+        self._resize_timer.start()
 
 
 class FxdWorkbenchWindow(QMainWindow):
@@ -500,6 +567,10 @@ class FxdWorkbenchWindow(QMainWindow):
         self.selected_identity: str | None = None
         self.selected_reference: GeometryReference | None = None
         self.orientation_face_reference: GeometryReference | None = None
+        self.orientation_front_reference: GeometryReference | None = None
+        self.orientation_pending_reference: GeometryReference | None = None
+        self.orientation_recommendation: GeometryReference | None = None
+        self.orientation_guided_step = 0
         self.orientation_draft: ManufacturingOrientation | None = None
         self._setting_orientation_controls = False
         self._geometry_references: dict[str, GeometryReference] = {}
@@ -514,6 +585,8 @@ class FxdWorkbenchWindow(QMainWindow):
         self.log = StructuredLog(Path.home() / ".fxd" / "diagnostics.jsonl")
         self.kernel = kernel or OcpKernel()
         self.viewport = viewport_factory(self)
+        if hasattr(self.viewport, "face_picked"):
+            self.viewport.face_picked.connect(self._viewer_face_picked)
         self._property_values: dict[str, QLabel] = {}
         self._actions: dict[str, QAction] = {}
 
@@ -555,6 +628,9 @@ class FxdWorkbenchWindow(QMainWindow):
                 or self.orientation_draft.source_sha256 != project.product.source_sha256)):
             self.orientation_draft = None
             self.orientation_face_reference = None
+            self.orientation_front_reference = None
+            self.orientation_pending_reference = None
+            self.orientation_recommendation = None
 
     def _active_authored_fixture_build(self):
         """Return cache only when it belongs to the active source and build plan."""
@@ -602,6 +678,205 @@ class FxdWorkbenchWindow(QMainWindow):
             combo.setItemData(index, value, Qt.ItemDataRole.ToolTipRole)
         return combo
 
+    def _build_orientation_page(self) -> QScrollArea:
+        """Build the simple two-face workflow while retaining advanced controls."""
+        scroll = QScrollArea(self.workflow_tabs)
+        scroll.setObjectName("orientationWorkflow")
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        host = QWidget(scroll)
+        layout = QVBoxLayout(host)
+        layout.setContentsMargins(14, 14, 14, 14)
+        layout.setSpacing(10)
+
+        heading = QLabel("Manufacturing Orientation", host)
+        heading.setProperty("sectionHeading", True)
+        intro = QLabel(
+            "Tell FXD how the part sits using two planar model faces. "
+            "The imported STEP and its source coordinates remain unchanged.", host,
+        )
+        intro.setWordWrap(True)
+        self.orientation_step_label = QLabel("STEP 1 OF 3", host)
+        self.orientation_step_label.setProperty("technical", True)
+        layout.addWidget(heading)
+        layout.addWidget(intro)
+        layout.addWidget(self.orientation_step_label)
+
+        self.orientation_steps = QStackedWidget(host)
+
+        bottom_page = QWidget(self.orientation_steps)
+        bottom_layout = QVBoxLayout(bottom_page)
+        bottom_layout.setContentsMargins(0, 4, 0, 4)
+        bottom_prompt = QLabel("Select the face that sits down on the fixture.", bottom_page)
+        bottom_prompt.setWordWrap(True)
+        bottom_prompt.setProperty("sectionHeading", True)
+        bottom_help = QLabel("Click a planar face directly on the model.", bottom_page)
+        bottom_help.setWordWrap(True)
+        self.orientation_bottom_status = QLabel("No bottom face selected.", bottom_page)
+        self.orientation_bottom_status.setWordWrap(True)
+        self.orientation_recommendation_text = QLabel(
+            "FXD will show a support-face recommendation when planar evidence is available.",
+            bottom_page,
+        )
+        self.orientation_recommendation_text.setWordWrap(True)
+        self.orientation_use_recommendation = QPushButton("Use as fixture-down?", bottom_page)
+        self.orientation_use_recommendation.clicked.connect(self.use_recommended_bottom_face)
+        bottom_actions = QHBoxLayout()
+        self.orientation_accept_bottom = QPushButton("Accept bottom face", bottom_page)
+        self.orientation_accept_bottom.setProperty("role", "primary")
+        self.orientation_accept_bottom.clicked.connect(self.accept_guided_bottom_face)
+        self.orientation_pick_another_bottom = QPushButton("Pick another face", bottom_page)
+        self.orientation_pick_another_bottom.clicked.connect(self.pick_another_bottom_face)
+        self.orientation_flip_side = QPushButton("Flip side", bottom_page)
+        self.orientation_flip_side.clicked.connect(self.flip_guided_bottom_side)
+        bottom_actions.addWidget(self.orientation_accept_bottom)
+        bottom_actions.addWidget(self.orientation_pick_another_bottom)
+        bottom_actions.addWidget(self.orientation_flip_side)
+        bottom_layout.addWidget(bottom_prompt)
+        bottom_layout.addWidget(bottom_help)
+        bottom_layout.addWidget(self.orientation_bottom_status)
+        bottom_layout.addWidget(self.orientation_recommendation_text)
+        bottom_layout.addWidget(self.orientation_use_recommendation)
+        bottom_layout.addLayout(bottom_actions)
+        bottom_layout.addStretch(1)
+        self.orientation_steps.addWidget(bottom_page)
+
+        front_page = QWidget(self.orientation_steps)
+        front_layout = QVBoxLayout(front_page)
+        front_layout.setContentsMargins(0, 4, 0, 4)
+        front_prompt = QLabel(
+            "Select the face that points toward the operator or front of the fixture.",
+            front_page,
+        )
+        front_prompt.setWordWrap(True)
+        front_prompt.setProperty("sectionHeading", True)
+        front_help = QLabel("Click a second planar face directly on the model.", front_page)
+        front_help.setWordWrap(True)
+        self.orientation_front_status = QLabel("No front face selected.", front_page)
+        self.orientation_front_status.setWordWrap(True)
+        self.orientation_guided_error = QLabel("", front_page)
+        self.orientation_guided_error.setWordWrap(True)
+        self.orientation_guided_error.setProperty("status", "warning")
+        front_actions = QHBoxLayout()
+        self.orientation_preview_button = QPushButton("Preview orientation", front_page)
+        self.orientation_preview_button.setProperty("role", "primary")
+        self.orientation_preview_button.clicked.connect(self.preview_guided_orientation)
+        self.orientation_back_to_bottom = QPushButton("Back", front_page)
+        self.orientation_back_to_bottom.clicked.connect(self.back_to_guided_bottom)
+        front_actions.addWidget(self.orientation_preview_button)
+        front_actions.addWidget(self.orientation_back_to_bottom)
+        front_layout.addWidget(front_prompt)
+        front_layout.addWidget(front_help)
+        front_layout.addWidget(self.orientation_front_status)
+        front_layout.addWidget(self.orientation_guided_error)
+        front_layout.addLayout(front_actions)
+        front_layout.addStretch(1)
+        self.orientation_steps.addWidget(front_page)
+
+        preview_page = QWidget(self.orientation_steps)
+        preview_layout = QVBoxLayout(preview_page)
+        preview_layout.setContentsMargins(0, 4, 0, 4)
+        preview_prompt = QLabel("Review the manufacturing orientation.", preview_page)
+        preview_prompt.setProperty("sectionHeading", True)
+        self.orientation_summary = QLabel("Select bottom and front faces to create a preview.", preview_page)
+        self.orientation_summary.setWordWrap(True)
+        preview_actions = QVBoxLayout()
+        preview_primary_actions = QHBoxLayout()
+        preview_secondary_actions = QHBoxLayout()
+        self.orientation_guided_accept = QPushButton("Accept orientation", preview_page)
+        self.orientation_guided_accept.setProperty("role", "primary")
+        self.orientation_guided_accept.clicked.connect(self.accept_guided_orientation)
+        self.orientation_back_to_front = QPushButton("Back", preview_page)
+        self.orientation_back_to_front.clicked.connect(self.back_to_guided_front)
+        self.orientation_guided_reset = QPushButton("Reset", preview_page)
+        self.orientation_guided_reset.clicked.connect(self.reset_guided_orientation)
+        self.orientation_fit_preview = QPushButton("Fit View", preview_page)
+        self.orientation_fit_preview.clicked.connect(self.fit_view)
+        self.orientation_advanced_toggle = QToolButton(preview_page)
+        self.orientation_advanced_toggle.setText("Advanced")
+        self.orientation_advanced_toggle.setCheckable(True)
+        preview_primary_actions.addWidget(self.orientation_guided_accept)
+        preview_primary_actions.addWidget(self.orientation_back_to_front)
+        preview_primary_actions.addWidget(self.orientation_guided_reset)
+        preview_secondary_actions.addWidget(self.orientation_fit_preview)
+        preview_secondary_actions.addWidget(self.orientation_advanced_toggle)
+        preview_actions.addLayout(preview_primary_actions)
+        preview_actions.addLayout(preview_secondary_actions)
+        preview_layout.addWidget(preview_prompt)
+        preview_layout.addWidget(self.orientation_summary)
+        preview_layout.addLayout(preview_actions)
+        preview_layout.addStretch(1)
+        self.orientation_steps.addWidget(preview_page)
+        layout.addWidget(self.orientation_steps)
+
+        self.orientation_advanced_group = QGroupBox("Advanced orientation settings", host)
+        advanced_form = QFormLayout(self.orientation_advanced_group)
+        self.orientation_method = self._combo(ORIENTATION_METHOD_OPTIONS, wheel_to_parent=True)
+        self.orientation_reference_plane = self._combo(REFERENCE_PLANE_OPTIONS, wheel_to_parent=True)
+        self.orientation_select_face = QPushButton("Use selected face as build-down")
+        self.orientation_selected_face = QLabel("No planar model face selected.")
+        self.orientation_selected_face.setWordWrap(True)
+        self.orientation_flip_normal = QCheckBox("Flip normal")
+        self.orientation_rotation = self._combo(ORIENTATION_ROTATION_OPTIONS, wheel_to_parent=True)
+        self.orientation_custom_rotation = QDoubleSpinBox()
+        self.orientation_custom_rotation.setRange(-360.0, 360.0)
+        self.orientation_custom_rotation.setSuffix(" deg")
+        self.orientation_custom_origin = QLineEdit()
+        self.orientation_custom_origin.setPlaceholderText("x, y, z mm")
+        self.orientation_custom_normal = QLineEdit()
+        self.orientation_custom_normal.setPlaceholderText("x, y, z source direction")
+        self.orientation_matrix = QLabel("Not defined")
+        self.orientation_matrix.setWordWrap(True)
+        self.orientation_inverse = QLabel("Not defined")
+        self.orientation_inverse.setWordWrap(True)
+        self.orientation_raw_evidence = QLabel("No orientation evidence.")
+        self.orientation_raw_evidence.setWordWrap(True)
+        self.orientation_explanation = QLabel(
+            "Choose a source plane, exact source axes, or an exact planar face."
+        )
+        self.orientation_explanation.setWordWrap(True)
+        self.orientation_reset = QPushButton("Reset to source orientation")
+        self.orientation_accept = QPushButton("Apply advanced orientation")
+        for label, widget in (
+            ("Orientation method", self.orientation_method),
+            ("Source reference plane", self.orientation_reference_plane),
+            ("Face identity", self.orientation_selected_face),
+            ("Selected face", self.orientation_select_face),
+            ("Flip normal", self.orientation_flip_normal),
+            ("Rotation", self.orientation_rotation),
+            ("Custom angle", self.orientation_custom_rotation),
+            ("Plane origin", self.orientation_custom_origin),
+            ("Plane normal / source axes", self.orientation_custom_normal),
+            ("Source-to-manufacturing", self.orientation_matrix),
+            ("Inverse transform", self.orientation_inverse),
+            ("Raw evidence", self.orientation_raw_evidence),
+            ("Decision", self.orientation_explanation),
+        ):
+            advanced_form.addRow(label + ":", widget)
+        advanced_actions = QWidget(self.orientation_advanced_group)
+        advanced_actions_layout = QHBoxLayout(advanced_actions)
+        advanced_actions_layout.setContentsMargins(0, 0, 0, 0)
+        advanced_actions_layout.addWidget(self.orientation_reset)
+        advanced_actions_layout.addWidget(self.orientation_accept)
+        advanced_form.addRow(advanced_actions)
+        self.orientation_advanced_group.setVisible(False)
+        self.orientation_advanced_toggle.toggled.connect(self.orientation_advanced_group.setVisible)
+        layout.addWidget(self.orientation_advanced_group)
+        layout.addStretch(1)
+
+        self.orientation_method.currentTextChanged.connect(self._orientation_controls_changed)
+        self.orientation_reference_plane.currentTextChanged.connect(self._orientation_controls_changed)
+        self.orientation_flip_normal.toggled.connect(self._orientation_controls_changed)
+        self.orientation_rotation.currentTextChanged.connect(self._orientation_controls_changed)
+        self.orientation_custom_rotation.valueChanged.connect(self._orientation_controls_changed)
+        self.orientation_custom_origin.editingFinished.connect(self._orientation_controls_changed)
+        self.orientation_custom_normal.editingFinished.connect(self._orientation_controls_changed)
+        self.orientation_select_face.clicked.connect(self.select_build_down_face)
+        self.orientation_reset.clicked.connect(self.reset_to_source_orientation)
+        self.orientation_accept.clicked.connect(self.accept_manufacturing_orientation)
+        scroll.setWidget(host)
+        return scroll
+
     def _build_workflow_dock(self) -> None:
         dock = QDockWidget("Fixture Engineering Workflow", self)
         dock.setObjectName("workflowDock")
@@ -623,6 +898,9 @@ class FxdWorkbenchWindow(QMainWindow):
         product_layout.addWidget(self.workflow_source)
         product_layout.addStretch(1)
         self.workflow_tabs.addTab(product_page, "Product")
+
+        self.orientation_page = self._build_orientation_page()
+        self.workflow_tabs.addTab(self.orientation_page, "Orientation")
 
         # M30 adds governed construction inputs; keep the complete review form
         # reachable at the supported 1366 x 768 desktop size.
@@ -716,73 +994,6 @@ class FxdWorkbenchWindow(QMainWindow):
         self.process_unload_clearance.setToolTip(
             "Engineer-reviewed welded-shape unload clearance evidence."
         )
-        orientation_heading = QLabel("Manufacturing Orientation")
-        orientation_heading.setProperty("sectionHeading", True)
-        process_form.addRow(orientation_heading)
-        self.orientation_method = self._combo(ORIENTATION_METHOD_OPTIONS, wheel_to_parent=True)
-        self.orientation_reference_plane = self._combo(REFERENCE_PLANE_OPTIONS, wheel_to_parent=True)
-        self.orientation_select_face = QPushButton("Select build-down face")
-        self.orientation_selected_face = QLabel("No planar model face selected.")
-        self.orientation_selected_face.setWordWrap(True)
-        self.orientation_selected_face.setSizePolicy(
-            QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred
-        )
-        self.orientation_selected_face.setMinimumWidth(0)
-        self.orientation_flip_normal = QCheckBox("Flip build normal")
-        self.orientation_rotation = self._combo(ORIENTATION_ROTATION_OPTIONS, wheel_to_parent=True)
-        self.orientation_custom_rotation = QDoubleSpinBox()
-        self.orientation_custom_rotation.setRange(-360.0, 360.0)
-        self.orientation_custom_rotation.setSuffix(" deg")
-        self.orientation_custom_rotation.setEnabled(False)
-        self.orientation_custom_origin = QLineEdit()
-        self.orientation_custom_origin.setPlaceholderText("x, y, z mm")
-        self.orientation_custom_normal = QLineEdit()
-        self.orientation_custom_normal.setPlaceholderText("x, y, z source direction")
-        self.orientation_reset = QPushButton("Reset to source orientation")
-        self.orientation_accept = QPushButton("Accept orientation")
-        self.orientation_explanation = QLabel(
-            "Choose a familiar plane or confirmed planar face. Source CAD stays unchanged."
-        )
-        self.orientation_explanation.setWordWrap(True)
-        self.orientation_explanation.setSizePolicy(
-            QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred
-        )
-        self.orientation_explanation.setMinimumWidth(0)
-        for label, widget in (
-            ("Orientation method", self.orientation_method),
-            ("Reference plane", self.orientation_reference_plane),
-            ("Build-down face", self.orientation_select_face),
-            ("Selected face", self.orientation_selected_face),
-            ("Normal", self.orientation_flip_normal),
-            ("Rotation about build normal", self.orientation_rotation),
-            ("Custom rotation", self.orientation_custom_rotation),
-            ("Custom plane origin", self.orientation_custom_origin),
-            ("Custom plane normal", self.orientation_custom_normal),
-            ("Orientation decision", self.orientation_explanation),
-        ):
-            widget.setToolTip(
-                f"{label}: manufacturing-frame evidence only; the source STEP is never rotated or modified."
-            )
-            if isinstance(widget, QWidget) and not isinstance(widget, QLabel):
-                widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-                widget.setMinimumWidth(220)
-            process_form.addRow(label + ":", widget)
-        orientation_actions = QWidget(self.process_form_widget)
-        orientation_actions_layout = QVBoxLayout(orientation_actions)
-        orientation_actions_layout.setContentsMargins(0, 0, 0, 0)
-        orientation_actions_layout.addWidget(self.orientation_reset)
-        orientation_actions_layout.addWidget(self.orientation_accept)
-        process_form.addRow(orientation_actions)
-        self.orientation_method.currentTextChanged.connect(self._orientation_controls_changed)
-        self.orientation_reference_plane.currentTextChanged.connect(self._orientation_controls_changed)
-        self.orientation_flip_normal.toggled.connect(self._orientation_controls_changed)
-        self.orientation_rotation.currentTextChanged.connect(self._orientation_controls_changed)
-        self.orientation_custom_rotation.valueChanged.connect(self._orientation_controls_changed)
-        self.orientation_custom_origin.editingFinished.connect(self._orientation_controls_changed)
-        self.orientation_custom_normal.editingFinished.connect(self._orientation_controls_changed)
-        self.orientation_select_face.clicked.connect(self.select_build_down_face)
-        self.orientation_reset.clicked.connect(self.reset_to_source_orientation)
-        self.orientation_accept.clicked.connect(self.accept_manufacturing_orientation)
         self.analyze_button = QPushButton("Analyze Assembly")
         self.analyze_button.clicked.connect(self.analyze_assembly)
         process_form.addRow(self.analyze_button)
@@ -1216,6 +1427,10 @@ class FxdWorkbenchWindow(QMainWindow):
             engineering_menu.addAction(action)
         self._actions["nav_orbit"].setChecked(True)
         engineering_menu.addSeparator()
+        edit_orientation_action = self._action(
+            "edit_orientation", "Edit orientation", self.edit_orientation,
+            icon_name="manufacturing-intent",
+        )
         analyze_action = self._action(
             "analyze", "Analyze assembly", self.analyze_assembly,
             icon_name="analyze-assembly",
@@ -1224,7 +1439,7 @@ class FxdWorkbenchWindow(QMainWindow):
             "generate", "Generate concepts", self.generate_concepts,
             icon_name="generate-concepts",
         )
-        engineering_menu.addActions([analyze_action, generate_action])
+        engineering_menu.addActions([edit_orientation_action, analyze_action, generate_action])
 
         findings_action = self._action(
             "findings", "Review findings", self.focus_findings,
@@ -1280,7 +1495,7 @@ class FxdWorkbenchWindow(QMainWindow):
             self._actions["view_top"], wireframe, transparency,
         ])
         toolbar.addSeparator()
-        toolbar.addActions([analyze_action, generate_action, findings_action])
+        toolbar.addActions([edit_orientation_action, analyze_action, generate_action, findings_action])
         toolbar.addSeparator()
         toolbar.addActions([approve_action, reject_action])
         self.addToolBar(toolbar)
@@ -1292,11 +1507,11 @@ class FxdWorkbenchWindow(QMainWindow):
         self._ui_active_stage = stage
         tab_for_stage = {
             "Project": 0, "Import": 0, "Assembly": 0,
-            "Manufacturing Intent": 1, "Orientation": 1,
-            "Datums": 2, "Locators & Supports": 2, "Clamps": 2,
-            "Base Structure": 3, "Weld & Access": 3, "Concepts": 3,
-            "Cost & Volume": 3, "Component Library": 4,
-            "Rules & Preferences": 4, "Project History": 5,
+            "Manufacturing Intent": 2, "Orientation": 1,
+            "Datums": 3, "Locators & Supports": 3, "Clamps": 3,
+            "Base Structure": 4, "Weld & Access": 4, "Concepts": 4,
+            "Cost & Volume": 4, "Component Library": 6,
+            "Rules & Preferences": 6, "Project History": 7,
         }
         if stage in {"Validation", "Review & Approval", "Export"}:
             review = self.findChild(QDockWidget, "reviewDock")
@@ -1310,8 +1525,31 @@ class FxdWorkbenchWindow(QMainWindow):
                 workflow_dock.show()
                 workflow_dock.raise_()
             self.workflow_tabs.setCurrentIndex(tab_for_stage.get(stage, 0))
+        self._set_orientation_pick_mode(
+            stage == "Orientation" and self.orientation_guided_step in {0, 1}
+        )
         self._populate_workflow_rail()
         self.statusBar().showMessage(f"Workflow view: {stage}.")
+
+    def edit_orientation(self) -> None:
+        if self.workflow is None:
+            self.statusBar().showMessage("Import a STEP model before editing orientation.")
+            return
+        orientation = self.workflow.setup.manufacturing_orientation
+        if orientation is not None and orientation.front_reference is not None:
+            self.orientation_face_reference = orientation.selected_reference
+            self.orientation_front_reference = orientation.front_reference
+            self.orientation_draft = orientation.with_acceptance(False)
+            self.orientation_guided_step = 2
+        elif orientation is not None and orientation.selected_reference is not None:
+            self.orientation_face_reference = orientation.selected_reference
+            self.orientation_front_reference = None
+            self.orientation_guided_step = 1
+        else:
+            self.orientation_guided_step = 0
+        self._navigate_stage("Orientation")
+        self._set_orientation_pick_mode(True)
+        self._refresh_guided_orientation()
 
     def focus_findings(self) -> None:
         review = self.findChild(QDockWidget, "reviewDock")
@@ -1497,6 +1735,7 @@ class FxdWorkbenchWindow(QMainWindow):
             "export": self.project is not None and export_block_reason is None,
             "recover": self.project_path is not None,
             "fit": self.document is not None,
+            "edit_orientation": self.document is not None and self.workflow is not None,
             "analyze": self.document is not None and self.workflow is not None
             and self.workflow.setup.manufacturing_orientation is not None
             and self.workflow.setup.manufacturing_orientation.accepted
@@ -1575,6 +1814,8 @@ class FxdWorkbenchWindow(QMainWindow):
             self.selected_identity = None
             self.selected_reference = None
             self._refresh_all()
+            self._prepare_guided_orientation()
+            self._navigate_stage("Orientation")
             self.setWindowTitle(f"FXD - {source.name} - engineering review only")
             self.statusBar().showMessage(
                 f"Loaded immutable STEP through OCP in {import_elapsed_ms:.1f} ms: "
@@ -1623,6 +1864,9 @@ class FxdWorkbenchWindow(QMainWindow):
             self.document = None
         self._refresh_all()
         self._show_active_concept_geometry()
+        if self.workflow is not None and not self.workflow.has_accepted_manufacturing_orientation():
+            self._prepare_guided_orientation()
+            self._navigate_stage("Orientation")
         self.log.record("project_opened", source_sha256=self.project.product.source_sha256,
                         revision=self.project.revision_id)
         self.statusBar().showMessage(
@@ -1955,6 +2199,267 @@ class FxdWorkbenchWindow(QMainWindow):
             message += " Geometry identity mapping is not available for this item."
         self.statusBar().showMessage(message)
 
+    def _set_orientation_pick_mode(self, enabled: bool) -> None:
+        scene = self._scene()
+        method = getattr(scene, "set_face_picking", None) if scene is not None else None
+        if callable(method):
+            method(enabled)
+
+    def _reference_for_face_identity(self, face_identity: str) -> GeometryReference | None:
+        for reference in self._geometry_references.values():
+            if reference.face_identity == face_identity:
+                return reference
+        return None
+
+    def _face_summary(self, reference: GeometryReference | None, role: str) -> str:
+        if self.document is None or reference is None:
+            return f"No {role} face selected."
+        face = next((face for component in self.document.assembly.components
+                     if component.reference == reference.component_identity
+                     for face in component.faces if face.reference == reference.face_identity), None)
+        if face is None:
+            return f"The selected {role} face is no longer available for this source."
+        surface = "planar" if face.is_planar else "not planar"
+        return f"{role.title()} face selected · {surface} · area {face.area_mm2:.2f} mm²"
+
+    def _viewer_face_picked(self, face_identity: str) -> None:
+        if self.workflow is None or self.orientation_guided_step not in {0, 1}:
+            return
+        if not face_identity:
+            self.orientation_guided_error.setText(
+                "No model face was found at that point. Rotate or zoom, then click a planar face."
+            )
+            return
+        reference = self._reference_for_face_identity(face_identity)
+        if reference is None:
+            self.orientation_guided_error.setText(
+                "That tessellation cell is not linked to exact source-face evidence. Pick another face."
+            )
+            return
+        self.selected_reference = reference
+        self.selected_identity = face_identity
+        self._select_guided_face(reference)
+
+    def _select_guided_face(self, reference: GeometryReference) -> None:
+        if self.document is None:
+            return
+        if self.orientation_guided_step == 0:
+            try:
+                draft = orientation_from_face(
+                    self.document, reference,
+                    flip_normal=self.orientation_flip_normal.isChecked(),
+                )
+            except ManufacturingOrientationError as exc:
+                self.orientation_guided_error.setText(str(exc))
+                return
+            self.orientation_face_reference = reference
+            self.orientation_front_reference = None
+            self.orientation_pending_reference = reference
+            self.orientation_guided_error.setText("")
+            self._commit_orientation(draft)
+            self._preview_orientation_camera(draft)
+        else:
+            self.orientation_front_reference = reference
+            self.orientation_pending_reference = reference
+            try:
+                draft = self._guided_orientation(accepted=False)
+            except ManufacturingOrientationError as exc:
+                invalid_front = reference
+                bottom_draft = orientation_from_face(
+                    self.document, self.orientation_face_reference,
+                    flip_normal=self.orientation_flip_normal.isChecked(),
+                )
+                self._commit_orientation(bottom_draft)
+                self.orientation_front_reference = invalid_front
+                self.orientation_guided_error.setText(str(exc))
+                self._show_active_concept_geometry()
+                self._refresh_guided_orientation()
+                return
+            self.orientation_guided_error.setText("")
+            self._commit_orientation(draft)
+            self._preview_orientation_camera(draft)
+        self._refresh_guided_orientation()
+
+    def _guided_orientation(self, *, accepted: bool) -> ManufacturingOrientation:
+        if self.document is None or self.orientation_face_reference is None:
+            raise ManufacturingOrientationError("select and accept a planar bottom face first")
+        if self.orientation_front_reference is None:
+            raise ManufacturingOrientationError("select a planar operator/front face")
+        return orientation_from_faces(
+            self.document, self.orientation_face_reference, self.orientation_front_reference,
+            flip_bottom=self.orientation_flip_normal.isChecked(), accepted=accepted,
+        )
+
+    def _preview_orientation_camera(self, orientation: ManufacturingOrientation) -> None:
+        scene = self._scene()
+        method = getattr(scene, "preview_orientation", None) if scene is not None else None
+        if callable(method):
+            method(
+                tuple(orientation.manufacturing_x_source.__dict__.values()),
+                tuple(orientation.manufacturing_y_source.__dict__.values()),
+                tuple(orientation.manufacturing_z_source.__dict__.values()),
+            )
+
+    def _prepare_guided_orientation(self) -> None:
+        self.orientation_face_reference = None
+        self.orientation_front_reference = None
+        self.orientation_pending_reference = None
+        self.orientation_guided_step = 0
+        self.orientation_recommendation = None
+        if self.document is not None:
+            try:
+                recommendations = recommend_orientations(self.document)
+            except ManufacturingOrientationError:
+                recommendations = ()
+            if recommendations:
+                self.orientation_recommendation = recommendations[0].orientation.selected_reference
+        self._set_orientation_pick_mode(True)
+        self._refresh_guided_orientation()
+
+    def use_recommended_bottom_face(self) -> None:
+        if self.orientation_recommendation is None:
+            return
+        self._select_guided_face(self.orientation_recommendation)
+        if self.orientation_face_reference is not None:
+            self.accept_guided_bottom_face()
+
+    def accept_guided_bottom_face(self) -> None:
+        if self.orientation_face_reference is None:
+            self.orientation_guided_error.setText("Click a planar bottom face before continuing.")
+            return
+        self.orientation_pending_reference = None
+        self.orientation_front_reference = None
+        self.orientation_guided_step = 1
+        self._set_orientation_pick_mode(True)
+        self._refresh_guided_orientation()
+
+    def pick_another_bottom_face(self) -> None:
+        self.orientation_face_reference = None
+        self.orientation_front_reference = None
+        self.orientation_pending_reference = None
+        self.orientation_guided_step = 0
+        self._commit_orientation(None)
+        self._set_orientation_pick_mode(True)
+        self._refresh_guided_orientation()
+
+    def flip_guided_bottom_side(self) -> None:
+        if self.orientation_face_reference is None or self.document is None:
+            self.orientation_guided_error.setText("Select a bottom face before flipping its side.")
+            return
+        self._setting_orientation_controls = True
+        self.orientation_flip_normal.setChecked(not self.orientation_flip_normal.isChecked())
+        self._setting_orientation_controls = False
+        if self.orientation_front_reference is not None:
+            try:
+                draft = self._guided_orientation(accepted=False)
+            except ManufacturingOrientationError as exc:
+                self.orientation_guided_error.setText(str(exc))
+                return
+        else:
+            draft = orientation_from_face(
+                self.document, self.orientation_face_reference,
+                flip_normal=self.orientation_flip_normal.isChecked(),
+            )
+        self._commit_orientation(draft)
+        self._preview_orientation_camera(draft)
+        self._refresh_guided_orientation()
+
+    def preview_guided_orientation(self) -> None:
+        try:
+            draft = self._guided_orientation(accepted=False)
+        except ManufacturingOrientationError as exc:
+            self.orientation_guided_error.setText(str(exc))
+            self._refresh_guided_orientation()
+            return
+        self._commit_orientation(draft)
+        self.orientation_guided_step = 2
+        self._set_orientation_pick_mode(False)
+        self._preview_orientation_camera(draft)
+        self._refresh_guided_orientation()
+
+    def back_to_guided_bottom(self) -> None:
+        self.orientation_front_reference = None
+        self.orientation_guided_step = 0
+        if self.document is not None and self.orientation_face_reference is not None:
+            self._commit_orientation(orientation_from_face(
+                self.document, self.orientation_face_reference,
+                flip_normal=self.orientation_flip_normal.isChecked(),
+            ))
+        self._set_orientation_pick_mode(True)
+        self._refresh_guided_orientation()
+
+    def back_to_guided_front(self) -> None:
+        self.orientation_guided_step = 1
+        self._set_orientation_pick_mode(True)
+        self._refresh_guided_orientation()
+
+    def reset_guided_orientation(self) -> None:
+        self._setting_orientation_controls = True
+        self.orientation_flip_normal.setChecked(False)
+        self._setting_orientation_controls = False
+        self._commit_orientation(None)
+        self._prepare_guided_orientation()
+
+    def accept_guided_orientation(self) -> None:
+        try:
+            orientation = self._guided_orientation(accepted=True)
+        except ManufacturingOrientationError as exc:
+            self.orientation_guided_error.setText(str(exc))
+            return
+        self._commit_orientation(orientation)
+        self.orientation_guided_step = 2
+        self._set_orientation_pick_mode(False)
+        self._preview_orientation_camera(orientation)
+        self._refresh_guided_orientation()
+        self.statusBar().showMessage(
+            "Manufacturing orientation accepted. Continue with Process, then Analyze Assembly."
+        )
+        self._navigate_stage("Manufacturing Intent")
+
+    def _refresh_guided_orientation(self) -> None:
+        if not hasattr(self, "orientation_steps"):
+            return
+        self.orientation_steps.setCurrentIndex(self.orientation_guided_step)
+        self.orientation_step_label.setText(f"STEP {self.orientation_guided_step + 1} OF 3")
+        self.orientation_bottom_status.setText(
+            self._face_summary(self.orientation_face_reference, "bottom")
+        )
+        self.orientation_front_status.setText(
+            self._face_summary(self.orientation_front_reference, "front")
+        )
+        self.orientation_accept_bottom.setEnabled(self.orientation_face_reference is not None)
+        self.orientation_flip_side.setEnabled(self.orientation_face_reference is not None)
+        self.orientation_preview_button.setEnabled(self.orientation_front_reference is not None)
+        self.orientation_use_recommendation.setEnabled(self.orientation_recommendation is not None)
+        self.orientation_recommendation_text.setText(
+            "This appears to be the primary support face. Use as fixture-down?"
+            if self.orientation_recommendation is not None else
+            "No confirmed planar support-face recommendation is available."
+        )
+        orientation = self.orientation_draft or (
+            self.workflow.setup.manufacturing_orientation if self.workflow else None
+        )
+        self.orientation_guided_accept.setEnabled(
+            orientation is not None and orientation.front_reference is not None
+        )
+        if orientation is not None and orientation.front_reference is not None:
+            def vector(value: Vec3) -> str:
+                return f"({value.x:.3f}, {value.y:.3f}, {value.z:.3f})"
+            state = "Accepted" if orientation.accepted else "Preview - confirmation required"
+            self.orientation_summary.setText(
+                f"{state}\n"
+                f"Bottom face: selected planar support face\n"
+                f"Front direction / operator side: {vector(orientation.operator_front_source)}\n"
+                f"Up direction: {vector(orientation.manufacturing_z_source)}\n"
+                f"Manufacturing X (right): {vector(orientation.manufacturing_x_source)}\n"
+                "Manufacturing Y points toward the operator; Z points up.\n"
+                "Source CAD remains unchanged."
+            )
+        else:
+            self.orientation_summary.setText(
+                "Select bottom and front faces to create a manufacturing XYZ preview."
+            )
+
     @staticmethod
     def _direction(text: str) -> Vec3 | None:
         return {
@@ -2181,6 +2686,9 @@ class FxdWorkbenchWindow(QMainWindow):
             self.orientation_draft = orientation
             if orientation is None:
                 self.orientation_selected_face.setText("No accepted manufacturing orientation.")
+                self.orientation_matrix.setText("Not defined")
+                self.orientation_inverse.setText("Not defined")
+                self.orientation_raw_evidence.setText("No orientation evidence.")
                 self.orientation_explanation.setText(
                     "Choose a familiar plane or confirmed planar face. Source CAD stays unchanged."
                 )
@@ -2203,14 +2711,25 @@ class FxdWorkbenchWindow(QMainWindow):
                     f"{orientation.plane_normal_source.x}, {orientation.plane_normal_source.y}, {orientation.plane_normal_source.z}"
                 )
             self.orientation_face_reference = orientation.selected_reference
+            self.orientation_front_reference = orientation.front_reference
             self.orientation_selected_face.setText(
-                (f"Selected planar OCP face: {orientation.selected_reference.face_identity}"
+                ("Bottom: " + orientation.selected_reference.face_identity
+                 + ("\nFront: " + orientation.front_reference.face_identity
+                    if orientation.front_reference else "")
                  if orientation.selected_reference else "CAD reference plane selected.")
             )
+            matrix = lambda values: "\n".join(
+                "  ".join(f"{value: .6g}" for value in values[row:row + 4])
+                for row in range(0, 16, 4)
+            )
+            self.orientation_matrix.setText(matrix(orientation.source_to_manufacturing))
+            self.orientation_inverse.setText(matrix(orientation.manufacturing_to_source))
+            self.orientation_raw_evidence.setText("\n".join(orientation.evidence))
             state = "ACCEPTED" if orientation.accepted else "DRAFT - engineer acceptance required"
             self.orientation_explanation.setText(state + ": " + " ".join(orientation.explanation))
         finally:
             self._setting_orientation_controls = False
+        self._refresh_guided_orientation()
 
     @staticmethod
     def _optional_text(widget: QLineEdit) -> str | None:
@@ -2674,22 +3193,30 @@ class FxdWorkbenchWindow(QMainWindow):
             "opacity": 0.18, "representation": "surface",
             "evidence": "manufacturing build plane overlay; source CAD is unmodified",
         }]
-        if orientation.selected_reference is not None:
-            for mesh in self.document.meshes:
-                if mesh.face_reference != orientation.selected_reference.face_identity:
-                    continue
-                items.append({
-                    "identity": "orientation:selected-face", "kind": "orientation_face_highlight",
-                    "vertices": [list(point) for point in mesh.vertices_mm],
-                    "triangles": [list(triangle) for triangle in mesh.triangles],
-                    "status": "provisional", "color": [1.0, 0.48, 0.0], "opacity": 0.62,
-                    "representation": "surface",
-                    "evidence": "exact selected source face overlay; source CAD is unmodified",
-                })
-                break
+        highlighted_faces = (
+            ("bottom-face", self.orientation_face_reference or orientation.selected_reference,
+             [1.0, 0.48, 0.0], "selected fixture-down face"),
+            ("front-face", self.orientation_front_reference or orientation.front_reference,
+             [0.05, 0.80, 0.82], "selected operator/front face"),
+        )
+        for suffix, reference, color, evidence in highlighted_faces:
+            if reference is None:
+                continue
+            mesh = next((item for item in self.document.meshes
+                         if item.face_reference == reference.face_identity), None)
+            if mesh is None:
+                continue
+            items.append({
+                "identity": "orientation:" + suffix, "kind": "orientation_face_highlight",
+                "vertices": [list(point) for point in mesh.vertices_mm],
+                "triangles": [list(triangle) for triangle in mesh.triangles],
+                "status": "provisional", "color": color, "opacity": 0.68,
+                "representation": "surface",
+                "evidence": evidence + "; exact source face overlay; source CAD is unmodified",
+            })
         directions = (
             ("manufacturing-x", x_axis, [0.92, 0.24, 0.24], "Manufacturing +X"),
-            ("manufacturing-y", y_axis, [0.24, 0.82, 0.42], "Manufacturing +Y"),
+            ("manufacturing-y", y_axis, [0.24, 0.82, 0.42], "Manufacturing +Y / operator front"),
             ("manufacturing-z", z_axis, [0.12, 0.47, 0.95], "Manufacturing +Z / build-up"),
             ("gravity", [-value for value in z_axis], [0.96, 0.88, 0.20], "Gravity / build-down"),
         )

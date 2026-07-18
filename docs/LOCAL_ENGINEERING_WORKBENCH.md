@@ -100,15 +100,23 @@ released fabrication geometry.
 
 ### Manufacturing orientation
 
-Before **Analyze Assembly**, choose the Manufacturing Orientation proposal in
-the Process panel. Familiar Front, Top, Right, selected planar face, custom
-plane, and source-orientation choices define a separate manufacturing XYZ
-frame. The selected face receives a review-only highlight; the VTK viewport
-also shows a translucent build plane, manufacturing triad, gravity, load, and
-unload directions. Flip and rotation controls change that review frame without
-rotating source CAD. An engineer must explicitly accept the current
-source-SHA-linked orientation before deterministic analysis can run. Any source
-or orientation change clears downstream concepts and authored fixture geometry.
+STEP import opens **Orientation** immediately. In the normal workflow, click the
+planar face that sits on the fixture, confirm or flip its side, then click the
+planar face that points toward the operator/front. FXD derives manufacturing
+right (+X), operator/front (+Y), and up (+Z), rejects parallel face pairs, and
+shows distinct bottom/front highlights plus the build plane, XYZ triad,
+operator side, gravity, load, and unload directions. The support-face
+recommendation asks for confirmation and is never silently accepted. Normal
+mode does not expose face IDs, source axes, rotations, or matrices.
+
+**Advanced orientation settings** retains the existing source reference-plane,
+exact-axis, normal-flip, quarter/custom rotation, transform, inverse, face,
+plane, and raw-evidence controls. **Edit orientation** returns to the guided
+page from the Engineering menu or toolbar. An engineer must explicitly accept
+the current source-SHA-linked orientation before deterministic analysis can
+run. Any source or selected-face change clears downstream analysis, concepts,
+approval, authored fixture geometry, and export evidence without rotating or
+rewriting source CAD.
 
 See `docs/MANUFACTURING_ORIENTATION_CONTRACT.md` for persistence, transform,
 validation, and limitation details.

@@ -68,6 +68,10 @@ from source CAD. Workflow orchestration converts manufacturing intent into
 source-coordinate vectors only at the existing CAD-neutral engine boundary.
 The frame is revision-sensitive: unaccepted or stale orientation evidence
 blocks analysis and invalidates dependent fixture results.
+The normal desktop path derives that frame from exact planar fixture-down and
+operator/front face evidence selected through VTK cell-to-OCP-face mapping;
+reference planes, explicit axes, and rotations remain advanced inputs to the
+same deterministic engine.
 
 ### Desktop presentation system
 

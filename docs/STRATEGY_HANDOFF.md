@@ -21,8 +21,11 @@ Milestone 30 is active on
 `milestone-30-real-manufacturing-geometry-and-tack-location-fixtures`. It adds
 typed fixture-construction and lifecycle evidence, purpose-specific tack/location
 validation, Cleco strategy checks, real OCP authored manufacturing components,
-and review-only package outputs. It composes existing structure, placement,
-manufacturing, validation, and workbench contracts.
+review-only package outputs, and an immediate guided two-face manufacturing
+orientation workflow. The orientation flow stores its accepted frame separately,
+uses exact OCP planar-face evidence from the native VTK viewer, and keeps the
+existing deterministic advanced controls. It composes existing structure,
+placement, manufacturing, validation, and workbench contracts.
 
 The application preserves ordinary vendor STEP import, source bytes and
 SHA-256, XCAF color evidence, zero-based tessellation, and fail-closed behavior.
@@ -31,10 +34,12 @@ geometry and cannot be represented as source or final manufacturing geometry.
 
 ## Review boundary
 
-Milestone 30 remains Pending until automated validation, local Windows visual
-acceptance, independent review, CI, user engineering acceptance, and merge.
-The workbench and all exports remain engineering-review-only and never imply
-production, structural, weld-process, or safety approval.
+Milestone 30 remains Pending until independent review, hosted CI, user
+engineering acceptance, and merge. On 2026-07-18 the guided orientation change
+passed 255 automated tests, the repository CI/OCP proof, and local Windows native
+VTK visual acceptance. The workbench and all exports remain
+engineering-review-only and never imply production, structural, weld-process,
+or safety approval.
 
 ## Governing principles
 
