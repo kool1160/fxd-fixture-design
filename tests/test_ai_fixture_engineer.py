@@ -110,11 +110,16 @@ class AiFixtureEngineerTests(unittest.TestCase):
         self.assertNotIn("source_step_base64", encoded)
         self.assertNotIn("source_bytes", encoded)
         self.assertNotIn("FXD_AI_API_KEY", encoded)
+        self.assertTrue({
+            item.identity for item in self.fallback.project.workflow.geometry_annotations
+        } <= request.known_identities)
         self.assertNotIn(self.original[:24].decode("ascii", errors="ignore"), encoded)
         self.assertEqual(request.source_sha256, sha256(self.original).hexdigest())
 
     def test_valid_mock_ai_response_is_versioned_and_provider_neutral(self):
         response = ai_response_from_proposal(self.fallback.proposal)
+        annotation = self.fallback.project.workflow.geometry_annotations[0]
+        response["recommendations"][0]["source_evidence"][0]["identity"] = annotation.identity
         outcome = generate_fixture_proposal(
             self.document, self.workflow,
             provider=StaticAiProvider(response, identity="mock-ai", engine_identifier="mock-v1"),

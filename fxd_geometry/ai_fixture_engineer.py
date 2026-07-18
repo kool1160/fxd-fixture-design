@@ -687,6 +687,7 @@ def _known_identities(project: FxdProject) -> frozenset[str]:
             values.update(edge.identity for edge in body.edges)
     values.update(item.identity for item in project.active.fixture.features)
     if project.workflow:
+        values.update(item.identity for item in project.workflow.geometry_annotations)
         values.update(
             item.identity for item in project.workflow.customer_tooling if item.verified
         )
