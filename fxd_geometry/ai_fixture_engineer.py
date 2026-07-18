@@ -928,9 +928,47 @@ def proposal_from_ai_response(data: dict[str, object], request: AiProposalReques
         raise FixtureProposalError("AI proposal source SHA-256 mismatch")
     if data["manufacturing_orientation_identity"] != request.manufacturing_orientation_identity:
         raise FixtureProposalError("AI proposal manufacturing orientation mismatch")
+    recommendation_fields = {
+        "recommendation_id", "recommendation_type", "title", "engineering_reason",
+        "source_evidence", "assumptions", "confidence", "deterministic_checks",
+        "validation_status", "unresolved_risks", "editable_parameters",
+        "downstream_dependencies", "geometry_reference", "fixture_feature_identity",
+        "decision", "engineer_note",
+    }
+    evidence_fields = {"identity", "kind", "summary"}
+    parameter_fields = {"name", "value", "units", "choices"}
+    reference_fields = {
+        "component_identity", "body_identity", "face_identity", "edge_identity",
+    }
     try:
+        raw_recommendations = data["recommendations"]
+        if not isinstance(raw_recommendations, list):
+            raise FixtureProposalError("AI recommendations must be a list")
+        for item in raw_recommendations:
+            if not isinstance(item, dict) or set(item) != recommendation_fields:
+                raise FixtureProposalError(
+                    "AI recommendation does not match the strict nested schema"
+                )
+            if (not isinstance(item["source_evidence"], list)
+                    or any(not isinstance(value, dict) or set(value) != evidence_fields
+                           for value in item["source_evidence"])):
+                raise FixtureProposalError("AI evidence does not match the strict nested schema")
+            if (not isinstance(item["editable_parameters"], list)
+                    or any(not isinstance(value, dict) or set(value) != parameter_fields
+                           for value in item["editable_parameters"])):
+                raise FixtureProposalError(
+                    "AI editable parameters do not match the strict nested schema"
+                )
+            reference = item["geometry_reference"]
+            if reference is not None and (
+                    not isinstance(reference, dict) or set(reference) != reference_fields):
+                raise FixtureProposalError(
+                    "AI geometry reference does not match the strict nested schema"
+                )
         recommendations = tuple(ProposalRecommendation.from_dict(item)
-                                for item in data["recommendations"])
+                                for item in raw_recommendations)
+    except FixtureProposalError:
+        raise
     except (KeyError, TypeError, ValueError) as exc:
         raise FixtureProposalError(f"AI recommendations are malformed: {exc}") from exc
     for recommendation in recommendations:

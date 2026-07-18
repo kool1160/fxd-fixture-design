@@ -292,13 +292,28 @@ class FxdProject:
         if candidate.fixture_proposal is not None:
             from .ai_fixture_engineer import validate_fixture_proposal
             original_identity = candidate.fixture_proposal.proposal_identity
+            original_blockers = tuple(
+                item.issue_id for item in candidate.fixture_proposal.guided_issues
+                if item.severity == "error"
+            )
             validated = validate_fixture_proposal(candidate, candidate.fixture_proposal)
             proposal_changed = validated.proposal_identity != original_identity
+            current_orientation = workflow.setup.manufacturing_orientation
+            stale = validated.stale_reason(
+                candidate.product.source_sha256,
+                current_orientation.identity if current_orientation is not None else None,
+            )
+            blocker_state_changed = original_blockers != tuple(
+                item.issue_id for item in validated.guided_issues if item.severity == "error"
+            )
+            invalidate_downstream = (
+                proposal_changed or stale is not None or blocker_state_changed
+            )
             candidate = replace(
                 candidate, fixture_proposal=validated,
-                drawing_intent=None if proposal_changed else candidate.drawing_intent,
-                optimization_intent=None if proposal_changed else candidate.optimization_intent,
-                fixture_build=None if proposal_changed else candidate.fixture_build,
+                drawing_intent=None if invalidate_downstream else candidate.drawing_intent,
+                optimization_intent=None if invalidate_downstream else candidate.optimization_intent,
+                fixture_build=None if invalidate_downstream else candidate.fixture_build,
             )
         return candidate._record_revision(self.revision_id)
 

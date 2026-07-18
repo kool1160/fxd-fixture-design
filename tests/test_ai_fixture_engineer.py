@@ -148,6 +148,17 @@ class AiFixtureEngineerTests(unittest.TestCase):
         provider_note = ai_response_from_proposal(self.fallback.proposal)
         provider_note["recommendations"][0]["engineer_note"] = "provider-authored review"
         cases.append(provider_note)
+        nested_recommendation = ai_response_from_proposal(self.fallback.proposal)
+        nested_recommendation["recommendations"][0]["unsupported_claim"] = "approved"
+        cases.append(nested_recommendation)
+        nested_evidence = ai_response_from_proposal(self.fallback.proposal)
+        nested_evidence["recommendations"][0]["source_evidence"][0]["extra"] = True
+        cases.append(nested_evidence)
+        nested_parameter = ai_response_from_proposal(self.fallback.proposal)
+        editable = next(item for item in nested_parameter["recommendations"]
+                        if item["editable_parameters"])
+        editable["editable_parameters"][0]["unsupported_units_claim"] = True
+        cases.append(nested_parameter)
         for response in cases:
             with self.subTest(response=list(response)):
                 outcome = generate_fixture_proposal(
@@ -272,17 +283,31 @@ class AiFixtureEngineerTests(unittest.TestCase):
         self.assertEqual(self.source.read_bytes(), self.original)
 
     def test_orientation_change_marks_visible_proposal_stale_and_blocks_approval_export(self):
+        requirements = FixtureBuildRequirements(
+            self.fallback.project.product.source_sha256,
+            FixturePurpose.TACK_LOCATION, ConstructionMethod.TACK_LOCATION,
+            FixtureLifecycle.STORE_AND_REUSE, "JOB-A", "A", 10, "monthly", "MIG",
+            ("laser cutting", "fixture welding"), True, None, True,
+            AdjustmentState.LOCKED, ("review-only test plan",), (),
+            ClecoStrategy.SEPARATE_FIXTURE_HOLES,
+        )
+        plan = generate_fixture_build_plan(
+            self.fallback.project.product, self.fallback.project.active, requirements,
+        )
+        project = self.fallback.project.with_fixture_build(plan)
+        project = project.with_drawing_intent({"drawing": "stale"})
+        project = project.with_optimization_intent({"cost": "stale"})
         changed_orientation = reference_plane_orientation(
             self.document.source_sha256, ReferencePlane.RIGHT, accepted=True,
         )
         changed_workflow = replace(
-            self.fallback.project.workflow,
+            project.workflow,
             setup=replace(
-                self.fallback.project.workflow.setup,
+                project.workflow.setup,
                 manufacturing_orientation=changed_orientation,
             ),
         )
-        stale = self.fallback.project.with_workflow(changed_workflow)
+        stale = project.with_workflow(changed_workflow)
         self.assertIsNotNone(stale.fixture_proposal)
         self.assertEqual(
             stale.fixture_proposal.stale_reason(
@@ -290,6 +315,9 @@ class AiFixtureEngineerTests(unittest.TestCase):
             ),
             "manufacturing orientation changed",
         )
+        self.assertIsNone(stale.drawing_intent)
+        self.assertIsNone(stale.optimization_intent)
+        self.assertIsNone(stale.fixture_build)
         self.assertIn("stale fixture proposal", project_export_block_reason(stale))
         with self.assertRaisesRegex(ProjectFormatError, "stale fixture proposal"):
             stale.decide("approve_for_review")
