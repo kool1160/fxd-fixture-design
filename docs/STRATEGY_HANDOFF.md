@@ -35,11 +35,12 @@ geometry and cannot be represented as source or final manufacturing geometry.
 ## Review boundary
 
 Milestone 31 has 278 passing automated tests, governed repository CI and real
-OCP proof, and local Windows native VTK proposal-workflow acceptance. It remains
-In progress until hosted OCP acceptance, fresh Codex review, user Windows visual
-acceptance, engineering acceptance, and merge are recorded. The workbench and
-all exports remain engineering-review-only and never imply production,
-structural, weld-process, or safety approval.
+OCP proof, hosted pinned-OCP acceptance, clean fresh Codex review, and local
+Windows native VTK proposal-workflow acceptance. It remains in progress until
+user Windows visual acceptance, engineering acceptance, and explicit merge
+authorization are recorded. The workbench and all exports remain engineering-
+review-only and never imply production, structural, weld-process, or safety
+approval.
 
 ## Governing principles
 

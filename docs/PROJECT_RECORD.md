@@ -503,6 +503,7 @@ highlighting, guided issue explanation, correction routing, and post-resize
 repaint were exercised. The source SHA-256 remained
 `2A9EAC1BCEBD809EEC6DF40BA07D3576E6D1926AE7DA3D2AC0BC88F010CEAF94`.
 
-Milestone 31 remains pending hosted acceptance, fresh independent review, user
-Windows visual acceptance, engineering acceptance, and explicit merge authority.
-No production fixture approval or physical adequacy claim is made.
+PR #53 hosted pinned-OCP acceptance and fresh independent Codex review pass on
+the final implementation. Milestone 31 remains pending user Windows visual
+acceptance, engineering acceptance, and explicit merge authority. No production
+fixture approval or physical adequacy claim is made.
