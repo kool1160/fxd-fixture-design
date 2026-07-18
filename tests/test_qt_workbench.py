@@ -492,6 +492,13 @@ class QtWorkbenchTests(unittest.TestCase):
             source = self._real_step(directory)
             original = source.read_bytes()
             self.window.load_step_path(source)
+            self.window.process_fixture_type.setCurrentText("Full weld fixture")
+            self.window.process_method.setCurrentText("MIG welding")
+            self.window.process_mode.setCurrentText("Manual")
+            self.window.process_quantity.setValue(10)
+            self.window.process_lifecycle.setCurrentText("Store and reuse")
+            self.window.process_load.setCurrentText("+X")
+            self.window.process_unload.setCurrentText("-X")
             component = self.window.document.assembly.components[0]
             bottom = component.faces[0]
             front = next(face for face in component.faces if abs(sum(

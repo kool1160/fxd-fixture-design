@@ -3384,14 +3384,18 @@ class FxdWorkbenchWindow(QMainWindow):
         self.orientation_draft = orientation
         if self.workflow is None:
             return
-        if orientation is None:
-            self.workflow = replace(
-                self.workflow,
-                setup=replace(self.workflow.setup, manufacturing_orientation=None,
-                              build_orientation=None, loading_direction=None,
-                              unloading_direction=None),
-            )
-        setup = self._capture_process_setup(persist=False, orientation=orientation)
+        prior_setup = self.workflow.setup
+        to_source = lambda value: (
+            orientation.manufacturing_vector_to_source(value)
+            if orientation is not None and value is not None else None
+        )
+        setup = replace(
+            prior_setup,
+            manufacturing_orientation=orientation,
+            build_orientation=to_source(prior_setup.manufacturing_build_direction),
+            loading_direction=to_source(prior_setup.manufacturing_loading_direction),
+            unloading_direction=to_source(prior_setup.manufacturing_unloading_direction),
+        )
         self.workflow = replace(
             self.workflow, setup=setup, analysis_completed=False, concepts_generated=False,
             active_stage="Orientation", timings=(),
