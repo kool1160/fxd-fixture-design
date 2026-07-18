@@ -16,7 +16,7 @@ from fxd_geometry import (
     RecommendationType, StaticAiProvider, Vec3, ai_response_from_proposal,
     apply_recommended_intent, build_ai_request, generate_fixture_proposal,
     generate_fixture_build_plan, load_step_for_workbench, minimal_intent_questions,
-    orientation_from_faces,
+    orientation_from_faces, proposal_engineering_context_identity,
     reference_plane_orientation, ReferencePlane,
 )
 from fxd_geometry.operations import project_export_block_reason
@@ -336,12 +336,40 @@ class AiFixtureEngineerTests(unittest.TestCase):
         self.assertEqual(
             stale.fixture_proposal.stale_reason(
                 stale.product.source_sha256, changed_orientation.identity,
+                proposal_engineering_context_identity(stale),
             ),
             "manufacturing orientation changed",
         )
         self.assertIsNone(stale.drawing_intent)
         self.assertIsNone(stale.optimization_intent)
         self.assertIsNone(stale.fixture_build)
+        self.assertIn("stale fixture proposal", project_export_block_reason(stale))
+        with self.assertRaisesRegex(ProjectFormatError, "stale fixture proposal"):
+            stale.decide("approve_for_review")
+
+    def test_manufacturing_intent_change_marks_proposal_stale_and_blocks_use(self):
+        project = self.fallback.project.with_drawing_intent({"drawing": "stale"})
+        changed_workflow = replace(
+            project.workflow,
+            setup=replace(
+                project.workflow.setup,
+                production_quantity=project.workflow.setup.production_quantity + 1,
+            ),
+        )
+        stale = project.with_workflow(changed_workflow)
+        self.assertEqual(
+            stale.fixture_proposal.stale_reason(
+                stale.product.source_sha256,
+                changed_workflow.setup.manufacturing_orientation.identity,
+                proposal_engineering_context_identity(stale),
+            ),
+            "manufacturing intent or engineering context changed",
+        )
+        self.assertIsNone(stale.drawing_intent)
+        self.assertTrue(any(
+            issue.rule_id == "proposal_stale"
+            for issue in stale.fixture_proposal.guided_issues
+        ))
         self.assertIn("stale fixture proposal", project_export_block_reason(stale))
         with self.assertRaisesRegex(ProjectFormatError, "stale fixture proposal"):
             stale.decide("approve_for_review")

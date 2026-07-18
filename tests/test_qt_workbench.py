@@ -30,6 +30,7 @@ from fxd_geometry import (
     ProcessSetup,
     RenderDiagnostics,
     Vec3,
+    generate_fixture_proposal,
     import_step,
     load_step_for_workbench,
     product_from_workbench_document,
@@ -531,21 +532,24 @@ class QtWorkbenchTests(unittest.TestCase):
             self.window.accept_guided_orientation()
             self.window.apply_proposal_recommended_intent()
             old_outcome = self.window.generate_fixture_proposal_now()
-            old_request = self.window._proposal_request + 1
-            self.window._proposal_request = old_request
-            self.window._proposal_contexts[old_request] = (
-                self.window._proposal_workflow_identity(self.window.workflow)
+            self.window.process_quantity.setValue(
+                self.window.workflow.setup.production_quantity + 1
             )
-            changed_workflow = replace(
-                self.window.workflow,
-                setup=replace(
-                    self.window.workflow.setup,
-                    operator_access="changed while provider request was running",
-                ),
+            with patch.object(self.window.analysis_pool, "start") as start:
+                self.window.generate_fixture_proposal_action()
+            start.assert_called_once()
+            old_request = self.window._proposal_request
+            self.assertEqual(
+                self.window.workflow.setup.production_quantity,
+                self.window.process_quantity.value(),
             )
-            self.window.workflow = changed_workflow
-            self.window._replace_project(self.window.project.with_workflow(changed_workflow))
-            self.window._proposal_completed(old_outcome, old_request)
+            request_outcome = generate_fixture_proposal(
+                self.window.document, self.window.workflow,
+            )
+            self.window.process_operator.setText(
+                "changed while provider request was running"
+            )
+            self.window._proposal_completed(request_outcome, old_request)
             self.assertEqual(
                 self.window.workflow.setup.operator_access,
                 "changed while provider request was running",

@@ -294,6 +294,7 @@ class FixtureProposal:
     proposal_identity: str
     source_sha256: str
     manufacturing_orientation_identity: str
+    engineering_context_identity: str
     concept_name: str
     fixture_purpose: str
     base_strategy: str
@@ -314,6 +315,8 @@ class FixtureProposal:
             raise FixtureProposalError("proposal source SHA-256 is malformed")
         if not self.manufacturing_orientation_identity:
             raise FixtureProposalError("proposal requires manufacturing orientation identity")
+        if not self.engineering_context_identity:
+            raise FixtureProposalError("proposal requires engineering context identity")
         if len({item.recommendation_id for item in self.recommendations}) != len(self.recommendations):
             raise FixtureProposalError("proposal recommendation IDs must be unique")
         if not self.recommendations:
@@ -336,12 +339,14 @@ class FixtureProposal:
             "provisional" if self.warning_count else "valid"
         )
 
-    def stale_reason(self, source_sha256: str,
-                     orientation_identity: str | None) -> str | None:
+    def stale_reason(self, source_sha256: str, orientation_identity: str | None,
+                     engineering_context_identity: str | None) -> str | None:
         if source_sha256 != self.source_sha256:
             return "source SHA-256 changed"
         if orientation_identity != self.manufacturing_orientation_identity:
             return "manufacturing orientation changed"
+        if engineering_context_identity != self.engineering_context_identity:
+            return "manufacturing intent or engineering context changed"
         return None
 
     def to_dict(self) -> dict[str, object]:
@@ -350,6 +355,7 @@ class FixtureProposal:
             "proposal_identity": self.proposal_identity,
             "source_sha256": self.source_sha256,
             "manufacturing_orientation_identity": self.manufacturing_orientation_identity,
+            "engineering_context_identity": self.engineering_context_identity,
             "concept_name": self.concept_name,
             "fixture_purpose": self.fixture_purpose,
             "base_strategy": self.base_strategy,
@@ -392,6 +398,7 @@ class FixtureProposal:
         return cls(
             str(data["schema_version"]), str(data["proposal_identity"]),
             str(data["source_sha256"]), str(data["manufacturing_orientation_identity"]),
+            str(data["engineering_context_identity"]),
             str(data["concept_name"]), str(data["fixture_purpose"]),
             str(data["base_strategy"]), str(data["lifecycle"]),
             str(data["complexity_class"]),
@@ -416,6 +423,7 @@ def _identity_payload(proposal: FixtureProposal) -> dict[str, object]:
         "schema": proposal.schema_version,
         "source": proposal.source_sha256,
         "orientation": proposal.manufacturing_orientation_identity,
+        "engineering_context": proposal.engineering_context_identity,
         "name": proposal.concept_name,
         "purpose": proposal.fixture_purpose,
         "base": proposal.base_strategy,
@@ -445,6 +453,7 @@ class AiProposalRequest:
     prompt_contract_version: str
     source_sha256: str
     manufacturing_orientation_identity: str
+    engineering_context_identity: str
     context: dict[str, object]
     known_identities: frozenset[str]
 
@@ -454,6 +463,7 @@ class AiProposalRequest:
             "prompt_contract_version": self.prompt_contract_version,
             "source_sha256": self.source_sha256,
             "manufacturing_orientation_identity": self.manufacturing_orientation_identity,
+            "engineering_context_identity": self.engineering_context_identity,
             "context": self.context,
         }
 
@@ -715,7 +725,9 @@ def build_ai_request(project: FxdProject) -> AiProposalRequest:
                                 "references": [value.__dict__ for value in item.source_references],
                                 "rule": item.rule, "parameters": item.parameters}
                                for item in project.active.fixture.features],
-        "deterministic_findings": [item.__dict__ for item in project.active_validation.findings],
+        "deterministic_findings": [
+            item.__dict__ for item in project.validation_for(project.active).findings
+        ],
         "alternatives": [{"identity": item.identity, "objective": item.objective,
                           "validation": project.validation_for(item).status}
                          for item in project.concepts],
@@ -723,11 +735,17 @@ def build_ai_request(project: FxdProject) -> AiProposalRequest:
     encoded = json.dumps(context, sort_keys=True)
     if "source_step_base64" in encoded or "source_bytes" in encoded:
         raise FixtureProposalError("raw source geometry must not enter AI context")
+    context_identity = "context-" + sha256(encoded.encode()).hexdigest()
     return AiProposalRequest(
         PROPOSAL_REQUEST_SCHEMA, PROMPT_CONTRACT_VERSION,
-        project.product.source_sha256, orientation.identity, context,
+        project.product.source_sha256, orientation.identity, context_identity, context,
         _known_identities(project),
     )
+
+
+def proposal_engineering_context_identity(project: FxdProject) -> str:
+    """Return the governed upstream context identity used to author a proposal."""
+    return build_ai_request(project).engineering_context_identity
 
 
 def _evidence(identity: str, kind: str, summary: str) -> tuple[ProposalEvidence, ...]:
@@ -886,6 +904,7 @@ def deterministic_baseline_proposal(
     )
     proposal = FixtureProposal(
         PROPOSAL_SCHEMA, "", project.product.source_sha256, orientation.identity,
+        proposal_engineering_context_identity(project),
         "Deterministic baseline fixture proposal", setup.fixture_type or "Unknown",
         setup.preferred_base_strategy or "Auto-select", setup.fixture_lifecycle or "Unknown",
         "review required", (
@@ -902,6 +921,7 @@ def ai_response_from_proposal(proposal: FixtureProposal) -> dict[str, object]:
         "schema_version": PROPOSAL_SCHEMA,
         "source_sha256": proposal.source_sha256,
         "manufacturing_orientation_identity": proposal.manufacturing_orientation_identity,
+        "engineering_context_identity": proposal.engineering_context_identity,
         "concept_name": proposal.concept_name,
         "fixture_purpose": proposal.fixture_purpose,
         "base_strategy": proposal.base_strategy,
@@ -917,6 +937,7 @@ def proposal_from_ai_response(data: dict[str, object], request: AiProposalReques
                               provider: AiFixtureProvider) -> FixtureProposal:
     required = {
         "schema_version", "source_sha256", "manufacturing_orientation_identity",
+        "engineering_context_identity",
         "concept_name", "fixture_purpose", "base_strategy", "lifecycle",
         "complexity_class", "assumptions", "recommendations", "alternative_summary",
     }
@@ -928,6 +949,8 @@ def proposal_from_ai_response(data: dict[str, object], request: AiProposalReques
         raise FixtureProposalError("AI proposal source SHA-256 mismatch")
     if data["manufacturing_orientation_identity"] != request.manufacturing_orientation_identity:
         raise FixtureProposalError("AI proposal manufacturing orientation mismatch")
+    if data["engineering_context_identity"] != request.engineering_context_identity:
+        raise FixtureProposalError("AI proposal engineering context mismatch")
     top_string_fields = (
         "concept_name", "fixture_purpose", "base_strategy", "lifecycle",
         "complexity_class",
@@ -1059,7 +1082,8 @@ def proposal_from_ai_response(data: dict[str, object], request: AiProposalReques
     try:
         proposal = FixtureProposal(
             PROPOSAL_SCHEMA, "", request.source_sha256,
-            request.manufacturing_orientation_identity, str(data["concept_name"]),
+            request.manufacturing_orientation_identity,
+            request.engineering_context_identity, str(data["concept_name"]),
             str(data["fixture_purpose"]), str(data["base_strategy"]),
             str(data["lifecycle"]), str(data["complexity_class"]),
             tuple(str(item) for item in data["assumptions"]), recommendations,
@@ -1100,17 +1124,28 @@ def validate_fixture_proposal(project: FxdProject,
     workflow = project.workflow
     orientation = workflow.setup.manufacturing_orientation if workflow else None
     orientation_identity = orientation.identity if orientation else None
+    context_identity = (
+        proposal_engineering_context_identity(project)
+        if workflow is not None and workflow.has_accepted_manufacturing_orientation()
+        else None
+    )
     issues: list[GuidedValidationIssue] = []
-    stale = proposal.stale_reason(project.product.source_sha256, orientation_identity)
+    stale = proposal.stale_reason(
+        project.product.source_sha256, orientation_identity, context_identity,
+    )
     if stale:
+        context_changed = stale == "manufacturing intent or engineering context changed"
         issues.append(_guided_issue(
             "proposal_stale", "error", "Fixture proposal is stale", stale,
-            "A proposal tied to different source or orientation evidence cannot control approval or export.",
-            "Orientation", "orientation_workflow",
+            "A proposal tied to different source, orientation, or engineering intent evidence cannot control approval or export.",
+            "Manufacturing Intent" if context_changed else "Orientation",
+            "process_fixture_type" if context_changed else "orientation_workflow",
             details=(f"proposal_source={proposal.source_sha256}",
                      f"current_source={project.product.source_sha256}",
                      f"proposal_orientation={proposal.manufacturing_orientation_identity}",
-                     f"current_orientation={orientation_identity}"),
+                     f"current_orientation={orientation_identity}",
+                     f"proposal_context={proposal.engineering_context_identity}",
+                     f"current_context={context_identity}"),
         ))
     required_types = {
         RecommendationType.DATUM, RecommendationType.LOCATOR,

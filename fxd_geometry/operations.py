@@ -109,9 +109,12 @@ def project_export_block_reason(project: FxdProject) -> str | None:
         )
     proposal = getattr(project, "fixture_proposal", None)
     if proposal is not None:
+        from .ai_fixture_engineer import proposal_engineering_context_identity
         orientation = workflow.setup.manufacturing_orientation if workflow else None
         stale = proposal.stale_reason(
             project.product.source_sha256, orientation.identity if orientation else None,
+            proposal_engineering_context_identity(project)
+            if workflow and workflow.has_accepted_manufacturing_orientation() else None,
         )
         if stale:
             return f"stale fixture proposal cannot be exported: {stale}"

@@ -475,8 +475,8 @@ simulation, structural adequacy, safety certification, or production approval.
 Milestone 31 adds the provider-neutral `fxd-fixture-proposal-v1` request,
 response, provenance, recommendation, validation, edit, and audit contracts. A
 configured environment-only HTTP provider receives compact engineering summaries
-without STEP bytes; malformed, unknown-identity, source-mismatched, or
-orientation-mismatched output is quarantined. When AI is unavailable, the same
+without STEP bytes; malformed, unknown-identity, source-mismatched, orientation-
+mismatched, or engineering-context-mismatched output is quarantined. When AI is unavailable, the same
 workflow uses an explicitly labeled deterministic baseline. Existing
 deterministic placement, concept, access, weld, validation, approval, and export
 engines remain authoritative and fail closed.
@@ -489,9 +489,9 @@ confirmation, per-recommendation highlights and explanations, guided validation
 with correction routing, and dismissible/reopenable first-run guidance.
 
 Local evidence: Python 3.12.10, OCP 7.9.3.1, PySide6 6.8.3, and VTK 9.6.2;
-14 focused AI fixture tests, 45 focused Qt/workbench tests, 14 project and export
+15 focused AI fixture tests, 45 focused Qt/workbench tests, 14 project and export
 persistence tests, 36 manufacturing-orientation/interactive/kernel tests, and
-275 full-suite tests pass with zero failures, errors, or skips. `compileall`,
+276 full-suite tests pass with zero failures, errors, or skips. `compileall`,
 `git diff --check`, launcher dependency checking, and `scripts/ci.sh` pass; the
 governed CI validates 20 milestones and its real OCP proof.
 

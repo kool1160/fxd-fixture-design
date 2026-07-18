@@ -108,7 +108,7 @@ from .ai_fixture_engineer import (
     apply_recommended_intent, build_ai_request, decide_proposal,
     decide_recommendation, deterministic_baseline_proposal, edit_recommendation,
     generate_fixture_proposal, minimal_intent_questions, proposal_from_ai_response,
-    validate_fixture_proposal,
+    proposal_engineering_context_identity, validate_fixture_proposal,
 )
 
 

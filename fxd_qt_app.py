@@ -106,6 +106,7 @@ from fxd_geometry import (
     orientation_from_plane,
     recommend_orientations,
     reference_plane_orientation,
+    proposal_engineering_context_identity,
     tooling_record_from_file,
 )
 from fxd_geometry.operations import (
@@ -1807,6 +1808,7 @@ class FxdWorkbenchWindow(QMainWindow):
         """Synchronous seam used by focused tests and non-threaded integrations."""
         if self.document is None or self.workflow is None:
             raise InteractiveWorkflowError("import a STEP model before generating a proposal")
+        self._persist_process_setup_from_controls()
         outcome = generate_fixture_proposal(
             self.document, self.workflow,
             provider=provider if provider is not None else self.ai_provider,
@@ -1828,6 +1830,7 @@ class FxdWorkbenchWindow(QMainWindow):
             )
             self._navigate_stage("Orientation")
             return
+        self._persist_process_setup_from_controls()
         questions = minimal_intent_questions(self.workflow)
         if questions:
             self._populate_proposal()
@@ -1882,6 +1885,7 @@ class FxdWorkbenchWindow(QMainWindow):
         request_context = self._proposal_contexts.pop(request_id, None)
         if request_id != self._proposal_request:
             return
+        self._persist_process_setup_from_controls()
         if (self.workflow is None or request_context is None
                 or request_context != self._proposal_workflow_identity(self.workflow)
                 or self.document is None
@@ -1964,7 +1968,12 @@ class FxdWorkbenchWindow(QMainWindow):
             self.proposal_reject.setEnabled(False)
             self.proposal_technical_details.setText("")
             return
-        stale = proposal.stale_reason(self.project.product.source_sha256, orientation_identity)
+        stale = proposal.stale_reason(
+            self.project.product.source_sha256, orientation_identity,
+            proposal_engineering_context_identity(self.project)
+            if self.workflow and self.workflow.has_accepted_manufacturing_orientation()
+            else None,
+        )
         state = "STALE - " + stale if stale else proposal.validation_status.upper()
         source_label = (
             "AI-generated fixture proposal" if proposal.provenance.source.value == "ai"
@@ -2265,6 +2274,9 @@ class FxdWorkbenchWindow(QMainWindow):
         else:
             proposal_stale = proposal.stale_reason(
                 self.project.product.source_sha256, orientation.identity if orientation else None,
+                proposal_engineering_context_identity(self.project)
+                if self.workflow and self.workflow.has_accepted_manufacturing_orientation()
+                else None,
             )
             states["Proposal"] = (
                 "stale" if proposal_stale else "blocked" if proposal.blocker_count else
@@ -3532,6 +3544,20 @@ class FxdWorkbenchWindow(QMainWindow):
         if persist and self.workflow is not None:
             self.workflow = replace(self.workflow, setup=setup)
         return setup
+
+    def _persist_process_setup_from_controls(self) -> None:
+        """Bind visible manufacturing-intent controls to governed project state."""
+        if self.workflow is None:
+            return
+        setup = self._capture_process_setup(persist=False)
+        if setup == self.workflow.setup:
+            return
+        self.workflow = replace(
+            self.workflow, setup=setup, analysis_completed=False,
+            concepts_generated=False, timings=(),
+        )
+        if self.project is not None:
+            self._replace_project(self.project.with_workflow(self.workflow))
 
     def _set_process_setup(self, setup: ProcessSetup) -> None:
         self.process_project_name.setText(setup.project_name)

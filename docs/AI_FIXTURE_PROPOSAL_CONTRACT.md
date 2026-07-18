@@ -13,8 +13,8 @@ replacement for deterministic engineering.
 3. Existing placement, concept, access, weld, and validation engines prepare the
    governed context.
 4. A configured provider may return one strict JSON proposal. Unknown fields,
-   types, identities, source hashes, or orientation identities quarantine the
-   response.
+   types, identities, source hashes, orientation identities, or engineering-
+   context identities quarantine the response.
 5. Deterministic validation evaluates every accepted proposal. Its blockers and
    warnings override AI confidence and ranking.
 6. The engineer may accept, reject, suppress, or edit recommendations. Each
@@ -56,15 +56,18 @@ or network service.
 
 Projects use `fxd-neutral-project-v5` and retain v1 through v4 read
 compatibility. The persisted proposal includes schema and proposal identities,
-source SHA-256, manufacturing-orientation identity, provider and model
-provenance, prompt and response contract versions, timestamp, recommendations,
-guided issues, engineer decisions and edits, overall decision, and regeneration
-history.
+source SHA-256, manufacturing-orientation identity, governed engineering-context
+identity, provider and model provenance, prompt and response contract versions,
+timestamp, recommendations, guided issues, engineer decisions and edits,
+overall decision, and regeneration history.
 
-A source mismatch fails attachment or load closed. An orientation mismatch
-keeps the old proposal visible as stale. Stale proposals and proposals with
-deterministic blockers cannot be accepted, approved, or exported. Source STEP
-bytes and source coordinates remain unchanged.
+A source mismatch fails attachment or load closed. An orientation, manufacturing-
+intent, annotation, placement, concept, or upstream deterministic-evidence
+mismatch keeps the old proposal visible as stale. Visible intent controls are
+persisted before an asynchronous request is bound, and a completion is discarded
+if that governed context changes while the request runs. Stale proposals and
+proposals with deterministic blockers cannot be accepted, approved, or exported.
+Source STEP bytes and source coordinates remain unchanged.
 
 ## Guided validation
 

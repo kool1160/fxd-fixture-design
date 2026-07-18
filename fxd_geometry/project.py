@@ -290,7 +290,9 @@ class FxdProject:
             raise ProjectFormatError("interactive workflow does not match the immutable source geometry")
         candidate = replace(self, workflow=workflow, approved_revision=None)
         if candidate.fixture_proposal is not None:
-            from .ai_fixture_engineer import validate_fixture_proposal
+            from .ai_fixture_engineer import (
+                proposal_engineering_context_identity, validate_fixture_proposal,
+            )
             original_identity = candidate.fixture_proposal.proposal_identity
             original_blockers = tuple(
                 item.issue_id for item in candidate.fixture_proposal.guided_issues
@@ -302,6 +304,8 @@ class FxdProject:
             stale = validated.stale_reason(
                 candidate.product.source_sha256,
                 current_orientation.identity if current_orientation is not None else None,
+                proposal_engineering_context_identity(candidate)
+                if candidate.workflow.has_accepted_manufacturing_orientation() else None,
             )
             blocker_state_changed = original_blockers != tuple(
                 item.issue_id for item in validated.guided_issues if item.severity == "error"
@@ -552,8 +556,12 @@ class FxdProject:
         if action == "approve_for_review":
             if self.fixture_proposal is not None:
                 orientation = self.workflow.setup.manufacturing_orientation if self.workflow else None
+                from .ai_fixture_engineer import proposal_engineering_context_identity
                 stale = self.fixture_proposal.stale_reason(
                     self.product.source_sha256, orientation.identity if orientation else None,
+                    proposal_engineering_context_identity(self)
+                    if self.workflow and self.workflow.has_accepted_manufacturing_orientation()
+                    else None,
                 )
                 if stale:
                     raise ProjectFormatError(f"stale fixture proposal cannot be approved: {stale}")
