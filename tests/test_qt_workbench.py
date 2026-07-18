@@ -545,6 +545,19 @@ class QtWorkbenchTests(unittest.TestCase):
             )
             request_outcome = generate_fixture_proposal(
                 self.window.document, self.window.workflow,
+                current_project=self.window.project,
+            )
+            self.window._replace_project(self.window.project.toggle_layer("datums"))
+            self.window._proposal_completed(request_outcome, old_request)
+            self.assertIn("datums", self.window.project.hidden_layers)
+            self.assertIn("project evidence", self.window.statusBar().currentMessage())
+            with patch.object(self.window.analysis_pool, "start") as start:
+                self.window.generate_fixture_proposal_action()
+            start.assert_called_once()
+            old_request = self.window._proposal_request
+            request_outcome = generate_fixture_proposal(
+                self.window.document, self.window.workflow,
+                current_project=self.window.project,
             )
             self.window.process_operator.setText(
                 "changed while provider request was running"
@@ -554,7 +567,7 @@ class QtWorkbenchTests(unittest.TestCase):
                 self.window.workflow.setup.operator_access,
                 "changed while provider request was running",
             )
-            self.assertIn("workflow evidence", self.window.statusBar().currentMessage())
+            self.assertIn("workflow", self.window.statusBar().currentMessage())
             replacement = Path(directory) / "replacement.step"
             replacement.write_bytes(self.kernel.export_step(
                 self.kernel.make_box((0, 0, 0), (35, 18, 12))
@@ -568,7 +581,7 @@ class QtWorkbenchTests(unittest.TestCase):
             self.window._proposal_completed(old_outcome, old_request)
             self.assertEqual(self.window.document.source_sha256, replacement_sha)
             self.assertIsNone(self.window.project)
-            self.assertIn("replaced source or workflow", self.window.statusBar().currentMessage())
+            self.assertIn("replaced source, workflow", self.window.statusBar().currentMessage())
 
     def test_proposal_selection_highlights_evidence_and_decision_is_audited(self):
         with tempfile.TemporaryDirectory() as directory:

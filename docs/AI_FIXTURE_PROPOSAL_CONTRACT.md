@@ -68,7 +68,8 @@ A source mismatch fails attachment or load closed. An orientation, manufacturing
 intent, annotation, customer-tooling, placement, concept, or upstream deterministic-evidence
 mismatch keeps the old proposal visible as stale. Visible intent controls are
 persisted before an asynchronous request is bound, and a completion is discarded
-if that governed context changes while the request runs. Stale proposals and
+if that governed context or authored project identity changes while the request
+runs. Stale proposals and
 proposals with deterministic blockers cannot be accepted, approved, or exported.
 Source STEP bytes and source coordinates remain unchanged.
 

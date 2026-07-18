@@ -629,7 +629,7 @@ class FxdWorkbenchWindow(QMainWindow):
         self._analysis_tasks: dict[int, _AnalysisTask] = {}
         self._proposal_request = 0
         self._proposal_tasks: dict[int, _ProposalTask] = {}
-        self._proposal_contexts: dict[int, str] = {}
+        self._proposal_contexts: dict[int, tuple[str, str | None]] = {}
         self._proposal_cancellation: CancellationToken | None = None
         self.ai_provider = ai_provider
         self._proposal_records: dict[str, object] = {}
@@ -1853,7 +1853,10 @@ class FxdWorkbenchWindow(QMainWindow):
             self.project,
         )
         self._proposal_tasks[request_id] = task
-        self._proposal_contexts[request_id] = self._proposal_workflow_identity(self.workflow)
+        self._proposal_contexts[request_id] = (
+            self._proposal_workflow_identity(self.workflow),
+            self._proposal_project_identity(self.project),
+        )
         task.signals.completed.connect(self._proposal_completed)
         task.signals.failed.connect(self._proposal_failed)
         self.proposal_generate.setEnabled(False)
@@ -1875,6 +1878,29 @@ class FxdWorkbenchWindow(QMainWindow):
         )
         return sha256(encoded.encode("utf-8")).hexdigest()
 
+    @staticmethod
+    def _proposal_project_identity(project: FxdProject | None) -> str | None:
+        if project is None:
+            return None
+        payload = {
+            "revision_id": project.revision_id,
+            "hidden_layers": sorted(project.hidden_layers),
+            "decisions": [item.__dict__ for item in project.decisions],
+            "revisions": [{
+                "revision_id": item.revision_id,
+                "parent_id": item.parent_id,
+                "active_concept": item.active_concept,
+                "edit_count": item.edit_count,
+                "validation_status": item.validation_status,
+                "evidence_digest": item.evidence_digest,
+                "suppressed_features": sorted(item.suppressed_features),
+            } for item in project.revisions],
+            "approved_revision": project.approved_revision,
+            "drawing_intent": project.drawing_intent,
+        }
+        encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+        return sha256(encoded.encode("utf-8")).hexdigest()
+
     def _invalidate_pending_proposal_generation(self) -> None:
         """Discard completions tied to a source or project being replaced."""
         self._proposal_request += 1
@@ -1892,7 +1918,8 @@ class FxdWorkbenchWindow(QMainWindow):
             return
         self._persist_process_setup_from_controls()
         if (self.workflow is None or request_context is None
-                or request_context != self._proposal_workflow_identity(self.workflow)
+                or request_context[0] != self._proposal_workflow_identity(self.workflow)
+                or request_context[1] != self._proposal_project_identity(self.project)
                 or self.document is None
                 or outcome.project.product.source_sha256 != self.document.source_sha256
                 or outcome.project.product.source_bytes != self.document.source_bytes
@@ -1903,7 +1930,7 @@ class FxdWorkbenchWindow(QMainWindow):
             self.proposal_cancel.setVisible(False)
             self.proposal_generate.setEnabled(True)
             self.statusBar().showMessage(
-                "Discarded fixture proposal generated for replaced source or workflow evidence."
+                "Discarded fixture proposal generated for replaced source, workflow, or project evidence."
             )
             return
         self._proposal_cancellation = None
