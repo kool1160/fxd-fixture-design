@@ -40,7 +40,7 @@ OPENAI_RESPONSES_ENDPOINT = "https://api.openai.com/v1/responses"
 OPENAI_MAX_CONTEXT_BYTES = 512_000
 OPENAI_MAX_RESPONSE_BYTES = 1_000_000
 OPENAI_MAX_TIMEOUT_SECONDS = 60.0
-OPENAI_MAX_OUTPUT_TOKENS = 4_096
+OPENAI_MAX_OUTPUT_TOKENS = 8_192
 
 
 class FixtureProposalError(ValueError):
@@ -624,6 +624,20 @@ class OpenAiResponsesProvider:
         if not isinstance(raw, dict):
             raise FixtureProposalError("OpenAI response was malformed")
         if raw.get("status") == "incomplete":
+            incomplete_details = raw.get("incomplete_details")
+            reason = (
+                incomplete_details.get("reason")
+                if isinstance(incomplete_details, dict) else None
+            )
+            if isinstance(reason, str):
+                if reason in {"max_output_tokens", "max_tokens"}:
+                    raise FixtureProposalError(
+                        "OpenAI response reached the output-token limit"
+                    )
+                if reason == "content_filter":
+                    raise FixtureProposalError(
+                        "OpenAI response was stopped by content filtering"
+                    )
             raise FixtureProposalError("OpenAI response was incomplete")
         output = raw.get("output")
         if not isinstance(output, list):
@@ -727,6 +741,8 @@ def _sanitized_provider_failure_reason(provider: AiFixtureProvider, exc: Excepti
         "OpenAI response exceeded the configured safe limit",
         "OpenAI response was malformed",
         "OpenAI response was incomplete",
+        "OpenAI response reached the output-token limit",
+        "OpenAI response was stopped by content filtering",
         "OpenAI response was refused",
         "OpenAI response did not contain a JSON proposal",
         "OpenAI JSON proposal was not an object",

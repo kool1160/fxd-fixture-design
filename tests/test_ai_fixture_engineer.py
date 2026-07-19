@@ -290,7 +290,7 @@ class AiFixtureEngineerTests(unittest.TestCase):
         self.assertEqual(payload["model"], "configured-model")
         self.assertFalse(payload["store"])
         self.assertEqual(len(payload["input"]), 2)
-        self.assertEqual(payload["max_output_tokens"], 4096)
+        self.assertEqual(payload["max_output_tokens"], 8192)
         self.assertEqual(payload["text"]["format"]["type"], "json_schema")
         self.assertTrue(payload["text"]["format"]["strict"])
         schema = payload["text"]["format"]["schema"]
@@ -423,6 +423,56 @@ class AiFixtureEngineerTests(unittest.TestCase):
         self.assertEqual(
             restored.fixture_proposal.provenance.provider_message,
             outcome.proposal.provenance.provider_message,
+        )
+
+    def test_openai_output_limit_incomplete_is_sanitized_and_falls_back(self):
+        provider = OpenAiResponsesProvider("openai-secret-never-persisted", "configured-model")
+        response = _JsonHttpResponse({
+            "status": "incomplete",
+            "incomplete_details": {
+                "reason": "max_output_tokens",
+                "private_response_detail": "never persist this",
+            },
+            "output": [],
+        })
+        with patch(
+                "fxd_geometry.ai_fixture_engineer.urlopen",
+                side_effect=lambda *args, **kwargs: response):
+            outcome = generate_fixture_proposal(
+                self.document, self.workflow, provider=provider,
+            )
+        self.assertEqual(outcome.provider_state, ProviderState.FAILED)
+        self.assertEqual(outcome.proposal.provenance.source,
+                         ProposalSource.DETERMINISTIC_FALLBACK)
+        self.assertEqual(
+            outcome.proposal.provenance.provider_message,
+            "AI proposal failed or was quarantined: "
+            "OpenAI response reached the output-token limit.",
+        )
+        persisted = json.dumps(outcome.project.to_dict(), sort_keys=True)
+        self.assertNotIn("openai-secret-never-persisted", persisted)
+        self.assertNotIn("private_response_detail", persisted)
+        self.assertNotIn("never persist this", persisted)
+
+    def test_openai_accepts_structured_output_near_the_previous_token_ceiling(self):
+        response = ai_response_from_proposal(self.fallback.proposal)
+        response["recommendations"][0]["engineering_reason"] = "evidence " * 3900
+        http_response = _JsonHttpResponse({"status": "completed", "output": [{
+            "type": "message", "content": [{
+                "type": "output_text", "text": json.dumps(response),
+            }],
+        }]})
+        provider = OpenAiResponsesProvider("openai-secret-never-persisted", "configured-model")
+        with patch(
+                "fxd_geometry.ai_fixture_engineer.urlopen",
+                side_effect=lambda *args, **kwargs: http_response):
+            outcome = generate_fixture_proposal(
+                self.document, self.workflow, provider=provider,
+            )
+        self.assertEqual(outcome.provider_state, ProviderState.SUCCESS)
+        self.assertEqual(outcome.proposal.provenance.source, ProposalSource.AI)
+        self.assertGreater(
+            len(outcome.proposal.recommendations[0].engineering_reason.split()), 3800,
         )
 
     @unittest.skipUnless(
