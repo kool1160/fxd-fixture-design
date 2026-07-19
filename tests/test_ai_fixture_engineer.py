@@ -487,7 +487,15 @@ class AiFixtureEngineerTests(unittest.TestCase):
         outcome = generate_fixture_proposal(
             self.document, self.workflow, provider=provider, timeout_seconds=45,
         )
-        self.assertEqual(outcome.provider_state, ProviderState.SUCCESS)
+        if outcome.provider_state != ProviderState.SUCCESS:
+            print(
+                "FXD_M31_SANITIZED_PROVIDER_FAILURE="
+                + outcome.proposal.provenance.provider_message
+            )
+        self.assertEqual(
+            outcome.provider_state, ProviderState.SUCCESS,
+            outcome.proposal.provenance.provider_message,
+        )
         self.assertEqual(outcome.proposal.provenance.source, ProposalSource.AI)
         self.assertEqual(self.source.read_bytes(), self.original)
 

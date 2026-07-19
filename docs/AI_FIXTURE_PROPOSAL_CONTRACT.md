@@ -43,6 +43,26 @@ no raw STEP bytes, limits compact context and response sizes, and makes no
 automatic retries. A live smoke test is opt-in only and requires
 `FXD_OPENAI_LIVE_SMOKE=1` as well as both configuration values above.
 
+### Windows live-provider acceptance
+
+From the repository root, run the local acceptance runner only when an
+engineer intentionally wants to make one live provider request:
+
+```powershell
+.\scripts\run_m31_live_acceptance.ps1
+```
+
+It confirms the FXD repository, branch, clean worktree, virtual environment,
+and required environment-variable presence without reading or printing the API
+key. It runs the existing opt-in smoke test exactly once, then runs the focused
+provider suite with the smoke flag disabled to prevent a second request. The
+concise summary contains only allowlisted, sanitized provider-failure categories.
+To open the desktop workbench after both automated checks pass, use:
+
+```powershell
+.\scripts\run_m31_live_acceptance.ps1 -LaunchGui
+```
+
 The generic HTTP JSON compatibility adapter reads configuration only from the
 process environment:
 
