@@ -6,8 +6,9 @@ The Foreman selects the first milestone whose status is not Complete, Blocked, W
 
 Milestones after 20 are governed by `docs/ROADMAP_QUEUE.md`. Milestone 31 was
 accepted and merged through PR #53 at
-`ac1e7a1799ef9be674f6ab5739e48d178fa2f1dc`; Milestone 32 is locally verified
-and awaiting its unmerged review PR and hosted workflow. This legacy backlog preserves its historical M1–M20
+`ac1e7a1799ef9be674f6ab5739e48d178fa2f1dc`; Milestone 32 has passed its
+hosted acceptance workflow and awaits engineering acceptance on its unmerged
+review PR. This legacy backlog preserves its historical M1–M20
 evidence and does not supersede the forward queue.
 
 ## Milestone 1 — Establish the runnable technical baseline

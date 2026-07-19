@@ -276,7 +276,8 @@ rules, supplier scraping, or paid-service enablement is included.
 
 ## Milestone 32 - Multi-station weld-fixture synthesis
 
-**Status:** Locally verified; unmerged review PR and hosted acceptance pending
+**Status:** Hosted pinned-OCP acceptance passed; draft review PR #54 open;
+engineering acceptance pending
 
 Turn an accepted proposal and deterministic manufacturing intent into the first
 practical editable multi-station OCP fixture assembly. The supported family is

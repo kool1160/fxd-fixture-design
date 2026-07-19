@@ -529,6 +529,9 @@ Focused M32, M30 fixture-build, proposal, project-persistence, and Qt workbench
 tests pass locally. The full suite passes 298 tests with 3 expected skips;
 `bash scripts/ci.sh` passes with the pinned OCP proof and secret scan; the M31
 PowerShell acceptance-runner suite passes 9 tests; and the Windows workbench
-launch confirms OCP/VTK availability plus the M32 Process controls. Remaining
-M32 evidence is the hosted pinned-OCP workflow and engineering acceptance. All
-outputs remain engineering-review-only.
+launch confirms OCP/VTK availability plus the M32 Process controls. PR #54's
+hosted `Kernel acceptance` workflow passed for implementation commit
+`e81db500e02f55a17ebe43bba6b30a006fb712da`, including pinned-wheel install,
+runtime proof, and repository validation. The PR remains draft and unmerged;
+engineering acceptance is still required. All outputs remain
+engineering-review-only.

@@ -38,9 +38,9 @@ AABB evidence is retained only as explicitly labelled fallback/debug evidence.
 ## Review boundary
 
 Milestone 31 is complete and merged. Milestone 32 has focused and full
-regression evidence, governed CI, and a Windows technical smoke check; it still
-requires hosted pinned-OCP acceptance, engineering acceptance, and an unmerged
-review pull request.
+regression evidence, governed CI, a Windows technical smoke check, and hosted
+pinned-OCP acceptance on PR #54. The draft PR remains unmerged; engineering
+acceptance is still required.
 The workbench and all exports remain engineering-review-only and never imply
 production, structural, weld-process, or safety approval.
 
