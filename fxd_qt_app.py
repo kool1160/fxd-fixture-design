@@ -631,6 +631,7 @@ class FxdWorkbenchWindow(QMainWindow):
         self._proposal_tasks: dict[int, _ProposalTask] = {}
         self._proposal_contexts: dict[int, tuple[str, str | None]] = {}
         self._proposal_cancellation: CancellationToken | None = None
+        self._first_successful_source_import = False
         self.ai_provider = ai_provider
         self._proposal_records: dict[str, object] = {}
         self._guided_issue_records: dict[str, object] = {}
@@ -672,8 +673,6 @@ class FxdWorkbenchWindow(QMainWindow):
         self.statusBar().showMessage("Open a legally shareable STEP file or FXD project.")
         self._set_property("Evidence", EVIDENCE_PROVISIONAL)
         self._refresh_shell_state()
-        if self._settings_enabled:
-            QTimer.singleShot(0, self.show_first_run_guide)
 
     def _replace_project(self, project: FxdProject | None) -> None:
         """Replace project state and invalidate geometry authored for the old revision."""
@@ -2042,6 +2041,11 @@ class FxdWorkbenchWindow(QMainWindow):
             f"Fallback used: {'No' if ai_assisted else 'Yes'}\n"
             f"Prompt contract: {proposal.provenance.prompt_contract_version}\n"
             f"Response contract: {proposal.provenance.response_contract_version}"
+            + (
+                f"\nProvider failure: {proposal.provenance.provider_message}"
+                if proposal.provenance.provider_state == ProviderState.FAILED
+                else ""
+            )
         )
 
     def _selected_proposal_recommendation(self):
@@ -2609,6 +2613,9 @@ class FxdWorkbenchWindow(QMainWindow):
             self.log.record("step_opened", source_sha256=document.source_sha256,
                             component_count=document.component_count,
                             elapsed_ms=import_elapsed_ms)
+            if self._settings_enabled and not self._first_successful_source_import:
+                self._first_successful_source_import = True
+                QTimer.singleShot(0, self.show_first_run_guide)
         except Exception as exc:
             logger.exception("STEP import failed for %s", source)
             self.viewport.clear()

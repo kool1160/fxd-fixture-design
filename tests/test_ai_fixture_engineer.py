@@ -215,7 +215,7 @@ class AiFixtureEngineerTests(unittest.TestCase):
             self.document, self.workflow, provider=_TimeoutProvider(),
         )
         self.assertEqual(outcome.provider_state, ProviderState.FAILED)
-        self.assertIn("timeout", outcome.message)
+        self.assertIn("timed out", outcome.message)
         cancellation = CancellationToken.create()
         cancellation.cancel()
         with self.assertRaises(ProposalCancelled):
@@ -347,6 +347,83 @@ class AiFixtureEngineerTests(unittest.TestCase):
                              ProposalSource.DETERMINISTIC_FALLBACK)
             self.assertIn(expected, outcome.message)
             self.assertNotIn("openai-secret-never-displayed", outcome.message)
+
+    def test_openai_failure_diagnostics_are_sanitized_and_distinguishable(self):
+        provider = OpenAiResponsesProvider("openai-secret-never-persisted", "configured-model")
+        cases = (
+            (
+                HTTPError("https://api.openai.com/v1/responses", 400, "private", None, None),
+                "OpenAI structured-output request was rejected.",
+            ),
+            (
+                HTTPError("https://api.openai.com/v1/responses", 404, "private", None, None),
+                "OpenAI model or endpoint is unavailable.",
+            ),
+            (
+                HTTPError("https://api.openai.com/v1/responses", 429, "private", None, None),
+                "OpenAI request limit prevented proposal generation.",
+            ),
+            (
+                _JsonHttpResponse({"status": "incomplete", "output": []}),
+                "OpenAI response was incomplete.",
+            ),
+            (
+                _JsonHttpResponse({"status": "completed", "output": "private"}),
+                "OpenAI response contained no structured output.",
+            ),
+        )
+        for side_effect, reason in cases:
+            handler = (
+                (lambda *args, response=side_effect, **kwargs: response)
+                if isinstance(side_effect, _JsonHttpResponse) else side_effect
+            )
+            with self.subTest(reason=reason), patch(
+                    "fxd_geometry.ai_fixture_engineer.urlopen", side_effect=handler):
+                outcome = generate_fixture_proposal(
+                    self.document, self.workflow, provider=provider,
+                )
+            self.assertEqual(outcome.provider_state, ProviderState.FAILED)
+            self.assertEqual(outcome.proposal.provenance.source,
+                             ProposalSource.DETERMINISTIC_FALLBACK)
+            self.assertEqual(
+                outcome.proposal.provenance.provider_message,
+                "AI proposal failed or was quarantined: " + reason,
+            )
+            persisted = json.dumps(outcome.proposal.to_dict(), sort_keys=True)
+            self.assertNotIn("openai-secret-never-persisted", persisted)
+            self.assertNotIn("private", persisted)
+
+        rejected = ai_response_from_proposal(self.fallback.proposal)
+        rejected["recommendations"][0]["source_evidence"][0]["identity"] = "face:private"
+        response = _JsonHttpResponse({"status": "completed", "output": [{
+            "type": "message", "content": [{
+                "type": "output_text", "text": json.dumps(rejected),
+            }],
+        }]})
+        with patch(
+                "fxd_geometry.ai_fixture_engineer.urlopen",
+                side_effect=lambda *args, **kwargs: response):
+            outcome = generate_fixture_proposal(
+                self.document, self.workflow, provider=provider,
+            )
+        self.assertEqual(outcome.provider_state, ProviderState.FAILED)
+        self.assertEqual(
+            outcome.proposal.provenance.provider_message,
+            "AI proposal failed or was quarantined: "
+            "FXD typed proposal contract rejected provider output.",
+        )
+        self.assertNotIn("face:private", json.dumps(outcome.proposal.to_dict()))
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / "sanitized-failure.fxd.json"
+            outcome.project.save(target)
+            persisted = target.read_text(encoding="utf-8")
+            restored = FxdProject.load(target)
+        self.assertNotIn("face:private", persisted)
+        self.assertNotIn("openai-secret-never-persisted", persisted)
+        self.assertEqual(
+            restored.fixture_proposal.provenance.provider_message,
+            outcome.proposal.provenance.provider_message,
+        )
 
     @unittest.skipUnless(
         os.environ.get("FXD_OPENAI_LIVE_SMOKE") == "1"

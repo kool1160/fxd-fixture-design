@@ -611,6 +611,8 @@ class OpenAiResponsesProvider:
     def _failure_for_status(status: int) -> FixtureProposalError:
         if status in {401, 403}:
             return FixtureProposalError("OpenAI authentication is unavailable")
+        if status in {400, 422}:
+            return FixtureProposalError("OpenAI structured-output request was rejected")
         if status == 404:
             return FixtureProposalError("OpenAI model or endpoint is unavailable")
         if status == 429:
@@ -702,6 +704,40 @@ class OpenAiResponsesProvider:
             raise FixtureProposalError("OpenAI response was malformed") from exc
         cancellation.raise_if_cancelled()
         return self._extract_output(raw)
+
+
+def _sanitized_provider_failure_reason(provider: AiFixtureProvider, exc: Exception) -> str:
+    """Keep provider diagnostics useful without retaining response or prompt content."""
+    if isinstance(exc, TimeoutError):
+        return (
+            "OpenAI provider request timed out."
+            if provider.identity == "openai" else "AI provider request timed out."
+        )
+    if provider.identity != "openai":
+        return "AI provider failed safely."
+    message = str(exc)
+    known_reasons = {
+        "OpenAI authentication is unavailable",
+        "OpenAI structured-output request was rejected",
+        "OpenAI model or endpoint is unavailable",
+        "OpenAI request limit prevented proposal generation",
+        "OpenAI Responses request failed",
+        "OpenAI Responses request was unavailable",
+        "OpenAI proposal context exceeds the configured safe limit",
+        "OpenAI response exceeded the configured safe limit",
+        "OpenAI response was malformed",
+        "OpenAI response was incomplete",
+        "OpenAI response was refused",
+        "OpenAI response did not contain a JSON proposal",
+        "OpenAI JSON proposal was not an object",
+        "OpenAI response contained no structured output",
+        "OpenAI response contained no JSON proposal",
+    }
+    if message in known_reasons:
+        return message + "."
+    if message.startswith("AI "):
+        return "FXD typed proposal contract rejected provider output."
+    return "OpenAI provider failed safely."
 
 
 class HttpJsonAiProvider:
@@ -1635,9 +1671,10 @@ def generate_fixture_proposal(
         except Exception as exc:
             if not allow_fallback:
                 raise
+            failure_reason = _sanitized_provider_failure_reason(provider, exc)
             proposal = deterministic_baseline_proposal(
                 project, provider_state=ProviderState.FAILED,
-                provider_message=f"AI proposal failed or was quarantined: {exc}",
+                provider_message=f"AI proposal failed or was quarantined: {failure_reason}",
             )
             state = ProviderState.FAILED
             message = proposal.provenance.provider_message

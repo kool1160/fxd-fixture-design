@@ -146,6 +146,15 @@ class FailingViewport(FakeViewport):
         raise RuntimeError("injected native renderer startup failure")
 
 
+class _OpenAiSchemaFailureProvider:
+    identity = "openai"
+    engine_identifier = "configured-model"
+    available = True
+
+    def generate(self, request, *, timeout_seconds, cancellation):
+        raise RuntimeError("OpenAI structured-output request was rejected")
+
+
 class QtWorkbenchTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -533,6 +542,33 @@ class QtWorkbenchTests(unittest.TestCase):
         self.assertIn("Fallback used: Yes", self.window.proposal_technical_details.text())
         self.assertEqual(self.window.document.source_bytes, original)
 
+    def test_failed_openai_reason_is_visible_only_in_technical_proposal_details(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = self._real_step(directory)
+            original = source.read_bytes()
+            self.window.load_step_path(source)
+            component = self.window.document.assembly.components[0]
+            bottom = component.faces[0]
+            front = next(face for face in component.faces if abs(sum(
+                left * right for left, right in zip(bottom.normal, face.normal)
+            )) < 0.1)
+            self.window.viewport.face_picked.emit(bottom.reference)
+            self.window.accept_guided_bottom_face()
+            self.window.viewport.face_picked.emit(front.reference)
+            self.window.preview_guided_orientation()
+            self.window.accept_guided_orientation()
+            self.window.apply_proposal_recommended_intent()
+            outcome = self.window.generate_fixture_proposal_now(_OpenAiSchemaFailureProvider())
+        self.assertEqual(outcome.provider_state.value, "proposal_generation_failed")
+        self.assertIn("Deterministic baseline proposal", self.window.proposal_status.text())
+        self.assertIn(
+            "Provider failure: AI proposal failed or was quarantined: "
+            "OpenAI structured-output request was rejected.",
+            self.window.proposal_technical_details.text(),
+        )
+        self.assertNotIn("OpenAI structured-output", self.window.proposal_status.text())
+        self.assertEqual(self.window.document.source_bytes, original)
+
     def test_stale_background_proposal_completion_is_discarded_after_source_replacement(self):
         with tempfile.TemporaryDirectory() as directory:
             first = self._real_step(directory)
@@ -687,6 +723,33 @@ class QtWorkbenchTests(unittest.TestCase):
         self.assertIn("STALE", self.window.proposal_summary.text())
         self.assertFalse(self.window.proposal_accept.isEnabled())
 
+    def test_first_run_guide_waits_for_successful_source_import(self):
+        self.window._settings_enabled = True
+        self.window.settings.remove("guide/fixture_proposal_dismissed")
+        self.application.processEvents()
+        self.assertFalse(getattr(self.window, "_first_run_dialog", None))
+        with tempfile.TemporaryDirectory() as directory:
+            self.window.load_step_path(self._real_step(directory))
+            QTest.qWait(5)
+        dialog = self.window._first_run_dialog
+        self.assertTrue(dialog.isVisible())
+        dialog.close()
+        self.window.settings.remove("guide/fixture_proposal_dismissed")
+
+    def test_first_run_guide_ignores_failed_or_cancelled_imports(self):
+        self.window._settings_enabled = True
+        self.window.settings.remove("guide/fixture_proposal_dismissed")
+        with patch("fxd_qt_app.QMessageBox.critical"):
+            with self.assertRaises(KernelOperationError):
+                self.window.load_step_path(FIXTURE)
+        self.application.processEvents()
+        self.assertFalse(getattr(self.window, "_first_run_dialog", None))
+        with patch("fxd_qt_app.QFileDialog.getOpenFileName", return_value=("", "")):
+            self.window.import_step()
+        self.application.processEvents()
+        self.assertFalse(getattr(self.window, "_first_run_dialog", None))
+        self.window.settings.remove("guide/fixture_proposal_dismissed")
+
     def test_first_run_guide_can_be_disabled_and_reopened(self):
         self.window.settings.remove("guide/fixture_proposal_dismissed")
         self.window.show_first_run_guide(True)
@@ -701,7 +764,12 @@ class QtWorkbenchTests(unittest.TestCase):
         self.assertTrue(self.window.settings.value(
             "guide/fixture_proposal_dismissed", False, type=bool
         ))
-        self.window.show_first_run_guide(True)
+        self.window._settings_enabled = True
+        with tempfile.TemporaryDirectory() as directory:
+            self.window.load_step_path(self._real_step(directory))
+            QTest.qWait(5)
+        self.assertFalse(self.window._first_run_dialog.isVisible())
+        self.window._actions["first_run_guide"].trigger()
         self.assertTrue(self.window._first_run_dialog.isVisible())
         self.window._first_run_dialog.close()
         self.window.settings.remove("guide/fixture_proposal_dismissed")
