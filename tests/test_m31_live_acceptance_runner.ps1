@@ -40,23 +40,23 @@ Describe "M31 live acceptance runner summaries" {
         )).Count | Should Be 1
     }
 
+    It "stops before focused checks when the live smoke does not pass" {
+        $content = Get-Content -LiteralPath $runner -Raw
+        $liveFailureGate = $content.IndexOf('if ($liveSummary.Status -ne "passed")')
+        $focusedInvocation = $content.IndexOf('$focusedResult = Invoke-M31Unittest')
+
+        ($liveFailureGate -ge 0) | Should Be $true
+        ($focusedInvocation -ge 0) | Should Be $true
+        ($liveFailureGate -lt $focusedInvocation) | Should Be $true
+    }
+
     It "captures unittest stderr and preserves a started failure result" {
         $python = Join-Path $PSScriptRoot "..\.venv\Scripts\python.exe"
-        $previous = [Environment]::GetEnvironmentVariable("FXD_M31_RUNNER_CAPTURE_TEST")
-        try {
-            $env:FXD_M31_RUNNER_CAPTURE_TEST = "1"
-            $result = Invoke-M31Unittest -Python $python -TestArguments @(
-                "tests.test_m31_runner_capture_fixture",
-                "-v"
-            )
-        }
-        finally {
-            if ($null -eq $previous) {
-                Remove-Item -LiteralPath "Env:FXD_M31_RUNNER_CAPTURE_TEST" -ErrorAction SilentlyContinue
-            }
-            else {
-                $env:FXD_M31_RUNNER_CAPTURE_TEST = $previous
-            }
+        $result = Invoke-M31Unittest -Python $python -TestArguments @(
+            "tests.test_m31_runner_capture_fixture",
+            "-v"
+        ) -EnvironmentOverrides @{
+            "FXD_M31_RUNNER_CAPTURE_TEST" = "1"
         }
 
         $summary = Get-M31UnittestSummary -OutputLines $result.OutputLines -ExitCode $result.ExitCode
@@ -65,5 +65,68 @@ Describe "M31 live acceptance runner summaries" {
         ($result.OutputLines -join "`n") | Should Match "FAIL"
         $summary.Status | Should Be "failed"
         $category | Should Be "top-level schema mismatch"
+    }
+
+    It "removes provider configuration from the focused child without changing the parent" {
+        $python = Join-Path $PSScriptRoot "..\.venv\Scripts\python.exe"
+        $beforePresence = @{}
+        foreach ($name in $script:FocusedProviderEnvironmentNames) {
+            $beforePresence[$name] = Test-Path -LiteralPath ("Env:" + $name)
+        }
+        $result = Invoke-M31Unittest -Python $python -DisableLiveSmoke -TestArguments @(
+            "tests.test_m31_runner_environment_fixture",
+            "-v"
+        ) -EnvironmentOverrides @{
+            "FXD_M31_RUNNER_ENV_CAPTURE_TEST" = "1"
+            "FXD_M31_RUNNER_ENV_EXPECTATION" = "focused"
+            "OPENAI_API_KEY" = "test-configured"
+            "FXD_OPENAI_MODEL" = "test-configured"
+            "FXD_AI_MODEL" = "test-configured"
+            "FXD_AI_PROVIDER" = "test-configured"
+            "FXD_AI_ENDPOINT" = "test-configured"
+            "FXD_AI_API_KEY" = "test-configured"
+            "FXD_OPENAI_LIVE_SMOKE" = "1"
+        }
+
+        $result.ExitCode | Should Be 0
+        ($result.OutputLines -join "`n") | Should Match "FXD_M31_FOCUSED_PROVIDER_CONFIGURATION_ABSENT"
+        foreach ($name in $script:FocusedProviderEnvironmentNames) {
+            (Test-Path -LiteralPath ("Env:" + $name)) | Should Be $beforePresence[$name]
+        }
+    }
+
+    It "preserves configured provider state for the live child" {
+        $python = Join-Path $PSScriptRoot "..\.venv\Scripts\python.exe"
+        $result = Invoke-M31Unittest -Python $python -TestArguments @(
+            "tests.test_m31_runner_environment_fixture",
+            "-v"
+        ) -EnvironmentOverrides @{
+            "FXD_M31_RUNNER_ENV_CAPTURE_TEST" = "1"
+            "FXD_M31_RUNNER_ENV_EXPECTATION" = "live"
+            "OPENAI_API_KEY" = "test-configured"
+            "FXD_OPENAI_MODEL" = "test-configured"
+            "FXD_AI_MODEL" = "test-configured"
+            "FXD_AI_PROVIDER" = "test-configured"
+            "FXD_AI_ENDPOINT" = "test-configured"
+            "FXD_AI_API_KEY" = "test-configured"
+            "FXD_OPENAI_LIVE_SMOKE" = "1"
+        }
+
+        $result.ExitCode | Should Be 0
+        ($result.OutputLines -join "`n") | Should Match "FXD_M31_LIVE_PROVIDER_CONFIGURATION_PRESERVED"
+    }
+
+    It "runs the focused AI fixture suite in a child that cannot select a network provider" {
+        $python = Join-Path $PSScriptRoot "..\.venv\Scripts\python.exe"
+        $result = Invoke-M31Unittest -Python $python -DisableLiveSmoke -TestArguments @(
+            "tests.test_ai_fixture_engineer",
+            "-v"
+        )
+
+        $summary = Get-M31UnittestSummary -OutputLines $result.OutputLines -ExitCode $result.ExitCode
+        $result.ExitCode | Should Be 0
+        $summary.Total | Should BeGreaterThan 0
+        $summary.Skipped | Should BeGreaterThan 0
+        $summary.Status | Should Be "skipped"
     }
 }

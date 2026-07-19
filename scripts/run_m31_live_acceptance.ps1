@@ -22,6 +22,18 @@ $script:KnownM31ProviderFailureCategories = @(
     "provider-authored engineer decision"
 )
 
+# The focused provider suite must exercise deterministic offline behavior even
+# when the caller has live or generic provider configuration in its environment.
+# These names are removed only from the focused child process.
+$script:FocusedProviderEnvironmentNames = @(
+    "OPENAI_API_KEY",
+    "FXD_OPENAI_MODEL",
+    "FXD_AI_MODEL",
+    "FXD_AI_PROVIDER",
+    "FXD_AI_ENDPOINT",
+    "FXD_AI_API_KEY"
+)
+
 function Get-M31UnittestSummary {
     param(
         [string[]]$OutputLines,
@@ -65,7 +77,8 @@ function Invoke-M31Unittest {
     param(
         [string]$Python,
         [string[]]$TestArguments,
-        [switch]$DisableLiveSmoke
+        [switch]$DisableLiveSmoke,
+        [hashtable]$EnvironmentOverrides = @{}
     )
 
     $startInfo = New-Object System.Diagnostics.ProcessStartInfo
@@ -75,7 +88,13 @@ function Invoke-M31Unittest {
     $startInfo.CreateNoWindow = $true
     $startInfo.RedirectStandardOutput = $true
     $startInfo.RedirectStandardError = $true
+    foreach ($name in $EnvironmentOverrides.Keys) {
+        $startInfo.EnvironmentVariables[[string]$name] = [string]$EnvironmentOverrides[$name]
+    }
     if ($DisableLiveSmoke) {
+        foreach ($name in $script:FocusedProviderEnvironmentNames) {
+            $startInfo.EnvironmentVariables.Remove($name)
+        }
         $startInfo.EnvironmentVariables["FXD_OPENAI_LIVE_SMOKE"] = "0"
     }
     $process = New-Object System.Diagnostics.Process
@@ -177,8 +196,12 @@ function Invoke-M31LiveAcceptance {
         $liveSmokeStatus = $liveSummary.Status
         $providerFailureCategory = Get-M31SanitizedProviderFailureCategory -OutputLines $liveResult.OutputLines
 
-        # The provider suite is intentionally run with the opt-in smoke disabled so
-        # this runner makes no second live request.
+        if ($liveSummary.Status -ne "passed") {
+            throw "The opt-in live OpenAI smoke test did not pass."
+        }
+
+        # The focused provider suite is a credential-free child process.  It cannot
+        # select a live or generic provider, so this runner makes no second request.
         $focusedResult = Invoke-M31Unittest -Python $python -DisableLiveSmoke -TestArguments @(
             "tests.test_ai_fixture_engineer",
             "-v"
@@ -187,9 +210,6 @@ function Invoke-M31LiveAcceptance {
         $focusedTestTotals = "{0} run, {1} skipped ({2})" -f `
             $focusedSummary.Total, $focusedSummary.Skipped, $focusedSummary.Status
 
-        if ($liveSummary.Status -ne "passed") {
-            throw "The opt-in live OpenAI smoke test did not pass."
-        }
         if ($focusedSummary.Status -eq "failed") {
             throw "Focused AI fixture provider tests failed."
         }
