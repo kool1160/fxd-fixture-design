@@ -25,6 +25,7 @@ from .access import evaluate_access
 from .weld_rules import evaluate_weld_rules
 
 if TYPE_CHECKING:
+    from .ai_fixture_engineer import FixtureProposal
     from .fabrication_workflow import FixtureBuildPlan
     from .interactive_workflow import InteractiveWorkflow
 
@@ -38,7 +39,7 @@ SUPPORTED_LAYERS = frozenset({
     "supports", "stops", "clamps", "welds", "access", "keep_out",
     "warnings", "provisional",
 })
-PROJECT_FORMAT = "fxd-neutral-project-v4"
+PROJECT_FORMAT = "fxd-neutral-project-v5"
 
 
 @dataclass(frozen=True)
@@ -134,6 +135,7 @@ class FxdProject:
     optimization_intent: dict[str, object] | None = None
     workflow: "InteractiveWorkflow | None" = None
     fixture_build: "FixtureBuildPlan | None" = None
+    fixture_proposal: "FixtureProposal | None" = None
 
     def __post_init__(self) -> None:
         if self.annotations.source_sha256 != self.product.source_sha256:
@@ -157,6 +159,9 @@ class FxdProject:
                 raise ProjectFormatError("fixture build does not match the immutable source geometry")
             if self.fixture_build.concept_identity != self.active_concept:
                 raise ProjectFormatError("fixture build must belong to the active fixture concept")
+        if self.fixture_proposal is not None:
+            if self.fixture_proposal.source_sha256 != self.product.source_sha256:
+                raise ProjectFormatError("fixture proposal does not match the immutable source geometry")
 
     @classmethod
     def from_product(cls, product: ProductModel, annotations: EngineeringAnnotations,
@@ -212,6 +217,45 @@ class FxdProject:
         """Clear evidence derived from manufacturing or drawing state."""
         return replace(self, drawing_intent=None, optimization_intent=None, fixture_build=None)
 
+    def with_fixture_proposal(self, proposal: "FixtureProposal") -> "FxdProject":
+        """Persist reviewed proposal evidence and invalidate authored downstream geometry."""
+        if proposal.source_sha256 != self.product.source_sha256:
+            raise ProjectFormatError("fixture proposal does not match the immutable source geometry")
+        from .ai_fixture_engineer import validate_fixture_proposal
+        candidate = replace(
+            self, fixture_proposal=None, drawing_intent=None,
+            optimization_intent=None, fixture_build=None, approved_revision=None,
+        )
+        proposal = validate_fixture_proposal(candidate, proposal)
+        candidate = replace(candidate, fixture_proposal=proposal)
+        return candidate._record_revision(self.revision_id)
+
+    def decide_proposal_recommendation(self, recommendation_id: str, decision: object,
+                                       note: str = "") -> "FxdProject":
+        if self.fixture_proposal is None:
+            raise ProjectFormatError("project has no fixture proposal to review")
+        from .ai_fixture_engineer import decide_recommendation, validate_fixture_proposal
+        proposal = decide_recommendation(
+            self.fixture_proposal, recommendation_id, decision, note,
+        )
+        proposal = validate_fixture_proposal(self, proposal)
+        return self.with_fixture_proposal(proposal)
+
+    def edit_proposal_recommendation(self, recommendation_id: str,
+                                     values: dict[str, object], note: str) -> "FxdProject":
+        if self.fixture_proposal is None:
+            raise ProjectFormatError("project has no fixture proposal to edit")
+        from .ai_fixture_engineer import edit_recommendation, validate_fixture_proposal
+        proposal = edit_recommendation(self.fixture_proposal, recommendation_id, values, note)
+        proposal = validate_fixture_proposal(self, proposal)
+        return self.with_fixture_proposal(proposal)
+
+    def decide_fixture_proposal(self, decision: str, note: str = "") -> "FxdProject":
+        if self.fixture_proposal is None:
+            raise ProjectFormatError("project has no fixture proposal to decide")
+        from .ai_fixture_engineer import decide_proposal
+        return self.with_fixture_proposal(decide_proposal(self.fixture_proposal, decision, note))
+
     def with_drawing_intent(self, intent: dict[str, object] | None) -> "FxdProject":
         """Attach drawing evidence and invalidate dependent cost evidence."""
         return replace(self, drawing_intent=intent, optimization_intent=None)
@@ -245,6 +289,36 @@ class FxdProject:
         if workflow.source_sha256 != self.product.source_sha256:
             raise ProjectFormatError("interactive workflow does not match the immutable source geometry")
         candidate = replace(self, workflow=workflow, approved_revision=None)
+        if candidate.fixture_proposal is not None:
+            from .ai_fixture_engineer import (
+                proposal_engineering_context_identity, validate_fixture_proposal,
+            )
+            original_identity = candidate.fixture_proposal.proposal_identity
+            original_blockers = tuple(
+                item.issue_id for item in candidate.fixture_proposal.guided_issues
+                if item.severity == "error"
+            )
+            validated = validate_fixture_proposal(candidate, candidate.fixture_proposal)
+            proposal_changed = validated.proposal_identity != original_identity
+            current_orientation = workflow.setup.manufacturing_orientation
+            stale = validated.stale_reason(
+                candidate.product.source_sha256,
+                current_orientation.identity if current_orientation is not None else None,
+                proposal_engineering_context_identity(candidate)
+                if candidate.workflow.has_accepted_manufacturing_orientation() else None,
+            )
+            blocker_state_changed = original_blockers != tuple(
+                item.issue_id for item in validated.guided_issues if item.severity == "error"
+            )
+            invalidate_downstream = (
+                proposal_changed or stale is not None or blocker_state_changed
+            )
+            candidate = replace(
+                candidate, fixture_proposal=validated,
+                drawing_intent=None if invalidate_downstream else candidate.drawing_intent,
+                optimization_intent=None if invalidate_downstream else candidate.optimization_intent,
+                fixture_build=None if invalidate_downstream else candidate.fixture_build,
+            )
         return candidate._record_revision(self.revision_id)
 
     def with_fixture_build(self, fixture_build: "FixtureBuildPlan") -> "FxdProject":
@@ -271,6 +345,8 @@ class FxdProject:
             payload["placement_digest"] = self.placement.evidence_digest if self.placement else None
         if self.fixture_build is not None:
             payload["fixture_build"] = self.fixture_build.to_dict()
+        if self.fixture_proposal is not None:
+            payload["fixture_proposal"] = self.fixture_proposal.to_dict()
         encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"))
         return "rev-" + hashlib.sha256(encoded.encode()).hexdigest()[:16]
 
@@ -478,6 +554,23 @@ class FxdProject:
             raise ProjectFormatError("review action must be approve_for_review or reject")
         validation = self.active_validation
         if action == "approve_for_review":
+            if self.fixture_proposal is not None:
+                orientation = self.workflow.setup.manufacturing_orientation if self.workflow else None
+                from .ai_fixture_engineer import proposal_engineering_context_identity
+                stale = self.fixture_proposal.stale_reason(
+                    self.product.source_sha256, orientation.identity if orientation else None,
+                    proposal_engineering_context_identity(self)
+                    if self.workflow and self.workflow.has_accepted_manufacturing_orientation()
+                    else None,
+                )
+                if stale:
+                    raise ProjectFormatError(f"stale fixture proposal cannot be approved: {stale}")
+                if self.fixture_proposal.blocker_count:
+                    raise ProjectFormatError(
+                        "fixture proposal with deterministic blockers cannot be approved")
+                if self.fixture_proposal.proposal_decision != "accepted_for_engineering_review":
+                    raise ProjectFormatError(
+                        "fixture proposal must be accepted for engineering review before approval")
             if validation.blocked:
                 raise ProjectFormatError(
                     "invalid deterministic validation result cannot be approved for engineering review")
@@ -497,7 +590,7 @@ class FxdProject:
             for result in (self.validation_for(concept),)
         }
         return {
-            "format": PROJECT_FORMAT, "schema_version": 4, "units": "mm",
+            "format": PROJECT_FORMAT, "schema_version": 5, "units": "mm",
             "source_name": self.product.source_name,
             "source_sha256": self.product.source_sha256,
             "source_step_base64": base64.b64encode(self.product.source_bytes).decode("ascii"),
@@ -520,6 +613,7 @@ class FxdProject:
             "optimization_intent": self.optimization_intent,
             "interactive_workflow": self.workflow.to_dict() if self.workflow else None,
             "fixture_build": self.fixture_build.to_dict() if self.fixture_build else None,
+            "fixture_proposal": self.fixture_proposal.to_dict() if self.fixture_proposal else None,
             "validations": validations,
             "concept_corrections": {
                 concept.identity: [correction.__dict__ for correction in concept.corrections]
@@ -580,7 +674,8 @@ class FxdProject:
         try:
             data = json.loads(Path(source).read_text(encoding="utf-8"))
             if data.get("format") not in {
-                    "fxd-neutral-project-v1", "fxd-neutral-project-v2", "fxd-neutral-project-v3", PROJECT_FORMAT
+                    "fxd-neutral-project-v1", "fxd-neutral-project-v2", "fxd-neutral-project-v3",
+                    "fxd-neutral-project-v4", PROJECT_FORMAT
             } or data.get("units") != "mm":
                 raise ProjectFormatError("unsupported FXD project format or units")
             raw = base64.b64decode(data["source_step_base64"], validate=True)
@@ -622,6 +717,12 @@ class FxdProject:
                 else:
                     raise ProjectFormatError(f"unsupported saved edit {edit.operation!r}")
             project = project.with_concept(data["active_concept"])
+            fixture_proposal_data = data.get("fixture_proposal")
+            if fixture_proposal_data:
+                from .ai_fixture_engineer import FixtureProposal
+                project = project.with_fixture_proposal(
+                    FixtureProposal.from_dict(fixture_proposal_data)
+                )
             fixture_build_data = data.get("fixture_build")
             if fixture_build_data:
                 from .fabrication_workflow import FixtureBuildPlan

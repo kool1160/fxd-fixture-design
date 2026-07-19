@@ -1,0 +1,246 @@
+param(
+    [switch]$LaunchGui
+)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+$script:RunnerPath = $PSCommandPath
+
+$script:KnownM31ProviderFailureCategories = @(
+    "top-level schema mismatch",
+    "source identity mismatch",
+    "orientation identity mismatch",
+    "engineering-context mismatch",
+    "unsupported recommendation type",
+    "unsupported validation status",
+    "malformed confidence",
+    "missing or empty evidence",
+    "missing or empty deterministic checks",
+    "unknown governed identity",
+    "malformed geometry reference",
+    "malformed editable parameter",
+    "provider-authored engineer decision"
+)
+
+# The focused provider suite must exercise deterministic offline behavior even
+# when the caller has live or generic provider configuration in its environment.
+# These names are removed only from the focused child process.
+$script:FocusedProviderEnvironmentNames = @(
+    "OPENAI_API_KEY",
+    "FXD_OPENAI_MODEL",
+    "FXD_AI_MODEL",
+    "FXD_AI_PROVIDER",
+    "FXD_AI_ENDPOINT",
+    "FXD_AI_API_KEY"
+)
+
+function Get-M31UnittestSummary {
+    param(
+        [string[]]$OutputLines,
+        [int]$ExitCode
+    )
+
+    $output = $OutputLines -join "`n"
+    $runMatch = [regex]::Match($output, "Ran (?<count>\d+) tests? in")
+    $skipMatch = [regex]::Match($output, "skipped=(?<count>\d+)")
+    $total = if ($runMatch.Success) { [int]$runMatch.Groups["count"].Value } else { 0 }
+    $skipped = if ($skipMatch.Success) { [int]$skipMatch.Groups["count"].Value } else { 0 }
+    $status = if ($ExitCode -ne 0) {
+        "failed"
+    }
+    elseif ($skipped -gt 0) {
+        "skipped"
+    }
+    else {
+        "passed"
+    }
+    return [pscustomobject]@{
+        Total = $total
+        Skipped = $skipped
+        Status = $status
+    }
+}
+
+function Get-M31SanitizedProviderFailureCategory {
+    param([string[]]$OutputLines)
+
+    foreach ($category in $script:KnownM31ProviderFailureCategories) {
+        $marker = "FXD_M31_SANITIZED_PROVIDER_FAILURE=$category"
+        if ($OutputLines | Where-Object { $_.Contains($marker) }) {
+            return $category
+        }
+    }
+    return "unavailable"
+}
+
+function Invoke-M31Unittest {
+    param(
+        [string]$Python,
+        [string[]]$TestArguments,
+        [switch]$DisableLiveSmoke,
+        [hashtable]$EnvironmentOverrides = @{}
+    )
+
+    $startInfo = New-Object System.Diagnostics.ProcessStartInfo
+    $startInfo.FileName = $Python
+    $startInfo.Arguments = "-m unittest " + ($TestArguments -join " ")
+    $startInfo.UseShellExecute = $false
+    $startInfo.CreateNoWindow = $true
+    $startInfo.RedirectStandardOutput = $true
+    $startInfo.RedirectStandardError = $true
+    foreach ($name in $EnvironmentOverrides.Keys) {
+        $startInfo.EnvironmentVariables[[string]$name] = [string]$EnvironmentOverrides[$name]
+    }
+    if ($DisableLiveSmoke) {
+        foreach ($name in $script:FocusedProviderEnvironmentNames) {
+            $startInfo.EnvironmentVariables.Remove($name)
+        }
+        $startInfo.EnvironmentVariables["FXD_OPENAI_LIVE_SMOKE"] = "0"
+    }
+    $process = New-Object System.Diagnostics.Process
+    $process.StartInfo = $startInfo
+    [void]$process.Start()
+    $stdoutTask = $process.StandardOutput.ReadToEndAsync()
+    $stderrTask = $process.StandardError.ReadToEndAsync()
+    $process.WaitForExit()
+    $stdout = $stdoutTask.GetAwaiter().GetResult()
+    $stderr = $stderrTask.GetAwaiter().GetResult()
+    $output = @(
+        ($stdout -split "`r?`n"),
+        ($stderr -split "`r?`n")
+    ) | Where-Object { $_ -ne "" }
+    return [pscustomobject]@{
+        OutputLines = [string[]]$output
+        ExitCode = $process.ExitCode
+    }
+}
+
+function Write-M31Summary {
+    param(
+        [string]$Branch,
+        [string]$Sha,
+        [string]$LiveSmokeStatus,
+        [string]$FocusedTestTotals,
+        [string]$ProviderFailureCategory
+    )
+
+    Write-Host ""
+    Write-Host "M31 live-provider acceptance summary"
+    Write-Host "Branch: $Branch"
+    Write-Host "SHA: $Sha"
+    Write-Host "Live smoke: $LiveSmokeStatus"
+    Write-Host "Focused tests: $FocusedTestTotals"
+    Write-Host "Sanitized provider failure category: $ProviderFailureCategory"
+}
+
+function Invoke-M31LiveAcceptance {
+    $branch = "unavailable"
+    $sha = "unavailable"
+    $liveSmokeStatus = "not run"
+    $focusedTestTotals = "not run"
+    $providerFailureCategory = "unavailable"
+    $exitCode = 0
+    $checksPassed = $false
+    $python = $null
+
+    try {
+        $scriptPath = [System.IO.Path]::GetFullPath($script:RunnerPath)
+        $root = [System.IO.Path]::GetFullPath((Join-Path (Split-Path $scriptPath -Parent) ".."))
+        $repositoryRoot = (& git -C $root rev-parse --show-toplevel 2>$null).Trim()
+        if ($LASTEXITCODE -ne 0 -or -not $repositoryRoot) {
+            throw "This runner must be located inside an FXD Git repository."
+        }
+        if (-not [string]::Equals(
+                [System.IO.Path]::GetFullPath($repositoryRoot), $root,
+                [System.StringComparison]::OrdinalIgnoreCase)) {
+            throw "This runner must be executed from its FXD repository root."
+        }
+        Set-Location -LiteralPath $root
+
+        $branch = (& git branch --show-current).Trim()
+        $sha = (& git rev-parse HEAD).Trim()
+        if ($LASTEXITCODE -ne 0 -or -not $branch -or -not $sha) {
+            throw "Unable to determine the FXD branch and HEAD SHA."
+        }
+        Write-Host "Branch: $branch"
+        Write-Host "SHA: $sha"
+
+        $dirtyWorktree = @(& git status --porcelain --untracked-files=all)
+        if ($dirtyWorktree.Count -gt 0) {
+            throw "FXD worktree is dirty; commit or remove local changes before live acceptance."
+        }
+
+        # Test only whether the key variable exists; do not read its value.
+        $apiKeyConfigured = Test-Path -LiteralPath "Env:OPENAI_API_KEY"
+        $model = [Environment]::GetEnvironmentVariable("FXD_OPENAI_MODEL")
+        $smokeFlag = [Environment]::GetEnvironmentVariable("FXD_OPENAI_LIVE_SMOKE")
+        $displayModel = if ([string]::IsNullOrWhiteSpace($model)) { "<not configured>" } else { $model.Trim() }
+        $displaySmokeFlag = if ($null -eq $smokeFlag) { "<not configured>" } else { $smokeFlag }
+        Write-Host "OPENAI_API_KEY configured: $apiKeyConfigured"
+        Write-Host "FXD_OPENAI_MODEL: $displayModel"
+        Write-Host "FXD_OPENAI_LIVE_SMOKE: $displaySmokeFlag"
+        if (-not $apiKeyConfigured -or [string]::IsNullOrWhiteSpace($model) -or $smokeFlag -ne "1") {
+            throw "Required live-provider environment configuration is not available."
+        }
+
+        $python = Join-Path $root ".venv\Scripts\python.exe"
+        if (-not (Test-Path -LiteralPath $python -PathType Leaf)) {
+            throw "FXD repository virtual-environment Python was not found."
+        }
+
+        $liveResult = Invoke-M31Unittest -Python $python -TestArguments @(
+            "tests.test_ai_fixture_engineer.AiFixtureEngineerTests.test_opt_in_openai_live_smoke_uses_one_bounded_request",
+            "-v"
+        )
+        $liveSummary = Get-M31UnittestSummary -OutputLines $liveResult.OutputLines -ExitCode $liveResult.ExitCode
+        $liveSmokeStatus = $liveSummary.Status
+        $providerFailureCategory = Get-M31SanitizedProviderFailureCategory -OutputLines $liveResult.OutputLines
+
+        if ($liveSummary.Status -ne "passed") {
+            throw "The opt-in live OpenAI smoke test did not pass."
+        }
+
+        # The focused provider suite is a credential-free child process.  It cannot
+        # select a live or generic provider, so this runner makes no second request.
+        $focusedResult = Invoke-M31Unittest -Python $python -DisableLiveSmoke -TestArguments @(
+            "tests.test_ai_fixture_engineer",
+            "-v"
+        )
+        $focusedSummary = Get-M31UnittestSummary -OutputLines $focusedResult.OutputLines -ExitCode $focusedResult.ExitCode
+        $focusedTestTotals = "{0} run, {1} skipped ({2})" -f `
+            $focusedSummary.Total, $focusedSummary.Skipped, $focusedSummary.Status
+
+        if ($focusedSummary.Status -eq "failed") {
+            throw "Focused AI fixture provider tests failed."
+        }
+        $checksPassed = $true
+    }
+    catch {
+        $exitCode = 1
+        [Console]::Error.WriteLine("M31 live acceptance failed: $($_.Exception.Message)")
+    }
+    finally {
+        Write-M31Summary -Branch $branch -Sha $sha -LiveSmokeStatus $liveSmokeStatus `
+            -FocusedTestTotals $focusedTestTotals -ProviderFailureCategory $providerFailureCategory
+    }
+
+    if ($LaunchGui -and $checksPassed) {
+        Write-Host "Launching FXD GUI after successful automated checks."
+        & $python .\fxd_qt_app.py
+        if ($LASTEXITCODE -ne 0) {
+            return 1
+        }
+    }
+    if ($LaunchGui -and -not $checksPassed) {
+        Write-Host "FXD GUI was not launched because automated checks did not pass."
+    }
+    return $exitCode
+}
+
+# Dot-sourcing exposes the pure summary helpers to the focused PowerShell tests
+# without invoking a provider request or launching the desktop application.
+if ($MyInvocation.InvocationName -eq ".") {
+    return
+}
+
+exit (Invoke-M31LiveAcceptance)

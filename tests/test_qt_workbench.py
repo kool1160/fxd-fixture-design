@@ -19,7 +19,7 @@ if find_spec("PySide6") is None:
 from PySide6.QtCore import QPoint, QPointF, Qt, Signal
 from PySide6.QtGui import QWheelEvent
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QComboBox, QWidget
+from PySide6.QtWidgets import QApplication, QCheckBox, QComboBox, QPushButton, QWidget
 
 from fxd_geometry import (
     EngineeringAnnotations,
@@ -30,8 +30,10 @@ from fxd_geometry import (
     ProcessSetup,
     RenderDiagnostics,
     Vec3,
+    generate_fixture_proposal,
     import_step,
     load_step_for_workbench,
+    minimal_intent_questions,
     product_from_workbench_document,
     source_orientation,
 )
@@ -142,6 +144,15 @@ class FailingViewport(FakeViewport):
     def load_document(self, document):
         self.document = document
         raise RuntimeError("injected native renderer startup failure")
+
+
+class _OpenAiSchemaFailureProvider:
+    identity = "openai"
+    engine_identifier = "configured-model"
+    available = True
+
+    def generate(self, request, *, timeout_seconds, cancellation):
+        raise RuntimeError("OpenAI structured-output request was rejected")
 
 
 class QtWorkbenchTests(unittest.TestCase):
@@ -257,7 +268,7 @@ class QtWorkbenchTests(unittest.TestCase):
 
     def test_brand_shell_uses_shared_assets_and_accessible_engineering_states(self):
         self.assertIn("SOURCE CAD \u00b7 READ-ONLY", self.window.source_badge.text())
-        self.assertEqual(self.window.workflow_rail.count(), 18)
+        self.assertEqual(self.window.workflow_rail.count(), 19)
         self.assertFalse(self.window._actions["import"].icon().isNull())
         self.assertFalse(self.window._actions["approve"].isEnabled())
         self.assertEqual(self.window.status_validation.text_label.text(), "NOT EVALUATED")
@@ -482,8 +493,286 @@ class QtWorkbenchTests(unittest.TestCase):
             self.assertTrue(accepted.accepted)
             self.assertIsNotNone(accepted.front_reference)
             self.assertTrue(self.window.analyze_button.isEnabled())
-            self.assertIs(self.window.workflow_tabs.currentWidget(), self.window.process_scroll)
+            self.assertIs(self.window.workflow_tabs.currentWidget(), self.window.proposal_page)
             self.assertEqual(source.read_bytes(), original)
+
+    def test_fixture_proposal_step_generates_offline_baseline_and_hides_raw_ids(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = self._real_step(directory)
+            original = source.read_bytes()
+            self.window.load_step_path(source)
+            self.window.process_fixture_type.setCurrentText("Full weld fixture")
+            self.window.process_method.setCurrentText("MIG welding")
+            self.window.process_mode.setCurrentText("Manual")
+            self.window.process_quantity.setValue(10)
+            self.window.process_lifecycle.setCurrentText("Store and reuse")
+            self.window.process_load.setCurrentText("+X")
+            self.window.process_unload.setCurrentText("-X")
+            component = self.window.document.assembly.components[0]
+            bottom = component.faces[0]
+            front = next(face for face in component.faces if abs(sum(
+                left * right for left, right in zip(bottom.normal, face.normal)
+            )) < 0.1)
+            self.window.viewport.face_picked.emit(bottom.reference)
+            self.window.accept_guided_bottom_face()
+            self.window.viewport.face_picked.emit(front.reference)
+            self.window.preview_guided_orientation()
+            self.window.accept_guided_orientation()
+            unanswered = minimal_intent_questions(self.window.workflow)
+            self.assertTrue(unanswered)
+            with patch.object(self.window.analysis_pool, "start") as start:
+                self.window.generate_fixture_proposal_action()
+            start.assert_not_called()
+            self.assertEqual(minimal_intent_questions(self.window.workflow), unanswered)
+            self.assertFalse(self.window.proposal_interview.isHidden())
+            self.window.apply_proposal_recommended_intent()
+            outcome = self.window.generate_fixture_proposal_now()
+        self.assertIsNotNone(self.window.project.fixture_proposal)
+        self.assertEqual(outcome.provider_state.value, "ai_unavailable")
+        self.assertIn("Deterministic baseline proposal", self.window.proposal_status.text())
+        self.assertGreater(self.window.proposal_recommendations.count(), 0)
+        normal_text = "\n".join(
+            self.window.proposal_recommendations.item(index).text()
+            for index in range(self.window.proposal_recommendations.count())
+        )
+        self.assertNotIn("face:", normal_text)
+        self.assertNotIn("proposal-", normal_text)
+        self.assertIn("Proposal identity:", self.window.proposal_technical_details.text())
+        self.assertIn("Mode: Deterministic baseline", self.window.proposal_technical_details.text())
+        self.assertIn("Fallback used: Yes", self.window.proposal_technical_details.text())
+        self.assertEqual(self.window.document.source_bytes, original)
+
+    def test_failed_openai_reason_is_visible_only_in_technical_proposal_details(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = self._real_step(directory)
+            original = source.read_bytes()
+            self.window.load_step_path(source)
+            component = self.window.document.assembly.components[0]
+            bottom = component.faces[0]
+            front = next(face for face in component.faces if abs(sum(
+                left * right for left, right in zip(bottom.normal, face.normal)
+            )) < 0.1)
+            self.window.viewport.face_picked.emit(bottom.reference)
+            self.window.accept_guided_bottom_face()
+            self.window.viewport.face_picked.emit(front.reference)
+            self.window.preview_guided_orientation()
+            self.window.accept_guided_orientation()
+            self.window.apply_proposal_recommended_intent()
+            outcome = self.window.generate_fixture_proposal_now(_OpenAiSchemaFailureProvider())
+        self.assertEqual(outcome.provider_state.value, "proposal_generation_failed")
+        self.assertIn("Deterministic baseline proposal", self.window.proposal_status.text())
+        self.assertIn(
+            "Provider failure: AI proposal failed or was quarantined: "
+            "OpenAI structured-output request was rejected.",
+            self.window.proposal_technical_details.text(),
+        )
+        self.assertNotIn("OpenAI structured-output", self.window.proposal_status.text())
+        self.assertEqual(self.window.document.source_bytes, original)
+
+    def test_stale_background_proposal_completion_is_discarded_after_source_replacement(self):
+        with tempfile.TemporaryDirectory() as directory:
+            first = self._real_step(directory)
+            self.window.load_step_path(first)
+            component = self.window.document.assembly.components[0]
+            bottom = component.faces[0]
+            front = next(face for face in component.faces if abs(sum(
+                left * right for left, right in zip(bottom.normal, face.normal)
+            )) < 0.1)
+            self.window.viewport.face_picked.emit(bottom.reference)
+            self.window.accept_guided_bottom_face()
+            self.window.viewport.face_picked.emit(front.reference)
+            self.window.preview_guided_orientation()
+            self.window.accept_guided_orientation()
+            self.window.apply_proposal_recommended_intent()
+            old_outcome = self.window.generate_fixture_proposal_now()
+            self.window.process_quantity.setValue(
+                self.window.workflow.setup.production_quantity + 1
+            )
+            with patch.object(self.window.analysis_pool, "start") as start:
+                self.window.generate_fixture_proposal_action()
+            start.assert_called_once()
+            old_request = self.window._proposal_request
+            self.assertEqual(
+                self.window.workflow.setup.production_quantity,
+                self.window.process_quantity.value(),
+            )
+            request_outcome = generate_fixture_proposal(
+                self.window.document, self.window.workflow,
+                current_project=self.window.project,
+            )
+            self.window._replace_project(self.window.project.toggle_layer("datums"))
+            self.window._proposal_completed(request_outcome, old_request)
+            self.assertIn("datums", self.window.project.hidden_layers)
+            self.assertIn("project evidence", self.window.statusBar().currentMessage())
+            with patch.object(self.window.analysis_pool, "start") as start:
+                self.window.generate_fixture_proposal_action()
+            start.assert_called_once()
+            old_request = self.window._proposal_request
+            request_outcome = generate_fixture_proposal(
+                self.window.document, self.window.workflow,
+                current_project=self.window.project,
+            )
+            self.window.process_operator.setText(
+                "changed while provider request was running"
+            )
+            self.window._proposal_completed(request_outcome, old_request)
+            self.assertEqual(
+                self.window.workflow.setup.operator_access,
+                "changed while provider request was running",
+            )
+            self.assertIn("workflow", self.window.statusBar().currentMessage())
+            replacement = Path(directory) / "replacement.step"
+            replacement.write_bytes(self.kernel.export_step(
+                self.kernel.make_box((0, 0, 0), (35, 18, 12))
+            ))
+            self.window.load_step_path(replacement)
+            replacement_sha = self.window.document.source_sha256
+            self.window._proposal_completed(old_outcome, old_request)
+            self.assertEqual(self.window.document.source_sha256, replacement_sha)
+            self.assertIsNone(self.window.project)
+            self.window._proposal_request = old_request
+            self.window._proposal_completed(old_outcome, old_request)
+            self.assertEqual(self.window.document.source_sha256, replacement_sha)
+            self.assertIsNone(self.window.project)
+            self.assertIn("replaced source, workflow", self.window.statusBar().currentMessage())
+
+    def test_proposal_selection_highlights_evidence_and_decision_is_audited(self):
+        with tempfile.TemporaryDirectory() as directory:
+            self.window.load_step_path(self._real_step(directory))
+            component = self.window.document.assembly.components[0]
+            bottom = component.faces[0]
+            front = next(face for face in component.faces if abs(sum(
+                left * right for left, right in zip(bottom.normal, face.normal)
+            )) < 0.1)
+            self.window.viewport.face_picked.emit(bottom.reference)
+            self.window.accept_guided_bottom_face()
+            self.window.viewport.face_picked.emit(front.reference)
+            self.window.preview_guided_orientation()
+            self.window.accept_guided_orientation()
+            self.window.apply_proposal_recommended_intent()
+            self.window.generate_fixture_proposal_now()
+        self.window.proposal_recommendations.setCurrentRow(0)
+        self.application.processEvents()
+        self.assertIn("Why proposed:", self.window.proposal_explanation.text())
+        self.assertTrue(any(call[0] == "select" for call in self.window.viewport.scene.calls))
+        before = self.window.project.fixture_proposal.proposal_identity
+        self.window.proposal_reject_recommendation.click()
+        self.assertNotEqual(self.window.project.fixture_proposal.proposal_identity, before)
+        self.assertTrue(self.window.project.fixture_proposal.audit_history)
+
+    def test_guided_validation_summary_and_fix_navigation_are_plain_language(self):
+        with tempfile.TemporaryDirectory() as directory:
+            self.window.load_step_path(self._real_step(directory))
+            component = self.window.document.assembly.components[0]
+            bottom = component.faces[0]
+            front = next(face for face in component.faces if abs(sum(
+                left * right for left, right in zip(bottom.normal, face.normal)
+            )) < 0.1)
+            self.window.viewport.face_picked.emit(bottom.reference)
+            self.window.accept_guided_bottom_face()
+            self.window.viewport.face_picked.emit(front.reference)
+            self.window.preview_guided_orientation()
+            self.window.accept_guided_orientation()
+            self.window.apply_proposal_recommended_intent()
+            self.window.generate_fixture_proposal_now()
+        self.assertIn("blocking issues", self.window.guided_validation_summary.text())
+        self.assertIn("warnings requiring review", self.window.guided_validation_summary.text())
+        self.assertGreater(self.window.guided_issues.count(), 0)
+        routed_row = next(
+            index for index in range(self.window.guided_issues.count())
+            if self.window._guided_issue_records[str(
+                self.window.guided_issues.item(index).data(Qt.ItemDataRole.UserRole)
+            )].fix_target == "proposal_recommendations"
+        )
+        self.window.guided_issues.setCurrentRow(routed_row)
+        self.application.processEvents()
+        self.assertIn("What is wrong:", self.window.guided_issue_explanation.text())
+        issue = self.window._selected_guided_issue()
+        self.window.fix_selected_guided_issue()
+        self.assertEqual(self.window._ui_active_stage, issue.workflow_section)
+        self.assertEqual(issue.workflow_section, "Proposal")
+        self.assertEqual(self.window.workflow_tabs.currentIndex(), 2)
+        self.assertFalse(self.window.proposal_recommendations.isHidden())
+
+    def test_stale_orientation_keeps_proposal_visible_and_disables_acceptance(self):
+        with tempfile.TemporaryDirectory() as directory:
+            self.window.load_step_path(self._real_step(directory))
+            component = self.window.document.assembly.components[0]
+            bottom = component.faces[0]
+            front = next(face for face in component.faces if abs(sum(
+                left * right for left, right in zip(bottom.normal, face.normal)
+            )) < 0.1)
+            self.window.viewport.face_picked.emit(bottom.reference)
+            self.window.accept_guided_bottom_face()
+            self.window.viewport.face_picked.emit(front.reference)
+            self.window.preview_guided_orientation()
+            self.window.accept_guided_orientation()
+            self.window.apply_proposal_recommended_intent()
+            self.window.generate_fixture_proposal_now()
+        prior_identity = self.window.project.fixture_proposal.proposal_identity
+        self.window.edit_orientation()
+        self.window.flip_guided_bottom_side()
+        self.window._refresh_all()
+        self.assertIsNotNone(self.window.project)
+        self.assertTrue(any(
+            issue.rule_id == "proposal_stale"
+            for issue in self.window.project.fixture_proposal.guided_issues
+        ))
+        self.assertNotEqual(self.window.project.fixture_proposal.proposal_identity, prior_identity)
+        self.assertGreater(self.window.proposal_recommendations.count(), 0)
+        self.assertIn("STALE", self.window.proposal_summary.text())
+        self.assertFalse(self.window.proposal_accept.isEnabled())
+
+    def test_first_run_guide_waits_for_successful_source_import(self):
+        self.window._settings_enabled = True
+        self.window.settings.remove("guide/fixture_proposal_dismissed")
+        self.application.processEvents()
+        self.assertFalse(getattr(self.window, "_first_run_dialog", None))
+        with tempfile.TemporaryDirectory() as directory:
+            self.window.load_step_path(self._real_step(directory))
+            QTest.qWait(5)
+        dialog = self.window._first_run_dialog
+        self.assertTrue(dialog.isVisible())
+        dialog.close()
+        self.window.settings.remove("guide/fixture_proposal_dismissed")
+
+    def test_first_run_guide_ignores_failed_or_cancelled_imports(self):
+        self.window._settings_enabled = True
+        self.window.settings.remove("guide/fixture_proposal_dismissed")
+        with patch("fxd_qt_app.QMessageBox.critical"):
+            with self.assertRaises(KernelOperationError):
+                self.window.load_step_path(FIXTURE)
+        self.application.processEvents()
+        self.assertFalse(getattr(self.window, "_first_run_dialog", None))
+        with patch("fxd_qt_app.QFileDialog.getOpenFileName", return_value=("", "")):
+            self.window.import_step()
+        self.application.processEvents()
+        self.assertFalse(getattr(self.window, "_first_run_dialog", None))
+        self.window.settings.remove("guide/fixture_proposal_dismissed")
+
+    def test_first_run_guide_can_be_disabled_and_reopened(self):
+        self.window.settings.remove("guide/fixture_proposal_dismissed")
+        self.window.show_first_run_guide(True)
+        dialog = self.window._first_run_dialog
+        self.assertTrue(dialog.isVisible())
+        never = next(item for item in dialog.findChildren(QCheckBox)
+                     if "show this again" in item.text())
+        dismiss = next(item for item in dialog.findChildren(QPushButton)
+                       if item.text() == "Dismiss")
+        never.setChecked(True)
+        dismiss.click()
+        self.assertTrue(self.window.settings.value(
+            "guide/fixture_proposal_dismissed", False, type=bool
+        ))
+        self.window._settings_enabled = True
+        with tempfile.TemporaryDirectory() as directory:
+            self.window.load_step_path(self._real_step(directory))
+            QTest.qWait(5)
+        self.assertFalse(self.window._first_run_dialog.isVisible())
+        self.window._actions["first_run_guide"].trigger()
+        self.assertTrue(self.window._first_run_dialog.isVisible())
+        self.window._first_run_dialog.close()
+        self.window.settings.remove("guide/fixture_proposal_dismissed")
 
     def test_changing_guided_face_or_flip_clears_downstream_state(self):
         with tempfile.TemporaryDirectory() as directory:

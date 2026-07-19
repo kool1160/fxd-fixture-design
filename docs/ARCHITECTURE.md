@@ -50,6 +50,17 @@ Owns topology queries, spatial indexing, contact calculations, collision, cleara
 
 Consumes compact structured context. It proposes restricted commands, asks for missing engineering intent, compares valid concepts, and explains tradeoffs. It does not directly mutate kernel geometry or silently override failed checks.
 
+`fxd_geometry.ai_fixture_engineer` implements that boundary through the
+provider-neutral `AiFixtureProvider` protocol and the versioned
+`fxd-fixture-proposal-v1` contract. The HTTP adapter receives environment-only
+configuration and sends structured summaries without STEP bytes. Strict schema,
+source, orientation, and identity checks quarantine unsupported output. The
+existing deterministic engines generate the offline baseline and remain the
+authoritative validation gate for AI and fallback proposals alike. Proposal
+state is stored separately in schema-v5 projects, and reviewed edits clear
+dependent authored geometry without changing source CAD. See
+`docs/AI_FIXTURE_PROPOSAL_CONTRACT.md`.
+
 ### Interactive workflow orchestration
 
 `fxd_geometry.interactive_workflow` is a CAD-neutral application contract. It

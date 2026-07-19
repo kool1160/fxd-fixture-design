@@ -14,18 +14,18 @@ This is the short-form cross-task repository handoff. It does not override
   and squash-merged through PR #50 at `1313922`.
 - Milestone 29 was independently visually accepted and squash-merged through
   PR #51 at `4b6691a`.
+- Milestone 30 was squash-merged through PR #52 at `edf65bb`.
 
 ## Active milestone
 
-Milestone 30 is active on
-`milestone-30-real-manufacturing-geometry-and-tack-location-fixtures`. It adds
-typed fixture-construction and lifecycle evidence, purpose-specific tack/location
-validation, Cleco strategy checks, real OCP authored manufacturing components,
-review-only package outputs, and an immediate guided two-face manufacturing
-orientation workflow. The orientation flow stores its accepted frame separately,
-uses exact OCP planar-face evidence from the native VTK viewer, and keeps the
-existing deterministic advanced controls. It composes existing structure,
-placement, manufacturing, validation, and workbench contracts.
+Milestone 31 is active on
+`milestone-31-ai-fixture-engineer-guided-validation`. It adds the versioned,
+provider-neutral AI Fixture Engineer proposal boundary, a deterministic offline
+baseline, a minimal intent interview, strict response quarantine, guided
+validation and correction routing, recommendation review/edit decisions, and
+schema-v5 persistence. Proposal generation follows accepted manufacturing
+orientation and composes existing placement, concept, access, weld, validation,
+revision, approval, and export contracts rather than replacing them.
 
 The application preserves ordinary vendor STEP import, source bytes and
 SHA-256, XCAF color evidence, zero-based tessellation, and fail-closed behavior.
@@ -34,12 +34,13 @@ geometry and cannot be represented as source or final manufacturing geometry.
 
 ## Review boundary
 
-Milestone 30 remains Pending until independent review, hosted CI, user
-engineering acceptance, and merge. On 2026-07-18 the guided orientation change
-passed 255 automated tests, the repository CI/OCP proof, and local Windows native
-VTK visual acceptance. The workbench and all exports remain
-engineering-review-only and never imply production, structural, weld-process,
-or safety approval.
+Milestone 31 has 278 passing automated tests, governed repository CI and real
+OCP proof, hosted pinned-OCP acceptance, clean fresh Codex review, and local
+Windows native VTK proposal-workflow acceptance. It remains in progress until
+user Windows visual acceptance, engineering acceptance, and explicit merge
+authorization are recorded. The workbench and all exports remain engineering-
+review-only and never imply production, structural, weld-process, or safety
+approval.
 
 ## Governing principles
 

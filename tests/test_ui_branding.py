@@ -122,11 +122,11 @@ class BrandingWidgetTests(unittest.TestCase):
             "Project": "complete", "Concepts": "engineer modified",
             "Validation": "blocked",
         }, "Validation")
-        self.assertEqual(rail.count(), 18)
-        validation = rail.item(11)
+        self.assertEqual(rail.count(), 19)
+        validation = rail.item(12)
         self.assertEqual(validation.data(Qt.ItemDataRole.UserRole + 1), "active")
         self.assertIn("Validation - Active", validation.toolTip())
-        self.assertIn("Engineer Modified", rail.item(10).toolTip())
+        self.assertIn("Engineer Modified", rail.item(11).toolTip())
 
     def test_workflow_rail_single_click_navigates_once(self):
         rail = WorkflowRail()

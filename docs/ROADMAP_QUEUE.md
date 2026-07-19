@@ -234,7 +234,12 @@ Acceptance criteria:
 
 ## Milestone 30 - Real manufacturing geometry and tack/location fixtures
 
-**Status:** Pending
+**Status:** Complete
+
+Squash-merged through PR #52 at `edf65bb`. The accepted implementation adds
+typed fixture-build, lifecycle, tack/location, Cleco, authored OCP component,
+BOM, nest, and guided two-face orientation evidence without weakening review
+or source-CAD boundaries.
 
 Extend the existing fixture architecture with editable, deterministic
 construction evidence for real OCP manufacturing geometry, laser-cut and
@@ -243,5 +248,24 @@ job-revision choices, manufacturing BOM and nest classification, and review
 only export packages. Completion still requires independent review, hosted
 kernel acceptance, Windows visual review, user engineering acceptance, and
 merge.
+
+**Recommended level:** Sol
+
+## Milestone 31 - AI Fixture Engineer and guided validation
+
+**Status:** In progress
+
+Add one provider-neutral, versioned, editable fixture proposal after accepted
+manufacturing orientation. Ask only for missing essential intent, use the
+existing deterministic engines for the offline baseline and authoritative
+validation, provide plain-language correction routing, persist proposal
+provenance and engineer decisions, and fail approval/export closed for stale or
+blocked proposals. The UI must remain review-oriented and must not expose raw
+identities or matrices in normal mode.
+
+Acceptance still requires focused and full automated validation, real OCP and
+Windows viewer acceptance, independent Codex review, and user engineering
+visual acceptance. No production approval, autonomous iteration, learned global
+rules, supplier scraping, or paid-service enablement is included.
 
 **Recommended level:** Sol

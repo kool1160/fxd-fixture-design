@@ -156,3 +156,29 @@ and representative STEP behavior.
 
 **Supporting evidence:** `fxd_geometry/kernel.py`,
 `docs/GEOMETRY_KERNEL_BOUNDARY.md`, and `tests/test_kernel_boundary.py`.
+
+### 2026-07-18 - Keep AI fixture proposals advisory and provider-neutral
+
+**Decision:** AI fixture proposals use a versioned, provider-neutral JSON
+contract. Provider output is quarantined until its source SHA, manufacturing
+orientation, referenced identities, and schema validate. The existing
+deterministic engineering engines always rerun and remain authoritative for
+approval and export; provider failure produces an explicitly labeled offline
+baseline instead of bypassing the workflow.
+
+**Context:** Milestone 31 adds an AI Fixture Engineer that must remain useful
+without credentials while avoiding hidden source-CAD mutation, silent intent
+assumptions, or production-safety claims.
+
+**Reasoning:** A strict boundary permits later provider choice without coupling
+the CAD-neutral core to an SDK. Visible provenance, explicit engineer decisions,
+and deterministic validation preserve traceability and human authority.
+
+**Risks and tradeoffs:** HTTP cancellation is cooperative and cannot interrupt
+an operating-system call already in progress. The deterministic baseline can
+recommend only what current geometry and rule evidence support, and neither AI
+nor baseline output proves physical fixture adequacy.
+
+**Supporting evidence:** `docs/AI_FIXTURE_PROPOSAL_CONTRACT.md`,
+`fxd_geometry/ai_fixture_engineer.py`, and
+`tests/test_ai_fixture_engineer.py`.

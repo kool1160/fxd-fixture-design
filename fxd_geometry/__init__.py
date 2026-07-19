@@ -96,6 +96,22 @@ from .fabrication_workflow import (
     build_fixture_build_package, compare_fixture_build_plans, generate_fixture_build_plan,
     validate_fixture_build_plan, write_fixture_build_package,
 )
+from .ai_fixture_engineer import (
+    PROMPT_CONTRACT_VERSION, PROPOSAL_REQUEST_SCHEMA, PROPOSAL_SCHEMA,
+    AiFixtureProvider, AiProposalRequest, CancellationToken, EditableParameter,
+    FixtureProposal, FixtureProposalError, GuidedValidationIssue, HttpJsonAiProvider,
+    OpenAiResponsesProvider,
+    IntentQuestion, MissingIntentError, ProposalAuditEvent, ProposalCancelled,
+    ProposalContractRejection, ProposalEvidence, ProposalGenerationOutcome, ProposalProvenance,
+    ProposalRecommendation, ProposalSource, ProviderState, ProviderUnavailable,
+    PROPOSAL_CONTRACT_REJECTION_CATEGORIES,
+    RecommendationDecision, RecommendationType, RecommendationValidation,
+    StaticAiProvider, UnavailableAiProvider, ai_response_from_proposal,
+    apply_recommended_intent, build_ai_request, decide_proposal,
+    decide_recommendation, deterministic_baseline_proposal, edit_recommendation,
+    generate_fixture_proposal, minimal_intent_questions, proposal_from_ai_response,
+    proposal_engineering_context_identity, validate_fixture_proposal,
+)
 
 
 def require_real_kernel() -> RealKernel:
@@ -157,3 +173,17 @@ __all__ += ["M30_SCHEMA", "RULE_CATALOG", "RULES_BY_ID", "AdjustmentState", "Aut
             "M30Rule", "NestClassification", "PokaYokeSpec", "TabSlotJoint", "author_fixture_build",
             "build_fixture_build_package", "compare_fixture_build_plans", "generate_fixture_build_plan",
             "validate_fixture_build_plan", "write_fixture_build_package"]
+__all__ += ["PROMPT_CONTRACT_VERSION", "PROPOSAL_REQUEST_SCHEMA", "PROPOSAL_SCHEMA",
+            "AiFixtureProvider", "AiProposalRequest", "CancellationToken", "EditableParameter",
+            "FixtureProposal", "FixtureProposalError", "GuidedValidationIssue", "HttpJsonAiProvider",
+            "OpenAiResponsesProvider",
+            "IntentQuestion", "MissingIntentError", "ProposalAuditEvent", "ProposalCancelled",
+            "ProposalContractRejection", "ProposalEvidence", "ProposalGenerationOutcome", "ProposalProvenance",
+            "ProposalRecommendation", "ProposalSource", "ProviderState", "ProviderUnavailable",
+            "PROPOSAL_CONTRACT_REJECTION_CATEGORIES",
+            "RecommendationDecision", "RecommendationType", "RecommendationValidation",
+            "StaticAiProvider", "UnavailableAiProvider", "ai_response_from_proposal",
+            "apply_recommended_intent", "build_ai_request", "decide_proposal",
+            "decide_recommendation", "deterministic_baseline_proposal", "edit_recommendation",
+            "generate_fixture_proposal", "minimal_intent_questions", "proposal_from_ai_response",
+            "validate_fixture_proposal"]
