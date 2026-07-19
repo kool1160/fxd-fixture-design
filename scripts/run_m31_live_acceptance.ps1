@@ -7,24 +7,19 @@ $ErrorActionPreference = "Stop"
 $script:RunnerPath = $PSCommandPath
 
 $script:KnownM31ProviderFailureCategories = @(
-    "AI proposal failed or was quarantined: OpenAI authentication is unavailable.",
-    "AI proposal failed or was quarantined: OpenAI structured-output request was rejected.",
-    "AI proposal failed or was quarantined: OpenAI model or endpoint is unavailable.",
-    "AI proposal failed or was quarantined: OpenAI request limit prevented proposal generation.",
-    "AI proposal failed or was quarantined: OpenAI Responses request failed.",
-    "AI proposal failed or was quarantined: OpenAI Responses request was unavailable.",
-    "AI proposal failed or was quarantined: OpenAI proposal context exceeds the configured safe limit.",
-    "AI proposal failed or was quarantined: OpenAI response exceeded the configured safe limit.",
-    "AI proposal failed or was quarantined: OpenAI response was malformed.",
-    "AI proposal failed or was quarantined: OpenAI response was incomplete.",
-    "AI proposal failed or was quarantined: OpenAI response reached the output-token limit.",
-    "AI proposal failed or was quarantined: OpenAI response was stopped by content filtering.",
-    "AI proposal failed or was quarantined: OpenAI response was refused.",
-    "AI proposal failed or was quarantined: OpenAI response did not contain a JSON proposal.",
-    "AI proposal failed or was quarantined: OpenAI JSON proposal was not an object.",
-    "AI proposal failed or was quarantined: OpenAI response contained no structured output.",
-    "AI proposal failed or was quarantined: OpenAI response contained no JSON proposal.",
-    "AI proposal failed or was quarantined: OpenAI provider failed safely."
+    "top-level schema mismatch",
+    "source identity mismatch",
+    "orientation identity mismatch",
+    "engineering-context mismatch",
+    "unsupported recommendation type",
+    "unsupported validation status",
+    "malformed confidence",
+    "missing or empty evidence",
+    "missing or empty deterministic checks",
+    "unknown governed identity",
+    "malformed geometry reference",
+    "malformed editable parameter",
+    "provider-authored engineer decision"
 )
 
 function Get-M31UnittestSummary {
@@ -59,7 +54,7 @@ function Get-M31SanitizedProviderFailureCategory {
 
     foreach ($category in $script:KnownM31ProviderFailureCategories) {
         $marker = "FXD_M31_SANITIZED_PROVIDER_FAILURE=$category"
-        if ($OutputLines -contains $marker) {
+        if ($OutputLines | Where-Object { $_.Contains($marker) }) {
             return $category
         }
     }
@@ -73,28 +68,31 @@ function Invoke-M31Unittest {
         [switch]$DisableLiveSmoke
     )
 
-    $originalSmokeFlag = [Environment]::GetEnvironmentVariable("FXD_OPENAI_LIVE_SMOKE")
-    try {
-        if ($DisableLiveSmoke) {
-            $env:FXD_OPENAI_LIVE_SMOKE = "0"
-        }
-        $output = @(& $Python -m unittest @TestArguments 2>&1 | ForEach-Object {
-            [string]$_
-        })
-        return [pscustomobject]@{
-            OutputLines = $output
-            ExitCode = $LASTEXITCODE
-        }
+    $startInfo = New-Object System.Diagnostics.ProcessStartInfo
+    $startInfo.FileName = $Python
+    $startInfo.Arguments = "-m unittest " + ($TestArguments -join " ")
+    $startInfo.UseShellExecute = $false
+    $startInfo.CreateNoWindow = $true
+    $startInfo.RedirectStandardOutput = $true
+    $startInfo.RedirectStandardError = $true
+    if ($DisableLiveSmoke) {
+        $startInfo.EnvironmentVariables["FXD_OPENAI_LIVE_SMOKE"] = "0"
     }
-    finally {
-        if ($DisableLiveSmoke) {
-            if ($null -eq $originalSmokeFlag) {
-                Remove-Item -LiteralPath "Env:FXD_OPENAI_LIVE_SMOKE" -ErrorAction SilentlyContinue
-            }
-            else {
-                $env:FXD_OPENAI_LIVE_SMOKE = $originalSmokeFlag
-            }
-        }
+    $process = New-Object System.Diagnostics.Process
+    $process.StartInfo = $startInfo
+    [void]$process.Start()
+    $stdoutTask = $process.StandardOutput.ReadToEndAsync()
+    $stderrTask = $process.StandardError.ReadToEndAsync()
+    $process.WaitForExit()
+    $stdout = $stdoutTask.GetAwaiter().GetResult()
+    $stderr = $stderrTask.GetAwaiter().GetResult()
+    $output = @(
+        ($stdout -split "`r?`n"),
+        ($stderr -split "`r?`n")
+    ) | Where-Object { $_ -ne "" }
+    return [pscustomobject]@{
+        OutputLines = [string[]]$output
+        ExitCode = $process.ExitCode
     }
 }
 

@@ -15,14 +15,16 @@ from fxd_geometry import (
     FixtureProposalError, FixturePurpose, GeometryReference,
     HttpJsonAiProvider, OpenAiResponsesProvider,
     InteractiveWorkflow, MissingIntentError, OcpKernel, ProcessSetup,
-    ProposalCancelled, ProposalSource, ProviderState, RecommendationDecision,
-    RecommendationType, StaticAiProvider, Vec3, ai_response_from_proposal,
+    ProposalCancelled, ProposalContractRejection, ProposalSource, ProviderState, RecommendationDecision,
+    PROPOSAL_CONTRACT_REJECTION_CATEGORIES, RecommendationType, RecommendationValidation,
+    StaticAiProvider, Vec3, ai_response_from_proposal,
     analyze_engineering_workflow, apply_recommended_intent, build_ai_request,
     generate_fixture_proposal,
     generate_fixture_build_plan, load_step_for_workbench, minimal_intent_questions,
     orientation_from_faces, proposal_engineering_context_identity,
-    reference_plane_orientation, ReferencePlane,
+    proposal_from_ai_response, reference_plane_orientation, ReferencePlane,
 )
+from fxd_geometry.ai_fixture_engineer import _openai_proposal_response_schema
 from fxd_geometry.operations import project_export_block_reason
 from fxd_geometry.project import FxdProject, ProjectFormatError
 
@@ -144,6 +146,106 @@ class AiFixtureEngineerTests(unittest.TestCase):
         self.assertEqual(outcome.proposal.provenance.source, ProposalSource.AI)
         self.assertEqual(outcome.proposal.provenance.provider_identity, "mock-ai")
         self.assertEqual(outcome.proposal.provenance.engine_identifier, "mock-v1")
+
+    def test_openai_schema_matches_the_strict_typed_proposal_contract(self):
+        request = build_ai_request(self.fallback.project)
+        schema = _openai_proposal_response_schema(request)
+        properties = schema["properties"]
+        recommendation = properties["recommendations"]["items"]
+        recommendation_properties = recommendation["properties"]
+
+        self.assertEqual(
+            recommendation_properties["validation_status"]["enum"],
+            [item.value for item in RecommendationValidation],
+        )
+        self.assertEqual(recommendation_properties["confidence"]["minimum"], 0.0)
+        self.assertEqual(recommendation_properties["confidence"]["maximum"], 1.0)
+        self.assertEqual(properties["recommendations"]["minItems"], 1)
+        self.assertEqual(recommendation_properties["source_evidence"]["minItems"], 1)
+        self.assertEqual(recommendation_properties["deterministic_checks"]["minItems"], 1)
+        self.assertEqual(
+            recommendation_properties["decision"]["enum"], ["proposed"],
+        )
+        self.assertEqual(recommendation_properties["engineer_note"]["enum"], [""])
+        self.assertEqual(properties["concept_name"]["minLength"], 1)
+        self.assertEqual(
+            recommendation_properties["source_evidence"]["items"]["properties"]
+            ["summary"]["minLength"],
+            1,
+        )
+        self.assertEqual(properties["source_sha256"]["enum"], [request.source_sha256])
+        self.assertIn(
+            request.manufacturing_orientation_identity,
+            recommendation_properties["source_evidence"]["items"]["properties"]
+            ["identity"]["enum"],
+        )
+
+    def test_typed_contract_rejections_are_allowlisted_and_value_free(self):
+        request = build_ai_request(self.fallback.project)
+        cases: list[tuple[str, dict[str, object], str]] = []
+
+        malformed_top = ai_response_from_proposal(self.fallback.proposal)
+        malformed_top["unexpected"] = "never display"
+        cases.append(("top", malformed_top, "top-level schema mismatch"))
+        source_mismatch = ai_response_from_proposal(self.fallback.proposal)
+        source_mismatch["source_sha256"] = "private-source-identity"
+        cases.append(("source", source_mismatch, "source identity mismatch"))
+        orientation_mismatch = ai_response_from_proposal(self.fallback.proposal)
+        orientation_mismatch["manufacturing_orientation_identity"] = "private-orientation"
+        cases.append(("orientation", orientation_mismatch, "orientation identity mismatch"))
+        context_mismatch = ai_response_from_proposal(self.fallback.proposal)
+        context_mismatch["engineering_context_identity"] = "private-context"
+        cases.append(("context", context_mismatch, "engineering-context mismatch"))
+        unsupported_type = ai_response_from_proposal(self.fallback.proposal)
+        unsupported_type["recommendations"][0]["recommendation_type"] = "private-type"
+        cases.append(("type", unsupported_type, "unsupported recommendation type"))
+        unsupported_status = ai_response_from_proposal(self.fallback.proposal)
+        unsupported_status["recommendations"][0]["validation_status"] = "private-status"
+        cases.append(("status", unsupported_status, "unsupported validation status"))
+        malformed_confidence = ai_response_from_proposal(self.fallback.proposal)
+        malformed_confidence["recommendations"][0]["confidence"] = 2.0
+        cases.append(("confidence", malformed_confidence, "malformed confidence"))
+        missing_evidence = ai_response_from_proposal(self.fallback.proposal)
+        missing_evidence["recommendations"][0]["source_evidence"] = []
+        cases.append(("evidence", missing_evidence, "missing or empty evidence"))
+        missing_checks = ai_response_from_proposal(self.fallback.proposal)
+        missing_checks["recommendations"][0]["deterministic_checks"] = []
+        cases.append(("checks", missing_checks, "missing or empty deterministic checks"))
+        unknown_identity = ai_response_from_proposal(self.fallback.proposal)
+        unknown_identity["recommendations"][0]["source_evidence"][0]["identity"] = "private-identity"
+        cases.append(("identity", unknown_identity, "unknown governed identity"))
+        malformed_reference = ai_response_from_proposal(self.fallback.proposal)
+        malformed_reference["recommendations"][0]["geometry_reference"] = {
+            "component_identity": None,
+            "body_identity": None,
+            "face_identity": None,
+            "edge_identity": None,
+        }
+        cases.append(("reference", malformed_reference, "malformed geometry reference"))
+        malformed_parameter = ai_response_from_proposal(self.fallback.proposal)
+        editable = next(item for item in malformed_parameter["recommendations"]
+                        if item["editable_parameters"])
+        editable["editable_parameters"][0]["value"] = {"private": "value"}
+        cases.append(("parameter", malformed_parameter, "malformed editable parameter"))
+        provider_decision = ai_response_from_proposal(self.fallback.proposal)
+        provider_decision["recommendations"][0]["decision"] = "accepted"
+        cases.append(("decision", provider_decision, "provider-authored engineer decision"))
+
+        for name, response, category in cases:
+            with self.subTest(name=name), self.assertRaises(ProposalContractRejection) as raised:
+                proposal_from_ai_response(response, request, StaticAiProvider(response))
+            self.assertEqual(raised.exception.category, category)
+            self.assertIn(category, PROPOSAL_CONTRACT_REJECTION_CATEGORIES)
+            outcome = generate_fixture_proposal(
+                self.document, self.workflow, provider=StaticAiProvider(response),
+            )
+            self.assertEqual(outcome.provider_state, ProviderState.FAILED)
+            self.assertEqual(outcome.proposal.provenance.source,
+                             ProposalSource.DETERMINISTIC_FALLBACK)
+            self.assertIn(category, outcome.proposal.provenance.provider_message)
+            persisted = json.dumps(outcome.project.to_dict(), sort_keys=True)
+            self.assertNotIn("private-", persisted)
+            self.assertGreater(outcome.proposal.blocker_count, 0)
 
     def test_malformed_unknown_and_mismatched_ai_outputs_are_quarantined(self):
         cases = []
@@ -410,7 +512,7 @@ class AiFixtureEngineerTests(unittest.TestCase):
         self.assertEqual(
             outcome.proposal.provenance.provider_message,
             "AI proposal failed or was quarantined: "
-            "FXD typed proposal contract rejected provider output.",
+            "FXD typed proposal contract rejected: unknown governed identity.",
         )
         self.assertNotIn("face:private", json.dumps(outcome.proposal.to_dict()))
         with tempfile.TemporaryDirectory() as directory:
@@ -488,13 +590,19 @@ class AiFixtureEngineerTests(unittest.TestCase):
             self.document, self.workflow, provider=provider, timeout_seconds=45,
         )
         if outcome.provider_state != ProviderState.SUCCESS:
+            failure_category = "unavailable"
+            prefix = "AI proposal failed or was quarantined: FXD typed proposal contract rejected: "
+            for category in PROPOSAL_CONTRACT_REJECTION_CATEGORIES:
+                if outcome.proposal.provenance.provider_message == prefix + category + ".":
+                    failure_category = category
+                    break
             print(
                 "FXD_M31_SANITIZED_PROVIDER_FAILURE="
-                + outcome.proposal.provenance.provider_message
+                + failure_category
             )
         self.assertEqual(
             outcome.provider_state, ProviderState.SUCCESS,
-            outcome.proposal.provenance.provider_message,
+            "OpenAI live smoke did not return an accepted proposal.",
         )
         self.assertEqual(outcome.proposal.provenance.source, ProposalSource.AI)
         self.assertEqual(self.source.read_bytes(), self.original)

@@ -47,6 +47,33 @@ class FixtureProposalError(ValueError):
     """Raised when proposal evidence is malformed, stale, or unsupported."""
 
 
+PROPOSAL_CONTRACT_REJECTION_CATEGORIES = frozenset({
+    "top-level schema mismatch",
+    "source identity mismatch",
+    "orientation identity mismatch",
+    "engineering-context mismatch",
+    "unsupported recommendation type",
+    "unsupported validation status",
+    "malformed confidence",
+    "missing or empty evidence",
+    "missing or empty deterministic checks",
+    "unknown governed identity",
+    "malformed geometry reference",
+    "malformed editable parameter",
+    "provider-authored engineer decision",
+})
+
+
+class ProposalContractRejection(FixtureProposalError):
+    """An allowlisted, value-free reason for rejecting provider proposal JSON."""
+
+    def __init__(self, category: str) -> None:
+        if category not in PROPOSAL_CONTRACT_REJECTION_CATEGORIES:
+            raise ValueError("unsupported proposal contract rejection category")
+        self.category = category
+        super().__init__("FXD typed proposal contract rejected: " + category)
+
+
 class ProviderUnavailable(FixtureProposalError):
     """Raised when no configured AI provider can run."""
 
@@ -521,36 +548,61 @@ def _strict_object(properties: dict[str, object]) -> dict[str, object]:
     }
 
 
-def _openai_proposal_response_schema() -> dict[str, object]:
-    """Schema bridge for the existing proposal parser; no new proposal model."""
+def _openai_proposal_response_schema(
+        request: AiProposalRequest | None = None) -> dict[str, object]:
+    """Strict OpenAI schema aligned with the existing typed proposal parser."""
     text = {"type": "string"}
+    required_text = {"type": "string", "minLength": 1}
     nullable_text = {"type": ["string", "null"]}
     text_list = {"type": "array", "items": text}
-    evidence = _strict_object({"identity": text, "kind": text, "summary": text})
+    known_identities = (
+        tuple(sorted(request.known_identities)) if request is not None else ()
+    )
+    use_identity_enum = (
+        0 < len(known_identities) <= 128
+        and len(json.dumps(known_identities, separators=(",", ":"))) <= 24_000
+    )
+
+    def identity(*, nullable: bool = False) -> dict[str, object]:
+        if use_identity_enum:
+            values: list[object] = list(known_identities)
+            if nullable:
+                values.append(None)
+            return {"enum": values}
+        if nullable:
+            return dict(nullable_text)
+        return dict(required_text)
+
+    evidence = _strict_object({
+        "identity": identity(), "kind": required_text, "summary": required_text,
+    })
     editable_parameter = _strict_object({
-        "name": text,
+        "name": required_text,
         "value": {"type": ["string", "number", "boolean", "null"]},
         "units": nullable_text,
         "choices": text_list,
     })
     geometry_reference = _strict_object({
-        "component_identity": text,
-        "body_identity": nullable_text,
-        "face_identity": nullable_text,
-        "edge_identity": nullable_text,
+        "component_identity": identity(),
+        "body_identity": identity(nullable=True),
+        "face_identity": identity(nullable=True),
+        "edge_identity": identity(nullable=True),
     })
     recommendation = _strict_object({
-        "recommendation_id": text,
+        "recommendation_id": required_text,
         "recommendation_type": {
             "type": "string", "enum": [item.value for item in RecommendationType],
         },
-        "title": text,
-        "engineering_reason": text,
-        "source_evidence": {"type": "array", "items": evidence},
+        "title": required_text,
+        "engineering_reason": required_text,
+        "source_evidence": {"type": "array", "minItems": 1, "items": evidence},
         "assumptions": text_list,
-        "confidence": {"type": "number"},
-        "deterministic_checks": text_list,
-        "validation_status": text,
+        "confidence": {"type": "number", "minimum": 0.0, "maximum": 1.0},
+        "deterministic_checks": {"type": "array", "minItems": 1, "items": text},
+        "validation_status": {
+            "type": "string",
+            "enum": [item.value for item in RecommendationValidation],
+        },
         "unresolved_risks": text_list,
         "editable_parameters": {"type": "array", "items": editable_parameter},
         "downstream_dependencies": text_list,
@@ -560,22 +612,31 @@ def _openai_proposal_response_schema() -> dict[str, object]:
             "required": geometry_reference["required"],
             "additionalProperties": False,
         },
-        "fixture_feature_identity": nullable_text,
+        "fixture_feature_identity": identity(nullable=True),
         "decision": {"type": "string", "enum": [RecommendationDecision.PROPOSED.value]},
         "engineer_note": {"type": "string", "enum": [""]},
     })
     return _strict_object({
         "schema_version": {"type": "string", "enum": [PROPOSAL_SCHEMA]},
-        "source_sha256": text,
-        "manufacturing_orientation_identity": text,
-        "engineering_context_identity": text,
-        "concept_name": text,
-        "fixture_purpose": text,
-        "base_strategy": text,
-        "lifecycle": text,
-        "complexity_class": text,
+        "source_sha256": (
+            {"type": "string", "enum": [request.source_sha256]}
+            if request is not None else required_text
+        ),
+        "manufacturing_orientation_identity": (
+            {"type": "string", "enum": [request.manufacturing_orientation_identity]}
+            if request is not None else required_text
+        ),
+        "engineering_context_identity": (
+            {"type": "string", "enum": [request.engineering_context_identity]}
+            if request is not None else required_text
+        ),
+        "concept_name": required_text,
+        "fixture_purpose": required_text,
+        "base_strategy": required_text,
+        "lifecycle": required_text,
+        "complexity_class": required_text,
         "assumptions": text_list,
-        "recommendations": {"type": "array", "items": recommendation},
+        "recommendations": {"type": "array", "minItems": 1, "items": recommendation},
         "alternative_summary": nullable_text,
     })
 
@@ -679,15 +740,18 @@ class OpenAiResponsesProvider:
                 {"role": "system", "content": (
                     "Return one FXD fixture proposal object. AI is assistive only; "
                     "FXD deterministic validation remains authoritative. Use only "
-                    "provided identities and evidence, state uncertainty in the "
-                    "typed fields, and never claim approval, certification, or safety."
+                    "provided identities and evidence. Copy every source, orientation, "
+                    "engineering-context, evidence, geometry, and fixture identity "
+                    "exactly as supplied; never invent, alter, or reformat one. State "
+                    "uncertainty in the typed fields, keep decision as proposed and "
+                    "engineer_note empty, and never claim approval, certification, or safety."
                 )},
                 {"role": "user", "content": request_text},
             ],
             "text": {"format": {
                 "type": "json_schema",
                 "name": "fxd_fixture_proposal_v1",
-                "schema": _openai_proposal_response_schema(),
+                "schema": _openai_proposal_response_schema(request),
                 "strict": True,
             }},
             "max_output_tokens": OPENAI_MAX_OUTPUT_TOKENS,
@@ -722,6 +786,8 @@ class OpenAiResponsesProvider:
 
 def _sanitized_provider_failure_reason(provider: AiFixtureProvider, exc: Exception) -> str:
     """Keep provider diagnostics useful without retaining response or prompt content."""
+    if isinstance(exc, ProposalContractRejection):
+        return "FXD typed proposal contract rejected: " + exc.category + "."
     if isinstance(exc, TimeoutError):
         return (
             "OpenAI provider request timed out."
@@ -1200,6 +1266,16 @@ def deterministic_baseline_proposal(
 
 def ai_response_from_proposal(proposal: FixtureProposal) -> dict[str, object]:
     """Return the strict provider response surface, useful for deterministic tests."""
+    recommendations: list[dict[str, object]] = []
+    for recommendation in proposal.recommendations:
+        encoded = recommendation.to_dict()
+        for parameter in encoded["editable_parameters"]:
+            value = parameter["value"]
+            if isinstance(value, (dict, list)):
+                parameter["value"] = json.dumps(
+                    value, sort_keys=True, separators=(",", ":"), ensure_ascii=True,
+                )
+        recommendations.append(encoded)
     return {
         "schema_version": PROPOSAL_SCHEMA,
         "source_sha256": proposal.source_sha256,
@@ -1211,7 +1287,7 @@ def ai_response_from_proposal(proposal: FixtureProposal) -> dict[str, object]:
         "lifecycle": proposal.lifecycle,
         "complexity_class": proposal.complexity_class,
         "assumptions": list(proposal.assumptions),
-        "recommendations": [item.to_dict() for item in proposal.recommendations],
+        "recommendations": recommendations,
         "alternative_summary": proposal.alternative_summary,
     }
 
@@ -1225,28 +1301,28 @@ def proposal_from_ai_response(data: dict[str, object], request: AiProposalReques
         "complexity_class", "assumptions", "recommendations", "alternative_summary",
     }
     if not isinstance(data, dict) or set(data) != required:
-        raise FixtureProposalError("AI response does not match the strict proposal schema")
+        raise ProposalContractRejection("top-level schema mismatch")
     if data["schema_version"] != PROPOSAL_SCHEMA:
-        raise FixtureProposalError("AI proposal response is unversioned or unsupported")
+        raise ProposalContractRejection("top-level schema mismatch")
     if data["source_sha256"] != request.source_sha256:
-        raise FixtureProposalError("AI proposal source SHA-256 mismatch")
+        raise ProposalContractRejection("source identity mismatch")
     if data["manufacturing_orientation_identity"] != request.manufacturing_orientation_identity:
-        raise FixtureProposalError("AI proposal manufacturing orientation mismatch")
+        raise ProposalContractRejection("orientation identity mismatch")
     if data["engineering_context_identity"] != request.engineering_context_identity:
-        raise FixtureProposalError("AI proposal engineering context mismatch")
+        raise ProposalContractRejection("engineering-context mismatch")
     top_string_fields = (
         "concept_name", "fixture_purpose", "base_strategy", "lifecycle",
         "complexity_class",
     )
     if any(not isinstance(data[field], str) or not data[field].strip()
            for field in top_string_fields):
-        raise FixtureProposalError("AI proposal contains malformed text fields")
+        raise ProposalContractRejection("top-level schema mismatch")
     if (not isinstance(data["assumptions"], list)
             or any(not isinstance(value, str) for value in data["assumptions"])):
-        raise FixtureProposalError("AI proposal assumptions must be a list of strings")
+        raise ProposalContractRejection("top-level schema mismatch")
     if (data["alternative_summary"] is not None
             and not isinstance(data["alternative_summary"], str)):
-        raise FixtureProposalError("AI proposal alternative summary is malformed")
+        raise ProposalContractRejection("top-level schema mismatch")
     recommendation_fields = {
         "recommendation_id", "recommendation_type", "title", "engineering_reason",
         "source_evidence", "assumptions", "confidence", "deterministic_checks",
@@ -1261,101 +1337,103 @@ def proposal_from_ai_response(data: dict[str, object], request: AiProposalReques
     }
     try:
         raw_recommendations = data["recommendations"]
-        if not isinstance(raw_recommendations, list):
-            raise FixtureProposalError("AI recommendations must be a list")
+        if not isinstance(raw_recommendations, list) or not raw_recommendations:
+            raise ProposalContractRejection("top-level schema mismatch")
+        recommendations: list[ProposalRecommendation] = []
         for item in raw_recommendations:
             if not isinstance(item, dict) or set(item) != recommendation_fields:
-                raise FixtureProposalError(
-                    "AI recommendation does not match the strict nested schema"
-                )
+                raise ProposalContractRejection("top-level schema mismatch")
             string_fields = (
                 "recommendation_id", "recommendation_type", "title",
                 "engineering_reason", "validation_status", "decision", "engineer_note",
             )
             if any(not isinstance(item[field], str) for field in string_fields):
-                raise FixtureProposalError("AI recommendation contains malformed text fields")
+                raise ProposalContractRejection("top-level schema mismatch")
             if (not item["recommendation_id"].strip() or not item["title"].strip()
                     or not item["engineering_reason"].strip()):
-                raise FixtureProposalError("AI recommendation contains empty required text")
+                raise ProposalContractRejection("top-level schema mismatch")
+            if item["recommendation_type"] not in {
+                    value.value for value in RecommendationType}:
+                raise ProposalContractRejection("unsupported recommendation type")
+            if item["validation_status"] not in {
+                    value.value for value in RecommendationValidation}:
+                raise ProposalContractRejection("unsupported validation status")
+            if (item["decision"] != RecommendationDecision.PROPOSED.value
+                    or item["engineer_note"] != ""):
+                raise ProposalContractRejection("provider-authored engineer decision")
             if (isinstance(item["confidence"], bool)
                     or not isinstance(item["confidence"], (int, float))):
-                raise FixtureProposalError("AI recommendation confidence must be numeric")
+                raise ProposalContractRejection("malformed confidence")
+            if not 0.0 <= item["confidence"] <= 1.0:
+                raise ProposalContractRejection("malformed confidence")
             for field in (
                     "assumptions", "deterministic_checks", "unresolved_risks",
                     "downstream_dependencies"):
                 if (not isinstance(item[field], list)
                         or any(not isinstance(value, str) for value in item[field])):
-                    raise FixtureProposalError(
-                        f"AI recommendation {field} must be a list of strings"
-                    )
+                    if field == "deterministic_checks":
+                        raise ProposalContractRejection(
+                            "missing or empty deterministic checks"
+                        )
+                    raise ProposalContractRejection("top-level schema mismatch")
+            if not item["deterministic_checks"]:
+                raise ProposalContractRejection("missing or empty deterministic checks")
             if (item["fixture_feature_identity"] is not None
                     and not isinstance(item["fixture_feature_identity"], str)):
-                raise FixtureProposalError("AI fixture feature identity is malformed")
-            if (not isinstance(item["source_evidence"], list)
+                raise ProposalContractRejection("unknown governed identity")
+            if (not isinstance(item["source_evidence"], list) or not item["source_evidence"]
                     or any(not isinstance(value, dict) or set(value) != evidence_fields
                            for value in item["source_evidence"])):
-                raise FixtureProposalError("AI evidence does not match the strict nested schema")
+                raise ProposalContractRejection("missing or empty evidence")
             if any(any(not isinstance(value[field], str) or not value[field].strip()
                        for field in evidence_fields)
                    for value in item["source_evidence"]):
-                raise FixtureProposalError("AI evidence fields must be non-empty strings")
+                raise ProposalContractRejection("missing or empty evidence")
             if (not isinstance(item["editable_parameters"], list)
                     or any(not isinstance(value, dict) or set(value) != parameter_fields
                            for value in item["editable_parameters"])):
-                raise FixtureProposalError(
-                    "AI editable parameters do not match the strict nested schema"
-                )
+                raise ProposalContractRejection("malformed editable parameter")
             for parameter in item["editable_parameters"]:
                 if not isinstance(parameter["name"], str) or not parameter["name"].strip():
-                    raise FixtureProposalError("AI editable parameter name is malformed")
+                    raise ProposalContractRejection("malformed editable parameter")
+                if (parameter["value"] is not None
+                        and (isinstance(parameter["value"], (dict, list))
+                             or not isinstance(parameter["value"], (str, int, float, bool)))):
+                    raise ProposalContractRejection("malformed editable parameter")
                 if (parameter["units"] is not None
                         and not isinstance(parameter["units"], str)):
-                    raise FixtureProposalError("AI editable parameter units are malformed")
+                    raise ProposalContractRejection("malformed editable parameter")
                 if (not isinstance(parameter["choices"], list)
                         or any(not isinstance(value, str) for value in parameter["choices"])):
-                    raise FixtureProposalError("AI editable parameter choices are malformed")
+                    raise ProposalContractRejection("malformed editable parameter")
             reference = item["geometry_reference"]
             if reference is not None and (
                     not isinstance(reference, dict) or set(reference) != reference_fields):
-                raise FixtureProposalError(
-                    "AI geometry reference does not match the strict nested schema"
-                )
+                raise ProposalContractRejection("malformed geometry reference")
             if reference is not None:
                 if (not isinstance(reference["component_identity"], str)
                         or not reference["component_identity"].strip()
                         or any(reference[field] is not None
                                and not isinstance(reference[field], str)
                                for field in ("body_identity", "face_identity", "edge_identity"))):
-                    raise FixtureProposalError("AI geometry reference identities are malformed")
-        recommendations = tuple(ProposalRecommendation.from_dict(item)
-                                for item in raw_recommendations)
-    except FixtureProposalError:
+                    raise ProposalContractRejection("malformed geometry reference")
+            for evidence in item["source_evidence"]:
+                if evidence["identity"] not in request.known_identities:
+                    raise ProposalContractRejection("unknown governed identity")
+            if reference is not None:
+                identities = set(reference.values()) - {None}
+                if not identities <= request.known_identities:
+                    raise ProposalContractRejection("unknown governed identity")
+            if (item["fixture_feature_identity"] is not None
+                    and item["fixture_feature_identity"] not in request.known_identities):
+                raise ProposalContractRejection("unknown governed identity")
+            recommendations.append(ProposalRecommendation.from_dict(item))
+        if len({item.recommendation_id for item in recommendations}) != len(recommendations):
+            raise ProposalContractRejection("top-level schema mismatch")
+    except ProposalContractRejection:
         raise
-    except (KeyError, TypeError, ValueError) as exc:
-        raise FixtureProposalError(f"AI recommendations are malformed: {exc}") from exc
-    for recommendation in recommendations:
-        if (recommendation.decision != RecommendationDecision.PROPOSED
-                or recommendation.engineer_note):
-            raise FixtureProposalError(
-                "AI proposal may not author engineer recommendation decisions"
-            )
-        for evidence in recommendation.source_evidence:
-            if evidence.identity not in request.known_identities:
-                raise FixtureProposalError(
-                    f"AI proposal references unknown feature identity {evidence.identity!r}"
-                )
-        if recommendation.geometry_reference is not None:
-            identities = {
-                recommendation.geometry_reference.component_identity,
-                recommendation.geometry_reference.body_identity,
-                recommendation.geometry_reference.face_identity,
-                recommendation.geometry_reference.edge_identity,
-            } - {None}
-            if not identities <= request.known_identities:
-                raise FixtureProposalError("AI proposal contains malformed geometry reference")
-        if (recommendation.fixture_feature_identity is not None
-                and recommendation.fixture_feature_identity not in request.known_identities):
-            raise FixtureProposalError("AI proposal references unknown fixture feature")
+    except (FixtureProposalError, KeyError, TypeError, ValueError) as exc:
+        raise FixtureProposalError("AI typed proposal contract was rejected") from exc
     provenance = ProposalProvenance(
         ProposalSource.AI, provider.identity, provider.engine_identifier,
         getattr(provider, "prompt_contract_version", PROMPT_CONTRACT_VERSION), PROPOSAL_SCHEMA,
@@ -1369,11 +1447,11 @@ def proposal_from_ai_response(data: dict[str, object], request: AiProposalReques
             request.engineering_context_identity, str(data["concept_name"]),
             str(data["fixture_purpose"]), str(data["base_strategy"]),
             str(data["lifecycle"]), str(data["complexity_class"]),
-            tuple(str(item) for item in data["assumptions"]), recommendations,
+            tuple(str(item) for item in data["assumptions"]), tuple(recommendations),
             data.get("alternative_summary"), provenance,
         )
-    except (KeyError, TypeError, ValueError) as exc:
-        raise FixtureProposalError(f"AI proposal values are malformed: {exc}") from exc
+    except (FixtureProposalError, KeyError, TypeError, ValueError) as exc:
+        raise FixtureProposalError("AI typed proposal contract was rejected") from exc
     return _finalize(proposal)
 
 
