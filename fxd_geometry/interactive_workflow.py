@@ -79,15 +79,27 @@ class ProcessSetup:
     manufacturing_build_direction: Vec3 | None = None
     manufacturing_loading_direction: Vec3 | None = None
     manufacturing_unloading_direction: Vec3 | None = None
+    fixture_family: str | None = None
+    requested_station_count: int | None = None
+    maximum_fixture_length_mm: float | None = None
+    preferred_station_pitch_mm: float | None = None
+    operator_loading_side: str | None = None
+    clamp_operating_side: str | None = None
+    table_mounting_preference: str | None = None
+    compare_one_up_and_multi_up: bool = False
 
     def __post_init__(self) -> None:
         if not self.project_name.strip():
             raise InteractiveWorkflowError("project name is required")
         if self.production_quantity is not None and self.production_quantity < 1:
             raise InteractiveWorkflowError("production quantity must be positive")
+        if self.requested_station_count is not None and not 1 <= self.requested_station_count <= 8:
+            raise InteractiveWorkflowError("requested station count must be between 1 and 8")
         for value, name in (
             (self.required_repeatability_mm, "required repeatability"),
             (self.required_clearance_mm, "required clearance"),
+            (self.maximum_fixture_length_mm, "maximum fixture length"),
+            (self.preferred_station_pitch_mm, "preferred station pitch"),
         ):
             if value is not None and (not math.isfinite(value) or value < 0):
                 raise InteractiveWorkflowError(f"{name} must be finite and non-negative")
@@ -134,6 +146,14 @@ class ProcessSetup:
             "manufacturing_build_direction": vector(self.manufacturing_build_direction),
             "manufacturing_loading_direction": vector(self.manufacturing_loading_direction),
             "manufacturing_unloading_direction": vector(self.manufacturing_unloading_direction),
+            "fixture_family": self.fixture_family,
+            "requested_station_count": self.requested_station_count,
+            "maximum_fixture_length_mm": self.maximum_fixture_length_mm,
+            "preferred_station_pitch_mm": self.preferred_station_pitch_mm,
+            "operator_loading_side": self.operator_loading_side,
+            "clamp_operating_side": self.clamp_operating_side,
+            "table_mounting_preference": self.table_mounting_preference,
+            "compare_one_up_and_multi_up": self.compare_one_up_and_multi_up,
         }
 
     @classmethod
@@ -172,6 +192,14 @@ class ProcessSetup:
             manufacturing_build_direction=vector("manufacturing_build_direction"),
             manufacturing_loading_direction=vector("manufacturing_loading_direction"),
             manufacturing_unloading_direction=vector("manufacturing_unloading_direction"),
+            fixture_family=data.get("fixture_family"),
+            requested_station_count=data.get("requested_station_count"),
+            maximum_fixture_length_mm=data.get("maximum_fixture_length_mm"),
+            preferred_station_pitch_mm=data.get("preferred_station_pitch_mm"),
+            operator_loading_side=data.get("operator_loading_side"),
+            clamp_operating_side=data.get("clamp_operating_side"),
+            table_mounting_preference=data.get("table_mounting_preference"),
+            compare_one_up_and_multi_up=bool(data.get("compare_one_up_and_multi_up", False)),
         )
 
 

@@ -159,6 +159,22 @@ revisions, and timing evidence. V1 through v4 projects remain readable. Invalid
 concepts and stale or blocked proposals remain blocked from review export;
 provisional output retains the engineering-review-only boundary.
 
-Milestone 30 was squash-merged through PR #52 at `edf65bb`. Milestone 31 remains
-Pending until hosted validation, independent review, user Windows visual
-acceptance, engineering acceptance, and merge.
+Milestone 30 was squash-merged through PR #52 at `edf65bb`. Milestone 31 was
+accepted and squash-merged through PR #53 at
+`ac1e7a1799ef9be674f6ab5739e48d178fa2f1dc`.
+
+### Multi-station weld-fixture synthesis
+
+The **Process** page exposes the first supported family, **Linear multi-station
+weld fixture**, together with editable station count (1–8), maximum fixture
+length, optional pitch, loading side, clamp side, table mounting, weld/unload
+evidence, and one-up/multi-up comparison intent. **Generate Fixture Build Plan**
+uses deterministic synthesis for that family; unsupported families are blocked.
+
+After **Author Real Manufacturing Geometry**, the Manufacturing page and VTK
+viewport show tessellated OCP base, rail, stations, locator/support/stop parts,
+clamp brackets, generic vendor-neutral clamp review solids, braces, and table
+holes. Source-product station copies are translucent review instances linked to
+the immutable source SHA and never modify customer CAD. Existing project layer
+controls retain base, locator, support, clamp, product-instance, purchased-tool,
+access-envelope, and findings visibility states. All results are review-only.

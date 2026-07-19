@@ -1234,6 +1234,23 @@ def deterministic_baseline_proposal(
             risks=("Warnings remain visible until supported by deterministic or engineer-recorded evidence.",),
         ),
     ))
+    if setup.fixture_family == "linear_multi_station_weld_fixture":
+        recommendations.append(_recommendation(
+            "multi-station-alternative", RecommendationType.ALTERNATIVE,
+            "Compare the governed linear multi-station weld fixture",
+            "The proposal may recommend one-up or multi-up, but deterministic synthesis owns the exact station count, pitch, clearance, clamp reach, and fixture geometry.",
+            project.active_concept, "fixture_concept", "Current deterministic concept selected for multi-station review",
+            assumptions=(
+                f"requested_station_count={setup.requested_station_count or 'unresolved'}",
+                f"maximum_fixture_length_mm={setup.maximum_fixture_length_mm or 'unresolved'}",
+            ),
+            risks=("Unsupported fixture families fail closed; generic clamp geometry is not released vendor CAD.",),
+            parameters=(
+                EditableParameter("fixture_family", "linear_multi_station_weld_fixture"),
+                EditableParameter("station_count", setup.requested_station_count or 1, "stations"),
+                EditableParameter("maximum_fixture_length_mm", setup.maximum_fixture_length_mm or 0.0, "mm"),
+            ),
+        ))
     alternative = None
     if len(project.concepts) > 1:
         alternative = (

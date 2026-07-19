@@ -15,32 +15,34 @@ This is the short-form cross-task repository handoff. It does not override
 - Milestone 29 was independently visually accepted and squash-merged through
   PR #51 at `4b6691a`.
 - Milestone 30 was squash-merged through PR #52 at `edf65bb`.
+- Milestone 31 was accepted and squash-merged through PR #53 at
+  `ac1e7a1799ef9be674f6ab5739e48d178fa2f1dc`.
 
 ## Active milestone
 
-Milestone 31 is active on
-`milestone-31-ai-fixture-engineer-guided-validation`. It adds the versioned,
-provider-neutral AI Fixture Engineer proposal boundary, a deterministic offline
-baseline, a minimal intent interview, strict response quarantine, guided
-validation and correction routing, recommendation review/edit decisions, and
-schema-v5 persistence. Proposal generation follows accepted manufacturing
-orientation and composes existing placement, concept, access, weld, validation,
-revision, approval, and export contracts rather than replacing them.
+Milestone 32 is locally verified on
+`milestone-32-multi-station-weld-fixture-synthesis`. It adds the first supported
+`linear_multi_station_weld_fixture` family by extending the existing fixture
+build, OCP authoring, validation, proposal, export, persistence, and workbench
+contracts. It persists stable immutable-source product review instances,
+station intent, equal-pitch layout evidence, real component identities, and
+deterministic access/connectivity results; it does not create a parallel fixture
+system.
 
 The application preserves ordinary vendor STEP import, source bytes and
 SHA-256, XCAF color evidence, zero-based tessellation, and fail-closed behavior.
-Generated AABB fixture evidence is explicitly provisional wireframe review
-geometry and cannot be represented as source or final manufacturing geometry.
+When an M32 build is authored, the workbench displays tessellated real OCP
+fixture components and transformed immutable source-product review instances.
+AABB evidence is retained only as explicitly labelled fallback/debug evidence.
 
 ## Review boundary
 
-Milestone 31 has 278 passing automated tests, governed repository CI and real
-OCP proof, hosted pinned-OCP acceptance, clean fresh Codex review, and local
-Windows native VTK proposal-workflow acceptance. It remains in progress until
-user Windows visual acceptance, engineering acceptance, and explicit merge
-authorization are recorded. The workbench and all exports remain engineering-
-review-only and never imply production, structural, weld-process, or safety
-approval.
+Milestone 31 is complete and merged. Milestone 32 has focused and full
+regression evidence, governed CI, and a Windows technical smoke check; it still
+requires hosted pinned-OCP acceptance, engineering acceptance, and an unmerged
+review pull request.
+The workbench and all exports remain engineering-review-only and never imply
+production, structural, weld-process, or safety approval.
 
 ## Governing principles
 

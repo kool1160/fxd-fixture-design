@@ -9,7 +9,7 @@ components whose authority is explicitly ``AUTHORED_MANUFACTURING``.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import Enum
 import hashlib
 import json
@@ -25,6 +25,7 @@ from .product_model import ProductModel
 
 
 M30_SCHEMA = "fxd-fixture-build-v1"
+M32_SCHEMA = "fxd-multi-station-weld-fixture-v1"
 
 
 class FixtureBuildError(ValueError):
@@ -41,6 +42,12 @@ class FixturePurpose(str, Enum):
     REWORK = "rework_fixture"
     ROBOTIC = "robotic_or_cobot_fixture"
     COMBINED_BUILD_CHECK = "combined_build_and_check_fixture"
+
+
+class FixtureFamily(str, Enum):
+    """Fixture families supported by a governed deterministic generator."""
+
+    LINEAR_MULTI_STATION_WELD = "linear_multi_station_weld_fixture"
 
 
 class ConstructionMethod(str, Enum):
@@ -97,6 +104,11 @@ class BuildComponentRole(str, Enum):
     TOOLING_MOUNT = "purchased_tooling_mount"
     FORK_POCKET = "fork_pocket"
     LIFTING_FEATURE = "lifting_feature"
+    DATUM_RAIL = "datum_rail_or_backplate"
+    CLAMP_BRACKET = "toggle_clamp_mounting_bracket"
+    TOGGLE_CLAMP = "vendor_neutral_toggle_clamp"
+    END_BRACE = "end_brace"
+    MOUNTING_FOOT = "mounting_foot"
 
 
 class HoleProcess(str, Enum):
@@ -179,6 +191,10 @@ RULE_CATALOG: tuple[M30Rule, ...] = (
     _rule("FXD-COST-001", "Lifecycle comparison", "Store/reuse versus recut is a ranked preference, not universal law.", "lifecycle", ("quantity", "repeat frequency", "job revision"), "keep lifecycle rationale explicit", "warning", ("test_lifecycle",)),
     _rule("FXD-MNT-001", "Replaceable service items", "Wear and locator items need accessible replacement evidence.", "maintenance", ("replacement evidence",), "flag inaccessible non-replaceable wear contacts", "warning", ("test_maintenance",)),
     _rule("FXD-EXP-001", "Review-only export gate", "Stale, suppressed, provisional, or invalid build evidence cannot export.", "export", ("validation digest", "authority"), "fail closed before package creation", "error", ("test_export_gate",)),
+    _rule("FXD-M32-STA", "Multi-station layout", "Station count, pitch, product instances, and fixture length require deterministic evidence.", "multi-station synthesis", ("station layout", "product envelope"), "reject overlap or out-of-bounds station layouts", "error", ("test_multi_station_fixture",)),
+    _rule("FXD-M32-CLP", "Multi-station clamp reach", "Each station requires a reachable clamp tip and a clear open envelope.", "multi-station clamping", ("clamp reach", "release envelope"), "reject unreachable or blocked clamp stations", "error", ("test_multi_station_fixture",)),
+    _rule("FXD-M32-ACC", "Multi-station access", "Loading, unloading, hand, and weld access remain first-class station evidence.", "multi-station access", ("access envelopes",), "reject trapped or inaccessible stations", "error", ("test_multi_station_fixture",)),
+    _rule("FXD-M32-CON", "Multi-station connectivity", "A datum rail, stations, braces, and base must share a connected load path.", "multi-station structure", ("component parent connectivity",), "reject disconnected station or brace components", "error", ("test_multi_station_fixture",)),
 )
 RULES_BY_ID = {item.identity: item for item in RULE_CATALOG}
 
@@ -222,6 +238,34 @@ class HoleProcessSpec:
                    data.get("thread_pitch"), data.get("thread_engagement_mm"),
                    HoleProcess(final) if final else None, str(data.get("notes", "")),
                    tuple(data.get("evidence", ())))
+
+
+@dataclass(frozen=True)
+class SlotProcessSpec:
+    """Through-slot operation kept in parity between OCP and planar review data."""
+
+    identity: str
+    minimum_mm: Vec3
+    maximum_mm: Vec3
+    purpose: str
+
+    def __post_init__(self) -> None:
+        if not self.identity.strip() or not self.purpose.strip():
+            raise FixtureBuildError("slot identity and purpose are required")
+        if any(left >= right for left, right in zip(
+                self.minimum_mm.__dict__.values(), self.maximum_mm.__dict__.values())):
+            raise FixtureBuildError("slot bounds must have positive extent")
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "identity": self.identity, "minimum_mm": self.minimum_mm.__dict__,
+            "maximum_mm": self.maximum_mm.__dict__, "purpose": self.purpose,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, object]) -> "SlotProcessSpec":
+        return cls(str(data["identity"]), Vec3(**data["minimum_mm"]),
+                   Vec3(**data["maximum_mm"]), str(data["purpose"]))
 
 
 @dataclass(frozen=True)
@@ -379,6 +423,185 @@ class PokaYokeSpec:
 
 
 @dataclass(frozen=True)
+class MultiStationRequirements:
+    """Only the additional intent required for the first M32 fixture family.
+
+    These are review inputs, not hidden shop standards.  Clearance allowances
+    are explicit so an engineer can inspect and change the synthesis basis.
+    """
+
+    fixture_family: FixtureFamily
+    requested_station_count: int
+    maximum_fixture_length_mm: float
+    preferred_station_pitch_mm: float | None
+    operator_loading_side: str
+    unloading_direction: str
+    clamp_operating_side: str
+    operation_mode: str
+    table_mounting_preference: str
+    expected_production_quantity: int
+    compare_one_up_and_multi_up: bool = True
+    hand_clearance_mm: float = 75.0
+    weld_clearance_mm: float = 25.0
+    adjustment_allowance_mm: float = 10.0
+    clamp_sweep_mm: float | None = None
+
+    def __post_init__(self) -> None:
+        if self.fixture_family != FixtureFamily.LINEAR_MULTI_STATION_WELD:
+            value = self.fixture_family.value if isinstance(self.fixture_family, FixtureFamily) else str(self.fixture_family)
+            raise FixtureBuildError(f"unsupported fixture family {value!r}")
+        if not 1 <= self.requested_station_count <= 8:
+            raise FixtureBuildError("multi-station fixture count must be between 1 and 8")
+        numeric = (self.maximum_fixture_length_mm, self.hand_clearance_mm,
+                   self.weld_clearance_mm, self.adjustment_allowance_mm)
+        if any(not math.isfinite(value) or value <= 0 for value in numeric):
+            raise FixtureBuildError("multi-station lengths and clearance allowances must be positive finite millimetres")
+        if self.preferred_station_pitch_mm is not None and self.preferred_station_pitch_mm <= 0:
+            raise FixtureBuildError("preferred station pitch must be positive when supplied")
+        if self.clamp_sweep_mm is not None and self.clamp_sweep_mm <= 0:
+            raise FixtureBuildError("clamp sweep must be positive when supplied")
+        if self.expected_production_quantity < 1:
+            raise FixtureBuildError("expected production quantity must be positive")
+        if self.operation_mode not in {"manual", "cobot", "robot"}:
+            raise FixtureBuildError("operation mode must be manual, cobot, or robot")
+        if not all(value.strip() for value in (
+                self.operator_loading_side, self.unloading_direction,
+                self.clamp_operating_side, self.table_mounting_preference)):
+            raise FixtureBuildError("multi-station handling and mounting intent is required")
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "fixture_family": self.fixture_family.value,
+            "requested_station_count": self.requested_station_count,
+            "maximum_fixture_length_mm": self.maximum_fixture_length_mm,
+            "preferred_station_pitch_mm": self.preferred_station_pitch_mm,
+            "operator_loading_side": self.operator_loading_side,
+            "unloading_direction": self.unloading_direction,
+            "clamp_operating_side": self.clamp_operating_side,
+            "operation_mode": self.operation_mode,
+            "table_mounting_preference": self.table_mounting_preference,
+            "expected_production_quantity": self.expected_production_quantity,
+            "compare_one_up_and_multi_up": self.compare_one_up_and_multi_up,
+            "hand_clearance_mm": self.hand_clearance_mm,
+            "weld_clearance_mm": self.weld_clearance_mm,
+            "adjustment_allowance_mm": self.adjustment_allowance_mm,
+            "clamp_sweep_mm": self.clamp_sweep_mm,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, object]) -> "MultiStationRequirements":
+        return cls(
+            FixtureFamily(data["fixture_family"]), int(data["requested_station_count"]),
+            float(data["maximum_fixture_length_mm"]), data.get("preferred_station_pitch_mm"),
+            str(data["operator_loading_side"]), str(data["unloading_direction"]),
+            str(data["clamp_operating_side"]), str(data["operation_mode"]),
+            str(data["table_mounting_preference"]), int(data["expected_production_quantity"]),
+            bool(data.get("compare_one_up_and_multi_up", True)),
+            float(data.get("hand_clearance_mm", 75.0)), float(data.get("weld_clearance_mm", 25.0)),
+            float(data.get("adjustment_allowance_mm", 10.0)), data.get("clamp_sweep_mm"),
+        )
+
+
+@dataclass(frozen=True)
+class StationTransform:
+    """Immutable source-instance evidence for one review station."""
+
+    identity: str
+    station_index: int
+    translation_mm: Vec3
+    product_source_sha256: str
+    source_component_identities: tuple[str, ...]
+    product_bounds: Aabb
+    clamp_tip_reaches_surface: bool = True
+    open_clamp_envelope_clear: bool = True
+    hand_access_clear: bool = True
+    weld_access_clear: bool = True
+    unload_path_clear: bool = True
+    trapped_part: bool = False
+
+    def __post_init__(self) -> None:
+        if not self.identity.strip() or self.station_index < 1 or len(self.product_source_sha256) != 64:
+            raise FixtureBuildError("station identity, positive index, and source SHA-256 are required")
+        if not self.source_component_identities:
+            raise FixtureBuildError("product review station must reference immutable source components")
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "identity": self.identity, "station_index": self.station_index,
+            "translation_mm": self.translation_mm.__dict__,
+            "product_source_sha256": self.product_source_sha256,
+            "source_component_identities": list(self.source_component_identities),
+            "product_bounds": self.product_bounds.as_dict(),
+            "clamp_tip_reaches_surface": self.clamp_tip_reaches_surface,
+            "open_clamp_envelope_clear": self.open_clamp_envelope_clear,
+            "hand_access_clear": self.hand_access_clear,
+            "weld_access_clear": self.weld_access_clear,
+            "unload_path_clear": self.unload_path_clear,
+            "trapped_part": self.trapped_part,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, object]) -> "StationTransform":
+        bounds = data["product_bounds"]
+        return cls(
+            str(data["identity"]), int(data["station_index"]), Vec3(**data["translation_mm"]),
+            str(data["product_source_sha256"]), tuple(data["source_component_identities"]),
+            Aabb(Vec3(**bounds["minimum"]), Vec3(**bounds["maximum"])),
+            bool(data.get("clamp_tip_reaches_surface", True)),
+            bool(data.get("open_clamp_envelope_clear", True)),
+            bool(data.get("hand_access_clear", True)), bool(data.get("weld_access_clear", True)),
+            bool(data.get("unload_path_clear", True)), bool(data.get("trapped_part", False)),
+        )
+
+
+@dataclass(frozen=True)
+class MultiStationLayout:
+    """Deterministic layout and source-instance evidence stored with the build."""
+
+    identity: str
+    requirements: MultiStationRequirements
+    primary_axis: str
+    station_pitch_mm: float
+    required_fixture_length_mm: float
+    proposed_smaller_station_count: int | None
+    stations: tuple[StationTransform, ...]
+    rationale: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        if self.primary_axis not in {"x", "y"} or self.station_pitch_mm <= 0:
+            raise FixtureBuildError("multi-station layout requires X or Y primary axis and positive pitch")
+        if len(self.stations) != self.requirements.requested_station_count:
+            raise FixtureBuildError("station layout count does not match requested station count")
+        if tuple(item.station_index for item in self.stations) != tuple(range(1, len(self.stations) + 1)):
+            raise FixtureBuildError("station indices must be stable and contiguous")
+        if len({item.identity for item in self.stations}) != len(self.stations):
+            raise FixtureBuildError("station identities must be unique")
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "schema": M32_SCHEMA, "identity": self.identity,
+            "requirements": self.requirements.to_dict(), "primary_axis": self.primary_axis,
+            "station_pitch_mm": self.station_pitch_mm,
+            "required_fixture_length_mm": self.required_fixture_length_mm,
+            "proposed_smaller_station_count": self.proposed_smaller_station_count,
+            "stations": [item.to_dict() for item in self.stations],
+            "rationale": list(self.rationale),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, object]) -> "MultiStationLayout":
+        if data.get("schema") != M32_SCHEMA:
+            raise FixtureBuildError("unsupported multi-station layout schema")
+        return cls(
+            str(data["identity"]), MultiStationRequirements.from_dict(data["requirements"]),
+            str(data["primary_axis"]), float(data["station_pitch_mm"]),
+            float(data["required_fixture_length_mm"]), data.get("proposed_smaller_station_count"),
+            tuple(StationTransform.from_dict(item) for item in data["stations"]),
+            tuple(data.get("rationale", ())),
+        )
+
+
+@dataclass(frozen=True)
 class FixtureBuildRequirements:
     source_sha256: str
     fixture_purpose: FixturePurpose
@@ -466,6 +689,7 @@ class FixtureBuildComponent:
     evidence: tuple[str, ...] = ()
     replaceable: bool = False
     maintenance_access: bool | None = None
+    slots: tuple[SlotProcessSpec, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.identity.strip() or not self.part_number.strip() or not self.description.strip():
@@ -499,6 +723,7 @@ class FixtureBuildComponent:
             "holes": [item.to_dict() for item in sorted(self.holes, key=lambda item: item.identity)],
             "assumptions": list(self.assumptions), "evidence": list(self.evidence),
             "replaceable": self.replaceable, "maintenance_access": self.maintenance_access,
+            "slots": [item.to_dict() for item in sorted(self.slots, key=lambda item: item.identity)],
         }
 
     @classmethod
@@ -519,6 +744,7 @@ class FixtureBuildComponent:
             tuple(HoleProcessSpec.from_dict(item) for item in data.get("holes", ())),
             tuple(data.get("assumptions", ())), tuple(data.get("evidence", ())),
             bool(data.get("replaceable", False)), data.get("maintenance_access"),
+            tuple(SlotProcessSpec.from_dict(item) for item in data.get("slots", ())),
         )
 
 
@@ -538,6 +764,7 @@ class FixtureBuildPlan:
     assumptions: tuple[str, ...] = ()
     evidence: tuple[str, ...] = ()
     poka_yokes: tuple[PokaYokeSpec, ...] = ()
+    multi_station_layout: MultiStationLayout | None = None
 
     def __post_init__(self) -> None:
         if not self.identity.strip() or not self.concept_identity.strip():
@@ -570,6 +797,7 @@ class FixtureBuildPlan:
             "finish_weld_handoff": self.finish_weld_handoff, "assumptions": list(self.assumptions),
             "evidence": list(self.evidence),
             "poka_yokes": [item.to_dict() for item in sorted(self.poka_yokes, key=lambda item: item.identity)],
+            "multi_station_layout": self.multi_station_layout.to_dict() if self.multi_station_layout else None,
         }
 
     @classmethod
@@ -587,6 +815,8 @@ class FixtureBuildPlan:
             str(data.get("finish_weld_handoff", "")), tuple(data.get("assumptions", ())),
             tuple(data.get("evidence", ())),
             tuple(PokaYokeSpec.from_dict(item) for item in data.get("poka_yokes", ())),
+            MultiStationLayout.from_dict(data["multi_station_layout"])
+            if data.get("multi_station_layout") else None,
         )
 
 
@@ -746,12 +976,14 @@ def _component(identity: str, part: str, description: str, role: BuildComponentR
                locating: bool = False, reaction_support: str | None = None,
                contact_condition: str | None = None, holes: tuple[HoleProcessSpec, ...] = (),
                assumptions: tuple[str, ...] = (), evidence: tuple[str, ...] = (),
-               replaceable: bool = False, maintenance_access: bool | None = None) -> FixtureBuildComponent:
+               replaceable: bool = False, maintenance_access: bool | None = None,
+               slots: tuple[SlotProcessSpec, ...] = ()) -> FixtureBuildComponent:
     return FixtureBuildComponent(
         identity, part, description, role, authority, "mild steel" if authority != GeometryAuthority.PURCHASED_COMPONENT else "purchased tooling",
         thickness, _stock(bounds), 1, process, bounds, (reference,), rule_ids, parent,
         nest, reusable, disposable, contact_condition, reaction_support, fixed, locating,
         holes, assumptions, evidence, replaceable, maintenance_access,
+        slots,
     )
 
 
@@ -904,8 +1136,346 @@ def generate_fixture_build_plan(product: ProductModel, concept: CompleteFixtureC
     )
 
 
+def _axis_span(bounds: Aabb, axis: str) -> float:
+    return getattr(bounds.maximum, axis) - getattr(bounds.minimum, axis)
+
+
+def _translated(bounds: Aabb, translation: Vec3) -> Aabb:
+    return Aabb(bounds.minimum + translation, bounds.maximum + translation)
+
+
+def propose_multi_station_count(product: ProductModel,
+                                requirements: MultiStationRequirements) -> int:
+    """Return the largest equal-pitch count that fits the explicit length limit."""
+    bounds = _product_bounds(product)
+    axis = "x" if _axis_span(bounds, "x") >= _axis_span(bounds, "y") else "y"
+    station_span = _axis_span(bounds, axis)
+    secondary = _axis_span(bounds, "y" if axis == "x" else "x")
+    clamp_sweep = requirements.clamp_sweep_mm or max(30.0, secondary * 0.60)
+    pitch = max(requirements.preferred_station_pitch_mm or 0.0,
+                station_span + clamp_sweep + requirements.hand_clearance_mm
+                + requirements.weld_clearance_mm + requirements.adjustment_allowance_mm)
+    end_allowance = max(45.0, requirements.hand_clearance_mm * 0.5)
+    usable = requirements.maximum_fixture_length_mm - (2.0 * end_allowance) - station_span
+    return max(0, min(8, int(math.floor(usable / pitch)) + 1))
+
+
+def generate_multi_station_layout(product: ProductModel,
+                                  requirements: MultiStationRequirements) -> MultiStationLayout:
+    """Derive equal-pitch source review instances without copying source CAD."""
+    bounds = _product_bounds(product)
+    axis = "x" if _axis_span(bounds, "x") >= _axis_span(bounds, "y") else "y"
+    station_span = _axis_span(bounds, axis)
+    secondary = _axis_span(bounds, "y" if axis == "x" else "x")
+    clamp_sweep = requirements.clamp_sweep_mm or max(30.0, secondary * 0.60)
+    minimum_pitch = station_span + clamp_sweep + requirements.hand_clearance_mm + \
+        requirements.weld_clearance_mm + requirements.adjustment_allowance_mm
+    pitch = max(requirements.preferred_station_pitch_mm or 0.0, minimum_pitch)
+    end_allowance = max(45.0, requirements.hand_clearance_mm * 0.5)
+    required_length = 2.0 * end_allowance + station_span + pitch * (requirements.requested_station_count - 1)
+    proposed = propose_multi_station_count(product, requirements)
+    if proposed < 1:
+        raise FixtureBuildError("maximum fixture length cannot fit one product station with its explicit access allowances")
+    if requirements.requested_station_count > proposed:
+        raise FixtureBuildError(
+            f"requested {requirements.requested_station_count} stations require {required_length:.3f} mm, "
+            f"exceeding the {requirements.maximum_fixture_length_mm:.3f} mm limit; "
+            f"deterministic smaller-layout proposal is {proposed} station(s)"
+        )
+    source_components = tuple(component.identity for component in product.components)
+    stations: list[StationTransform] = []
+    for index in range(1, requirements.requested_station_count + 1):
+        location = end_allowance + (index - 1) * pitch
+        translation = (
+            Vec3(location - bounds.minimum.x, 52.0 - bounds.minimum.y, 12.0 - bounds.minimum.z)
+            if axis == "x" else
+            Vec3(52.0 - bounds.minimum.x, location - bounds.minimum.y, 12.0 - bounds.minimum.z)
+        )
+        stations.append(StationTransform(
+            f"m32-station-{index:02d}", index, translation, product.source_sha256,
+            source_components, _translated(bounds, translation),
+        ))
+    payload = json.dumps({"source": product.source_sha256, "requirements": requirements.to_dict(),
+                          "axis": axis, "pitch": pitch,
+                          "stations": [item.identity for item in stations]},
+                         sort_keys=True, separators=(",", ":"))
+    return MultiStationLayout(
+        "m32-layout-" + hashlib.sha256(payload.encode("utf-8")).hexdigest()[:20], requirements,
+        axis, round(pitch, 6), round(required_length, 6),
+        proposed if proposed < 8 else None, tuple(stations),
+        (
+            f"primary_axis={axis} derived from the largest product horizontal envelope span.",
+            f"pitch={pitch:.3f} mm combines product envelope, clamp sweep, hand clearance, weld clearance, and adjustment allowance.",
+            "Product stations are immutable review instances referencing the original source SHA-256 and component identities.",
+        ),
+    )
+
+
+def generate_multi_station_fixture_build_plan(
+        product: ProductModel, concept: CompleteFixtureConcept,
+        requirements: FixtureBuildRequirements,
+        multi_station: MultiStationRequirements) -> FixtureBuildPlan:
+    """Author M32 manufacturing intent through the existing fixture-build plan.
+
+    This is deliberately a supported-family generator, not an unconstrained
+    B-Rep authoring API.  Every real solid is still created only by
+    :func:`author_fixture_build` after the same deterministic gate used by M30.
+    """
+    if requirements.source_sha256 != product.source_sha256:
+        raise FixtureBuildError("multi-station requirements do not match immutable source geometry")
+    if concept.fixture.source_sha256 != product.source_sha256:
+        raise FixtureBuildError("multi-station concept does not match immutable source geometry")
+    layout = generate_multi_station_layout(product, multi_station)
+    source_bounds = _product_bounds(product)
+    primary = layout.primary_axis
+    secondary = "y" if primary == "x" else "x"
+    product_primary = _axis_span(source_bounds, primary)
+    product_secondary = _axis_span(source_bounds, secondary)
+    product_height = _axis_span(source_bounds, "z")
+    plate = 12.0
+    base_length = layout.required_fixture_length_mm
+    base_secondary = product_secondary + 104.0
+    if primary == "x":
+        base = Aabb(Vec3(0.0, 0.0, -plate), Vec3(base_length, base_secondary, 0.0))
+        rail = Aabb(Vec3(0.0, 0.0, 0.0), Vec3(base_length, 12.0, product_height + 92.0))
+    else:
+        base = Aabb(Vec3(0.0, 0.0, -plate), Vec3(base_secondary, base_length, 0.0))
+        rail = Aabb(Vec3(0.0, 0.0, 0.0), Vec3(12.0, base_length, product_height + 92.0))
+    reference = _component_reference(product)
+    mount_holes = tuple(
+        HoleProcessSpec(
+            f"m32-table-mount-{index}", Vec3(x, y, base.minimum.z), 12.0,
+            HoleProcess.LASER_CLEARANCE, evidence=("Table-mount review hole; fastener and table standard require engineer confirmation.",),
+        )
+        for index, (x, y) in enumerate(((22.0, 22.0), (base.maximum.x - 22.0, 22.0),
+                                         (22.0, base.maximum.y - 22.0),
+                                         (base.maximum.x - 22.0, base.maximum.y - 22.0)), 1)
+    )
+    rail_slots = tuple(
+        SlotProcessSpec(
+            f"m32-rail-slot-{index}",
+            Vec3(x - 6.0, 2.0, base.minimum.z - 1.0) if primary == "x" else Vec3(2.0, x - 6.0, base.minimum.z - 1.0),
+            Vec3(x + 6.0, 10.0, 1.0) if primary == "x" else Vec3(10.0, x + 6.0, 1.0),
+            "datum rail tab-and-slot location during fixture fabrication",
+        ) for index, x in enumerate((48.0, base_length - 48.0), 1)
+    )
+    components: list[FixtureBuildComponent] = [
+        _component("m32-baseplate", "FXD-M32-001", "linear multi-station laser-cut baseplate with table mounting holes",
+                   BuildComponentRole.BASEPLATE, base, reference, parent=None, process="laser cut then drill as required",
+                   thickness=plate, rule_ids=("FXD-MFG-001", "FXD-M32-STA", "FXD-M32-CON", "FXD-EXP-001"),
+                   holes=mount_holes, slots=rail_slots,
+                   evidence=("Overall length is derived from deterministic station pitch and explicit maximum-length intent.",
+                             "Mounting holes are review geometry; table-fastener selection remains engineer controlled.")),
+        _component("m32-datum-rail", "FXD-M32-002", "continuous upright datum backplate or rail",
+                   BuildComponentRole.DATUM_RAIL, rail, reference, parent="m32-baseplate", process="laser cut and weld",
+                   thickness=12.0, rule_ids=("FXD-MFG-001", "FXD-TAB-001", "FXD-M32-CON"),
+                   evidence=("Continuous rail provides a shared repeatable datum path into the baseplate.",)),
+    ]
+    tab_slots = tuple(TabSlotJoint(
+        f"m32-rail-tab-{index}", "m32-datum-rail", "m32-baseplate", 12.0, 12.5, 12.0, 0.5,
+        Vec3(0.0, 0.0, -1.0), True, True, False, index,
+        ("Rail tab-and-slot fit is explicit review evidence, not a final tolerance release.",),
+    ) for index in (1, 2))
+    for station in layout.stations:
+        box = station.product_bounds
+        x0, x1 = box.minimum.x, box.maximum.x
+        y0, y1 = box.minimum.y, box.maximum.y
+        z1 = box.maximum.z
+        prefix = station.identity
+        support_points = ((x0 + (x1 - x0) * 0.22, y0 + (y1 - y0) * 0.30),
+                          (x0 + (x1 - x0) * 0.78, y0 + (y1 - y0) * 0.30),
+                          (x0 + (x1 - x0) * 0.50, y0 + (y1 - y0) * 0.72))
+        for support_index, (x, y) in enumerate(support_points, 1):
+            support = Aabb(Vec3(x - 7.0, y - 7.0, 0.0), Vec3(x + 7.0, y + 7.0, 12.0))
+            components.append(_component(
+                f"{prefix}-support-{support_index}", f"FXD-M32-{station.station_index:02d}1{support_index}",
+                f"station {station.station_index} replaceable support rest {support_index}",
+                BuildComponentRole.SUPPORT_PAD, support, reference, parent="m32-baseplate", process="machined replaceable rest",
+                thickness=12.0, rule_ids=("FXD-DAT-001", "FXD-SUP-001", "FXD-M32-STA"), fixed=True,
+                locating=True, replaceable=True, maintenance_access=True,
+                evidence=(f"station={station.identity}", "Three-point primary support arrangement."),
+            ))
+        locator = Aabb(Vec3(x0 + 8.0, y0 - 16.0, 0.0), Vec3(x0 + 30.0, y0 - 2.0, z1 + 28.0))
+        locator_slot = SlotProcessSpec(
+            f"{prefix}-locator-adjustment-slot", Vec3(x0 + 13.0, y0 - 17.0, 16.0),
+            Vec3(x0 + 23.0, y0 - 1.0, 36.0), "station locator adjustment and prove-out",
+        )
+        components.append(_component(
+            f"{prefix}-locator-plate", f"FXD-M32-{station.station_index:02d}20",
+            f"station {station.station_index} secondary locator plate with adjustment slot",
+            BuildComponentRole.LOCATOR_PLATE, locator, reference, parent="m32-baseplate", process="laser cut and machine locator face",
+            thickness=12.0, rule_ids=("FXD-LOC-001", "FXD-TAB-001", "FXD-M32-STA"), fixed=True,
+            locating=True, contact_condition="functional_face", replaceable=True, maintenance_access=True,
+            slots=(locator_slot,), evidence=(f"station={station.identity}", "Relieved contact and adjustment slot remain editable."),
+        ))
+        stop = Aabb(Vec3(x1 + 3.0, y0 + 8.0, 0.0), Vec3(x1 + 17.0, y0 + 30.0, z1 + 18.0))
+        components.append(_component(
+            f"{prefix}-hard-stop", f"FXD-M32-{station.station_index:02d}30",
+            f"station {station.station_index} longitudinal hard stop", BuildComponentRole.HARD_STOP,
+            stop, reference, parent="m32-baseplate", process="laser cut replaceable stop", thickness=12.0,
+            rule_ids=("FXD-LOC-001", "FXD-DST-001", "FXD-M32-STA"), fixed=True, locating=True,
+            replaceable=True, maintenance_access=True, evidence=(f"station={station.identity}", "Longitudinal location is explicit and replaceable."),
+        ))
+        bracket = Aabb(Vec3(x0 + (x1 - x0) * 0.42, max(y1 + 18.0, base.maximum.y - 32.0), 0.0),
+                       Vec3(x0 + (x1 - x0) * 0.42 + 28.0, base.maximum.y - 6.0, z1 + 54.0))
+        components.append(_component(
+            f"{prefix}-clamp-bracket", f"FXD-M32-{station.station_index:02d}40",
+            f"station {station.station_index} toggle-clamp mounting bracket", BuildComponentRole.CLAMP_BRACKET,
+            bracket, reference, parent="m32-baseplate", process="laser cut, weld, drill and tap", thickness=12.0,
+            rule_ids=("FXD-CLP-001", "FXD-SUP-001", "FXD-THR-001", "FXD-M32-CLP"),
+            reaction_support=f"{prefix}-support-2", replaceable=True, maintenance_access=True,
+            holes=(HoleProcessSpec(f"{prefix}-clamp-mount", Vec3(bracket.minimum.x + 14.0, bracket.minimum.y + 8.0, 0.0),
+                                   6.8, HoleProcess.LASER_PILOT, False, "M8x1.25", 12.0, HoleProcess.TAPPED,
+                                   evidence=("Generic clamp mounting pattern is review evidence, not released vendor CAD.",)),),
+            evidence=(f"station={station.identity}", "Clamp bracket has an explicit base-to-support reaction path."),
+        ))
+        clamp = Aabb(Vec3(bracket.minimum.x - 16.0, y1 - 8.0, z1 - 12.0),
+                     Vec3(bracket.maximum.x + 16.0, bracket.maximum.y, z1 + 28.0))
+        components.append(_component(
+            f"{prefix}-toggle-clamp", f"FXD-M32-{station.station_index:02d}50",
+            f"station {station.station_index} vendor-neutral toggle-clamp review geometry", BuildComponentRole.TOGGLE_CLAMP,
+            clamp, reference, parent=f"{prefix}-clamp-bracket", process="generic purchased-clamp review representation",
+            thickness=8.0, rule_ids=("FXD-CLP-001", "FXD-M32-CLP", "FXD-M32-ACC"),
+            reaction_support=f"{prefix}-support-2", replaceable=True, maintenance_access=True,
+            evidence=(f"station={station.identity}", "generic_vendor_neutral=true", "clamp_tip_target=intended clamp surface",
+                      "open_clamp_release_envelope=validated review envelope; not released vendor CAD."),
+        ))
+        shim = Aabb(Vec3(x0 + 36.0, y0 + 10.0, 0.0), Vec3(x0 + 56.0, y0 + 30.0, 2.0))
+        components.append(_component(
+            f"{prefix}-wear-shim", f"FXD-M32-{station.station_index:02d}60",
+            f"station {station.station_index} replaceable wear shim", BuildComponentRole.SHIM_PACK,
+            shim, reference, parent="m32-baseplate", process="laser cut shim stock", thickness=2.0,
+            rule_ids=("FXD-MNT-001", "FXD-M32-STA"), replaceable=True, maintenance_access=True,
+            evidence=(f"station={station.identity}", "Replaceable wear and shim evidence."),
+        ))
+    if primary == "x":
+        brace_bounds = (
+            Aabb(Vec3(0.0, 12.0, 0.0), Vec3(32.0, 44.0, product_height + 62.0)),
+            Aabb(Vec3(base_length - 32.0, 12.0, 0.0), Vec3(base_length, 44.0, product_height + 62.0)),
+        )
+    else:
+        brace_bounds = (
+            Aabb(Vec3(12.0, 0.0, 0.0), Vec3(44.0, 32.0, product_height + 62.0)),
+            Aabb(Vec3(12.0, base_length - 32.0, 0.0), Vec3(44.0, base_length, product_height + 62.0)),
+        )
+    for index, brace in enumerate(brace_bounds, 1):
+        components.append(_component(
+            f"m32-end-brace-{index}", f"FXD-M32-00{index + 2}", f"datum rail end brace {index}",
+            BuildComponentRole.END_BRACE, brace, reference, parent="m32-baseplate", process="laser cut and weld",
+            thickness=12.0, rule_ids=("FXD-MFG-001", "FXD-M32-CON"),
+            evidence=("End brace connects upright datum structure to the long base load path.",),
+        ))
+    identity_payload = json.dumps({"concept": concept.identity, "requirements": requirements.to_dict(),
+                                   "layout": layout.to_dict(), "components": [item.identity for item in components]},
+                                  sort_keys=True, separators=(",", ":"))
+    return FixtureBuildPlan(
+        "m32-build-" + hashlib.sha256(identity_payload.encode("utf-8")).hexdigest()[:20], concept.identity,
+        requirements, tuple(components), tab_slots, (),
+        ("open clamp envelopes", "load immutable product review instances", "seat on three supports", "locate against rail and stop", "close toggle clamps"),
+        (), ("open toggle clamps", "release removable contact items"),
+        ("remove completed assembly along the recorded unload direction",),
+        "Weld process, clamp force, and structural adequacy remain qualified engineering review work.",
+        ("M32 geometry is deterministic review geometry authored from explicit station intent.",
+         "No source CAD bytes or source topology are modified by product review instances."),
+        (f"source_sha256={product.source_sha256}", f"fixture_family={multi_station.fixture_family.value}",
+         f"station_count={multi_station.requested_station_count}"),
+        (PokaYokeSpec("m32-rail-key", "m32-datum-rail", "asymmetric rail tab pattern", True, True, True, True,
+                      ("Asymmetric rail tab pattern prevents backplate reversal while preserving visible seating and unload direction.",)),),
+        layout,
+    )
+
+
+def generate_multi_station_fixture_alternatives(
+        product: ProductModel, concept: CompleteFixtureConcept,
+        requirements: FixtureBuildRequirements,
+        multi_station: MultiStationRequirements) -> tuple[FixtureBuildPlan, ...]:
+    """Create governed one-up and selected multi-up alternatives.
+
+    The result consists of ordinary immutable build plans so both alternatives
+    go through the same validation, OCP authoring, and review gates.  The
+    selected count is last, making selection deterministic without turning a
+    comparison into a release decision.
+    """
+    counts = ((1, multi_station.requested_station_count)
+              if multi_station.compare_one_up_and_multi_up
+              and multi_station.requested_station_count > 1
+              else (multi_station.requested_station_count,))
+    return tuple(
+        generate_multi_station_fixture_build_plan(
+            product, concept, requirements,
+            replace(multi_station, requested_station_count=count),
+        )
+        for count in counts
+    )
+
+
 def _component_by_id(plan: FixtureBuildPlan) -> dict[str, FixtureBuildComponent]:
     return {item.identity: item for item in plan.components}
+
+
+def _multi_station_findings(plan: FixtureBuildPlan) -> tuple[FixtureBuildFinding, ...]:
+    """Validate the extra M32 station evidence without weakening M30 gates."""
+    layout = plan.multi_station_layout
+    if layout is None:
+        return ()
+    findings: list[FixtureBuildFinding] = []
+    req = layout.requirements
+    if req.fixture_family != FixtureFamily.LINEAR_MULTI_STATION_WELD:
+        findings.append(_finding("FXD-M32-STA", "error", "unsupported multi-station fixture family"))
+    if layout.required_fixture_length_mm > req.maximum_fixture_length_mm + 1e-7:
+        findings.append(_finding("FXD-M32-STA", "error", "station layout exceeds the requested maximum fixture length"))
+    if len(layout.stations) != req.requested_station_count:
+        findings.append(_finding("FXD-M32-STA", "error", "station layout does not contain the requested count"))
+    for left, right in zip(layout.stations, layout.stations[1:]):
+        if left.product_bounds.intersects(right.product_bounds):
+            findings.append(_finding("FXD-M32-STA", "error", "product review instances overlap", components=(left.identity, right.identity)))
+        left_axis = getattr(left.translation_mm, layout.primary_axis)
+        right_axis = getattr(right.translation_mm, layout.primary_axis)
+        if right_axis - left_axis + 1e-7 < layout.station_pitch_mm:
+            findings.append(_finding("FXD-M32-STA", "error", "station transforms are not stable equal-pitch placements", components=(left.identity, right.identity)))
+    base = next((item for item in plan.components if item.role == BuildComponentRole.BASEPLATE), None)
+    rail = next((item for item in plan.components if item.role == BuildComponentRole.DATUM_RAIL), None)
+    if base is None or rail is None:
+        findings.append(_finding("FXD-M32-CON", "error", "multi-station fixture requires one baseplate and one upright datum rail"))
+    elif _axis_span(base.bounds, layout.primary_axis) + 1e-7 < layout.required_fixture_length_mm:
+        findings.append(_finding("FXD-M32-CON", "error", "baseplate does not span the deterministic station layout"))
+    braces = [item for item in plan.components if item.role == BuildComponentRole.END_BRACE]
+    if len(braces) < 2:
+        findings.append(_finding("FXD-M32-CON", "error", "upright datum structure requires end braces"))
+    component_ids = {item.identity for item in plan.components}
+    for station in layout.stations:
+        prefix = station.identity + "-"
+        station_components = tuple(item for item in plan.components if item.identity.startswith(prefix))
+        role_counts = {role: sum(item.role == role for item in station_components) for role in (
+            BuildComponentRole.SUPPORT_PAD, BuildComponentRole.LOCATOR_PLATE,
+            BuildComponentRole.HARD_STOP, BuildComponentRole.CLAMP_BRACKET,
+            BuildComponentRole.TOGGLE_CLAMP,
+        )}
+        if any(role_counts[role] < 1 for role in role_counts):
+            findings.append(_finding("FXD-M32-STA", "error", "station is missing required support, locating, stop, clamp-mount, or clamp geometry", components=(station.identity,)))
+        if role_counts[BuildComponentRole.SUPPORT_PAD] > 3:
+            findings.append(_finding("FXD-DAT-001", "error", "station uses more than three fixed primary supports", components=(station.identity,)))
+        if not station.clamp_tip_reaches_surface:
+            findings.append(_finding("FXD-M32-CLP", "error", "clamp tip cannot reach its intended clamp surface", components=(station.identity,)))
+        if not station.open_clamp_envelope_clear:
+            findings.append(_finding("FXD-M32-CLP", "error", "open-clamp envelope blocks loading or release", components=(station.identity,)))
+        if not station.hand_access_clear:
+            findings.append(_finding("FXD-M32-ACC", "error", "operator hand clearance is blocked at station", components=(station.identity,)))
+        if not station.weld_access_clear:
+            findings.append(_finding("FXD-M32-ACC", "error", "weld access is blocked at station", components=(station.identity,)))
+        if not station.unload_path_clear or station.trapped_part:
+            findings.append(_finding("FXD-M32-ACC", "error", "station has a trapped-part or unloading-path conflict", components=(station.identity,)))
+        if station.product_source_sha256 != plan.requirements.source_sha256:
+            findings.append(_finding("FXD-M32-STA", "error", "product review instance does not reference immutable plan source", components=(station.identity,)))
+        if not station.source_component_identities:
+            findings.append(_finding("FXD-M32-STA", "error", "product review instance has no immutable source-component references", components=(station.identity,)))
+    if any(item.role == BuildComponentRole.TOGGLE_CLAMP and "generic_vendor_neutral=true" not in item.evidence
+           for item in plan.components):
+        findings.append(_finding("FXD-M32-CLP", "error", "toggle-clamp geometry must state its vendor-neutral review boundary"))
+    if any(item.parent_component_identity and item.parent_component_identity not in component_ids
+           for item in plan.components):
+        findings.append(_finding("FXD-M32-CON", "error", "multi-station fixture contains an unknown structural parent"))
+    return tuple(findings)
 
 
 def validate_fixture_build_plan(product: ProductModel, plan: FixtureBuildPlan) -> FixtureBuildValidation:
@@ -967,13 +1537,13 @@ def validate_fixture_build_plan(product: ProductModel, plan: FixtureBuildPlan) -
             if item.maintenance_access is not True:
                 findings.append(_finding("FXD-MNT-001", "warning", "service or contact item lacks explicit maintenance-access evidence", components=(item.identity,)))
     fixed_pads = tuple(item.identity for item in plan.components if item.role == BuildComponentRole.SUPPORT_PAD and item.fixed and item.locating_constraint)
-    if len(fixed_pads) > 3:
+    if plan.multi_station_layout is None and len(fixed_pads) > 3:
         findings.append(_finding("FXD-DAT-001", "error", "four or more fixed primary support pads can overconstrain the datum", components=fixed_pads))
     round_pins = tuple(item.identity for item in plan.components if item.role == BuildComponentRole.ROUND_PIN and item.fixed)
     if len(round_pins) >= 2:
         findings.append(_finding("FXD-PIN-001", "error", "two full round pins can bind under tolerance variation; use a relieved or diamond pin where supported", components=round_pins))
     fixed_stops = tuple(item.identity for item in plan.components if item.role == BuildComponentRole.HARD_STOP and item.fixed)
-    if len(fixed_stops) > 1:
+    if plan.multi_station_layout is None and len(fixed_stops) > 1:
         findings.append(_finding("FXD-LOC-001", "error", "opposing fixed hard stops can overconstrain loading", components=fixed_stops))
     if req.unload_clearance_evaluated is not True and any(item.role == BuildComponentRole.ROUND_PIN and item.fixed for item in plan.components):
         findings.append(_finding("FXD-DST-001", "error", "fixed locating pin has no welded-shape unloading clearance evidence", components=round_pins))
@@ -1026,6 +1596,7 @@ def validate_fixture_build_plan(product: ProductModel, plan: FixtureBuildPlan) -
         mixed = tuple(item.identity for item in plan.components if item.nest_classification == NestClassification.PRODUCT)
         if mixed:
             findings.append(_finding("FXD-COST-001", "error", "disposable fixture parts are mixed with sellable product parts in nesting classification", components=mixed))
+    findings.extend(_multi_station_findings(plan))
     status = "invalid" if any(item.severity == "error" for item in findings) else ("provisional" if any(item.severity == "warning" for item in findings) else "valid")
     encoded = json.dumps([item.to_dict() for item in sorted(findings, key=lambda item: item.identity)], sort_keys=True, separators=(",", ":"))
     return FixtureBuildValidation(plan.identity, req.source_sha256, status, tuple(sorted(findings, key=lambda item: item.identity)), hashlib.sha256(encoded.encode("utf-8")).hexdigest())
@@ -1082,6 +1653,17 @@ def _shape_for(component: FixtureBuildComponent, kernel: RealKernel) -> object:
                 (minimum_x, low.y - 1.0, low.z - 1.0),
                 (maximum_x, high.y + 1.0, low.z - 1.0 + relief_height),
             ))
+    elif component.role == BuildComponentRole.TOGGLE_CLAMP:
+        # A generic, intentionally vendor-neutral review representation: a
+        # mounting body, upright pivot housing, and clamp arm/tip.  It is real
+        # OCP geometry but never claims to be released supplier CAD.
+        body = kernel.make_box((low.x, high.y - 12.0, low.z),
+                               (high.x, high.y, min(high.z, low.z + 14.0)))
+        tower = kernel.make_box(((low.x + high.x) / 2.0 - 7.0, high.y - 12.0, low.z),
+                                ((low.x + high.x) / 2.0 + 7.0, high.y, high.z))
+        arm = kernel.make_box(((low.x + high.x) / 2.0 - 4.0, low.y, high.z - 10.0),
+                              ((low.x + high.x) / 2.0 + 4.0, high.y, high.z))
+        shape = kernel.boolean("fuse", kernel.boolean("fuse", body, tower), arm)
     else:
         shape = kernel.make_box((low.x, low.y, low.z), (high.x, high.y, high.z))
     if component.role in {BuildComponentRole.TUBE_FRAME, BuildComponentRole.CROSSMEMBER}:
@@ -1102,6 +1684,11 @@ def _shape_for(component: FixtureBuildComponent, kernel: RealKernel) -> object:
     for hole in component.holes:
         shape = kernel.cut(shape, kernel.make_hole((hole.center_mm.x, hole.center_mm.y, low.z - 1.0),
                                                    hole.diameter_mm / 2.0, high.z - low.z + 2.0))
+    for slot in component.slots:
+        shape = kernel.cut(shape, kernel.make_slot(
+            tuple(slot.minimum_mm.__dict__.values()),
+            tuple(slot.maximum_mm.__dict__.values()),
+        ))
     topology = kernel.topology_counts(shape)
     if topology.solids < 1:
         raise KernelOperationError(f"fixture build component {component.identity} did not author a real solid")
@@ -1121,6 +1708,12 @@ def _dxf_for(component: FixtureBuildComponent) -> bytes | None:
     for hole in component.holes:
         lines.extend(("0", "CIRCLE", "8", hole.process.value, "10", value(hole.center_mm.x),
                       "20", value(hole.center_mm.y), "40", value(hole.diameter_mm / 2.0)))
+    for slot in component.slots:
+        lines.extend(("0", "LWPOLYLINE", "8", "ADJUSTMENT_SLOT", "90", "5", "70", "1"))
+        for x, y in ((slot.minimum_mm.x, slot.minimum_mm.y), (slot.maximum_mm.x, slot.minimum_mm.y),
+                     (slot.maximum_mm.x, slot.maximum_mm.y), (slot.minimum_mm.x, slot.maximum_mm.y),
+                     (slot.minimum_mm.x, slot.minimum_mm.y)):
+            lines.extend(("10", value(x), "20", value(y)))
     lines.extend(("0", "ENDSEC", "0", "EOF"))
     return ("\n".join(lines) + "\n").encode("ascii")
 
@@ -1179,6 +1772,8 @@ def build_fixture_build_package(assembly: AuthoredFixtureAssembly, plan: Fixture
                        "findings": [item.to_dict() for item in assembly.validation.findings]},
         "approval_boundary": "Engineering review only. Not production release, certification, structural adequacy, or safety approval.",
     }
+    if plan.multi_station_layout is not None:
+        manifest["multi_station_layout"] = plan.multi_station_layout.to_dict()
     files["manifest.json"] = json.dumps(manifest, indent=2, sort_keys=True) + "\n"
     files["bom.json"] = json.dumps(bom, indent=2, sort_keys=True) + "\n"
     files["hole-process-table.json"] = json.dumps([
@@ -1187,6 +1782,11 @@ def build_fixture_build_package(assembly: AuthoredFixtureAssembly, plan: Fixture
         for hole in sorted(component.holes, key=lambda item: item.identity)
     ], indent=2, sort_keys=True) + "\n"
     files["slot-and-tab-map.json"] = json.dumps([item.to_dict() for item in plan.tab_slots], indent=2, sort_keys=True) + "\n"
+    files["adjustment-slot-map.json"] = json.dumps([
+        {"component": component.identity, **slot.to_dict()}
+        for component in sorted(plan.components, key=lambda item: item.identity)
+        for slot in sorted(component.slots, key=lambda item: item.identity)
+    ], indent=2, sort_keys=True) + "\n"
     files["poka-yoke-map.json"] = json.dumps([item.to_dict() for item in plan.poka_yokes], indent=2, sort_keys=True) + "\n"
     files["cleco-hole-map.json"] = json.dumps([item.to_dict() for item in plan.clecos], indent=2, sort_keys=True) + "\n"
     files["nest-classification.json"] = json.dumps([

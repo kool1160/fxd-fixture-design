@@ -71,8 +71,10 @@ from fxd_geometry import (
     ConstructionMethod,
     FixtureLifecycle,
     FixturePurpose,
+    FixtureFamily,
     FixtureBuildRequirements,
     FixtureBuildError,
+    MultiStationRequirements,
     ExportError,
     GeometryReference,
     InteractiveWorkflow,
@@ -99,6 +101,7 @@ from fxd_geometry import (
     load_step_for_workbench,
     product_from_workbench_document,
     generate_fixture_build_plan as generate_m30_fixture_build_plan,
+    generate_multi_station_fixture_alternatives,
     generate_fixture_proposal,
     minimal_intent_questions,
     orientation_from_face,
@@ -148,6 +151,12 @@ ADJUSTMENT_STATE_OPTIONS = (
     "Provisional adjustment", "Prove-out setting", "Locked production position",
     "Doweled production position", "Revalidation required",
 )
+FIXTURE_FAMILY_OPTIONS = (
+    "Existing single-station fixture workflow",
+    "Linear multi-station weld fixture",
+)
+OPERATOR_SIDE_OPTIONS = ("Operator front (+Y)", "Operator rear (-Y)", "Operator left (-X)", "Operator right (+X)")
+TABLE_MOUNTING_OPTIONS = ("Table mounting holes", "Mounting feet", "Engineer to decide")
 ORIENTATION_METHOD_OPTIONS = (
     "Auto recommend", "Select planar face", "Select reference plane", "Use source orientation",
 )
@@ -608,6 +617,8 @@ class FxdWorkbenchWindow(QMainWindow):
         self.project: FxdProject | None = None
         self.workflow: InteractiveWorkflow | None = None
         self.authored_fixture_build = None
+        self._multi_station_comparison_summary = ""
+        self._multi_station_comparison_plan_identity: str | None = None
         self.project_path: Path | None = None
         self.selected_identity: str | None = None
         self.selected_reference: GeometryReference | None = None
@@ -1148,7 +1159,24 @@ class FxdWorkbenchWindow(QMainWindow):
         self.process_product_hole_justification = QLineEdit()
         self.process_product_hole_justification.setPlaceholderText("Cost, process, or customer justification")
         self.process_tack_access = QCheckBox("Reviewed")
+        self.process_weld_access = QCheckBox("Reviewed")
         self.process_unload_clearance = QCheckBox("Reviewed")
+        self.process_fixture_family = self._combo(FIXTURE_FAMILY_OPTIONS, wheel_to_parent=True)
+        self.process_station_count = QSpinBox()
+        self.process_station_count.setRange(1, 8)
+        self.process_station_count.setValue(1)
+        self.process_max_fixture_length = QDoubleSpinBox()
+        self.process_max_fixture_length.setRange(100.0, 100000.0)
+        self.process_max_fixture_length.setDecimals(1)
+        self.process_max_fixture_length.setValue(1500.0)
+        self.process_station_pitch = QDoubleSpinBox()
+        self.process_station_pitch.setRange(0.0, 100000.0)
+        self.process_station_pitch.setDecimals(1)
+        self.process_station_pitch.setSpecialValueText("Auto from access allowances")
+        self.process_operator_loading_side = self._combo(OPERATOR_SIDE_OPTIONS, wheel_to_parent=True)
+        self.process_clamp_operating_side = self._combo(OPERATOR_SIDE_OPTIONS, wheel_to_parent=True)
+        self.process_table_mounting = self._combo(TABLE_MOUNTING_OPTIONS, wheel_to_parent=True)
+        self.process_compare_multi_up = QCheckBox("Compare one-up and multi-up")
         self.process_repeatability = QDoubleSpinBox()
         self.process_repeatability.setRange(0.0, 1000.0)
         self.process_repeatability.setDecimals(3)
@@ -1172,6 +1200,15 @@ class FxdWorkbenchWindow(QMainWindow):
             ("Product-hole approval", self.process_product_hole_approval),
             ("Product-hole justification", self.process_product_hole_justification),
             ("Tack access", self.process_tack_access), ("Unload clearance", self.process_unload_clearance),
+            ("Weld access", self.process_weld_access),
+            ("Fixture family", self.process_fixture_family),
+            ("Station count", self.process_station_count),
+            ("Maximum fixture length (mm)", self.process_max_fixture_length),
+            ("Preferred station pitch (mm)", self.process_station_pitch),
+            ("Operator loading side", self.process_operator_loading_side),
+            ("Clamp operating side", self.process_clamp_operating_side),
+            ("Fixture table mounting", self.process_table_mounting),
+            ("Alternative comparison", self.process_compare_multi_up),
             ("Repeatability (mm)", self.process_repeatability),
             ("Clearance (mm)", self.process_clearance),
         ):
@@ -2856,6 +2893,13 @@ class FxdWorkbenchWindow(QMainWindow):
                  "authored OCP B-Rep" if item.identity in authored else item.geometry_authority.value)
                 for item in self.project.fixture_build.components
             ])
+            layout = self.project.fixture_build.multi_station_layout
+            if layout is not None:
+                self._add_tree_category("Product review instances", [
+                    (f"Station {station.station_index} | immutable source instance", station.identity,
+                     "source-referenced review instance")
+                    for station in layout.stations
+                ])
         self.tree.resizeColumnToContents(1)
 
     def _populate_properties(self) -> None:
@@ -3586,6 +3630,21 @@ class FxdWorkbenchWindow(QMainWindow):
             manufacturing_build_direction=build_axis,
             manufacturing_loading_direction=load_axis,
             manufacturing_unloading_direction=unload_axis,
+            fixture_family=(FixtureFamily.LINEAR_MULTI_STATION_WELD.value
+                            if self.process_fixture_family.currentText() == "Linear multi-station weld fixture"
+                            else None),
+            requested_station_count=(self.process_station_count.value()
+                                     if self.process_fixture_family.currentText() == "Linear multi-station weld fixture"
+                                     else None),
+            maximum_fixture_length_mm=(self.process_max_fixture_length.value()
+                                       if self.process_fixture_family.currentText() == "Linear multi-station weld fixture"
+                                       else None),
+            preferred_station_pitch_mm=(self.process_station_pitch.value()
+                                        if self.process_station_pitch.value() > 0 else None),
+            operator_loading_side=self.process_operator_loading_side.currentText(),
+            clamp_operating_side=self.process_clamp_operating_side.currentText(),
+            table_mounting_preference=self.process_table_mounting.currentText(),
+            compare_one_up_and_multi_up=self.process_compare_multi_up.isChecked(),
         )
         if persist and self.workflow is not None:
             self.workflow = replace(self.workflow, setup=setup)
@@ -3636,6 +3695,23 @@ class FxdWorkbenchWindow(QMainWindow):
         self.process_job_revision.setText(setup.job_revision or "")
         self.process_repeatability.setValue(setup.required_repeatability_mm or 0.0)
         self.process_clearance.setValue(setup.required_clearance_mm or 0.0)
+        self.process_fixture_family.setCurrentText(
+            "Linear multi-station weld fixture"
+            if setup.fixture_family == FixtureFamily.LINEAR_MULTI_STATION_WELD.value
+            else "Existing single-station fixture workflow"
+        )
+        if setup.requested_station_count:
+            self.process_station_count.setValue(setup.requested_station_count)
+        if setup.maximum_fixture_length_mm:
+            self.process_max_fixture_length.setValue(setup.maximum_fixture_length_mm)
+        self.process_station_pitch.setValue(setup.preferred_station_pitch_mm or 0.0)
+        if setup.operator_loading_side:
+            self.process_operator_loading_side.setCurrentText(setup.operator_loading_side)
+        if setup.clamp_operating_side:
+            self.process_clamp_operating_side.setCurrentText(setup.clamp_operating_side)
+        if setup.table_mounting_preference:
+            self.process_table_mounting.setCurrentText(setup.table_mounting_preference)
+        self.process_compare_multi_up.setChecked(setup.compare_one_up_and_multi_up)
         self._set_orientation_controls(setup.manufacturing_orientation)
 
     def _populate_workflow(self) -> None:
@@ -3702,10 +3778,23 @@ class FxdWorkbenchWindow(QMainWindow):
         if self.project and self.project.fixture_build:
             build = self.project.fixture_build
             validation = self.project.active_validation
+            multi_station = build.multi_station_layout
+            station_summary = (
+                f"\nMulti-station: {len(multi_station.stations)} station(s) | "
+                f"pitch {multi_station.station_pitch_mm:.1f} mm | "
+                f"axis {multi_station.primary_axis.upper()}"
+                if multi_station is not None else ""
+            )
+            comparison_summary = (
+                "\n" + self._multi_station_comparison_summary
+                if self._multi_station_comparison_plan_identity == build.identity
+                else ""
+            )
             self.fabrication_status.setText(
                 f"{build.requirements.fixture_purpose.value} | {build.requirements.construction_method.value}\n"
                 f"Geometry authority: authored manufacturing geometry only after OCP authoring.\n"
                 f"Validation: {validation.status.upper()} | job revision: {build.requirements.job_revision or 'missing'}"
+                + station_summary + comparison_summary
             )
             active_authored = self._active_authored_fixture_build()
             authored = {item.component.identity for item in (active_authored.components if active_authored else ())}
@@ -3715,9 +3804,15 @@ class FxdWorkbenchWindow(QMainWindow):
                     f"{component.part_number} | {component.role.value} | {state} | {component.nest_classification.value}"
                 )
             self.process_tack_access.setChecked(build.requirements.tack_access_available is True)
+            self.process_weld_access.setChecked(build.requirements.full_weld_access_available is True)
             self.process_unload_clearance.setChecked(build.requirements.unload_clearance_evaluated is True)
             self.process_product_hole_approval.setChecked(build.requirements.product_hole_approved)
             self.process_product_hole_justification.setText(build.requirements.product_hole_justification or "")
+            if multi_station is not None:
+                self.process_fixture_family.setCurrentText("Linear multi-station weld fixture")
+                self.process_station_count.setValue(multi_station.requirements.requested_station_count)
+                self.process_max_fixture_length.setValue(multi_station.requirements.maximum_fixture_length_mm)
+                self.process_station_pitch.setValue(multi_station.requirements.preferred_station_pitch_mm or 0.0)
             self.process_adjustment_state.setCurrentText({
                 AdjustmentState.PROVISIONAL: "Provisional adjustment",
                 AdjustmentState.PROVE_OUT: "Prove-out setting",
@@ -3904,7 +3999,7 @@ class FxdWorkbenchWindow(QMainWindow):
             self._optional_text(self.process_job_revision), "A", setup.production_quantity,
             self._optional_text(self.process_repeat_frequency), setup.manufacturing_process,
             setup.shop_capabilities, self.process_tack_access.isChecked() if purpose == FixturePurpose.TACK_LOCATION else None,
-            None if purpose == FixturePurpose.TACK_LOCATION else None,
+            None if purpose == FixturePurpose.TACK_LOCATION else self.process_weld_access.isChecked(),
             self.process_unload_clearance.isChecked(), self._adjustment_state_from_ui(self.process_adjustment_state.currentText()),
             ("All M30 selections are engineer-editable review inputs.",),
             ("Generated through the local FXD workbench from immutable source identity.",),
@@ -3913,13 +4008,47 @@ class FxdWorkbenchWindow(QMainWindow):
             self._optional_text(self.process_product_hole_justification),
         )
 
+    def _multi_station_requirements(self, setup: ProcessSetup) -> MultiStationRequirements:
+        if setup.fixture_family != FixtureFamily.LINEAR_MULTI_STATION_WELD.value:
+            raise FixtureBuildError("select the supported linear multi-station weld fixture family before synthesis")
+        mode = {"Manual": "manual", "Cobot": "cobot", "Robotic": "robot"}.get(
+            setup.operation_mode or "", "manual"
+        )
+        return MultiStationRequirements(
+            FixtureFamily.LINEAR_MULTI_STATION_WELD,
+            self.process_station_count.value(), self.process_max_fixture_length.value(),
+            self.process_station_pitch.value() or None,
+            self.process_operator_loading_side.currentText(), self.process_unload.currentText(),
+            self.process_clamp_operating_side.currentText(), mode,
+            self.process_table_mounting.currentText(), setup.production_quantity or 1,
+            self.process_compare_multi_up.isChecked(),
+        )
+
     def generate_fixture_build_plan(self) -> None:
         if (self.project is None or self.workflow is None or not self.workflow.concepts_generated
                 or not self.workflow.has_accepted_manufacturing_orientation()):
             self.statusBar().showMessage("Generate and select a fixture concept before creating a build plan.")
             return
         try:
-            plan = generate_m30_fixture_build_plan(self.project.product, self.project.active, self._fixture_build_requirements())
+            build_requirements = self._fixture_build_requirements()
+            setup = self._capture_process_setup()
+            if setup.fixture_family == FixtureFamily.LINEAR_MULTI_STATION_WELD.value:
+                multi_station = self._multi_station_requirements(setup)
+                alternatives = generate_multi_station_fixture_alternatives(
+                    self.project.product, self.project.active, build_requirements, multi_station,
+                )
+                plan = alternatives[-1]
+                self._multi_station_comparison_summary = (
+                    f"Alternative comparison: generated {len(alternatives)} governed plan(s) "
+                    f"(one-up and {multi_station.requested_station_count}-station when requested); "
+                    f"selected {multi_station.requested_station_count}-station plan."
+                    if len(alternatives) > 1 else ""
+                )
+                self._multi_station_comparison_plan_identity = plan.identity
+            else:
+                plan = generate_m30_fixture_build_plan(self.project.product, self.project.active, build_requirements)
+                self._multi_station_comparison_summary = ""
+                self._multi_station_comparison_plan_identity = None
             self._replace_project(
                 self.project.with_workflow(self.workflow).with_fixture_build(plan)
             )
@@ -3974,14 +4103,59 @@ class FxdWorkbenchWindow(QMainWindow):
         if active_authored is not None:
             for authored in active_authored.components:
                 bounds = authored.component.bounds
+                layer = (
+                    "clamps" if authored.component.role.value in {"toggle_clamp_mounting_bracket", "vendor_neutral_toggle_clamp"}
+                    else "locators" if authored.component.role.value in {"locator_plate", "hard_stop"}
+                    else "supports" if authored.component.role.value in {"support_pad", "shim_pack"}
+                    else "fixture"
+                )
+                if layer in self.project.hidden_layers:
+                    continue
+                vertices: list[list[float]] = []
+                triangles: list[list[int]] = []
+                try:
+                    for mesh in self.kernel.tessellate(authored.shape, linear_deflection_mm=0.8):
+                        offset = len(vertices)
+                        vertices.extend([list(point) for point in mesh.vertices_mm])
+                        triangles.extend([[offset + index for index in triangle] for triangle in mesh.triangles])
+                except KernelOperationError:
+                    # A bounds item is retained only as an explicitly labelled debug fallback;
+                    # successful authoring normally supplies the tessellated OCP solid above.
+                    items.append({
+                        "identity": "manufacturing-debug-bounds:" + authored.component.identity,
+                        "kind": "authored_manufacturing_debug_bounds",
+                        "minimum": list(bounds.minimum.__dict__.values()),
+                        "maximum": list(bounds.maximum.__dict__.values()),
+                        "status": "provisional",
+                        "evidence": "debug fallback bounds after authored OCP tessellation failure; not fixture geometry",
+                    })
+                    continue
                 items.append({
                     "identity": "manufacturing:" + authored.component.identity,
-                    "kind": "authored_manufacturing_component",
-                    "minimum": list(bounds.minimum.__dict__.values()),
-                    "maximum": list(bounds.maximum.__dict__.values()),
-                    "status": self.project.active_validation.status,
-                    "evidence": "authored manufacturing OCP B-Rep review proxy; never source CAD",
+                    "kind": "authored_mesh", "vertices": vertices, "triangles": triangles,
+                    "status": self.project.active_validation.status, "representation": "surface", "opacity": 0.92,
+                    "evidence": "tessellated authored OCP manufacturing component; never source CAD",
                 })
+            layout = self.project.fixture_build.multi_station_layout
+            if layout is not None and self.document is not None and "product_instances" not in self.project.hidden_layers:
+                source_vertices = tuple((mesh.vertices_mm, mesh.triangles) for mesh in self.document.meshes)
+                for station in layout.stations:
+                    vertices = []
+                    triangles = []
+                    for mesh_vertices, mesh_triangles in source_vertices:
+                        offset = len(vertices)
+                        vertices.extend([[point[0] + station.translation_mm.x,
+                                          point[1] + station.translation_mm.y,
+                                          point[2] + station.translation_mm.z]
+                                         for point in mesh_vertices])
+                        triangles.extend([[offset + index for index in triangle] for triangle in mesh_triangles])
+                    items.append({
+                        "identity": "product-review:" + station.identity,
+                        "kind": "product_review_mesh", "vertices": vertices, "triangles": triangles,
+                        "status": "valid", "color": [0.30, 0.61, 0.96],
+                        "representation": "surface", "opacity": 0.35,
+                        "evidence": "immutable source-product review instance with deterministic station transform",
+                    })
         return items + orientation_items
 
     def _orientation_review_items(self) -> list[dict[str, object]]:

@@ -253,7 +253,11 @@ merge.
 
 ## Milestone 31 - AI Fixture Engineer and guided validation
 
-**Status:** In progress
+**Status:** Complete
+
+Accepted and squash-merged through PR #53 at
+`ac1e7a1799ef9be674f6ab5739e48d178fa2f1dc`. The provider-neutral proposal
+boundary remains advisory and deterministic validation remains authoritative.
 
 Add one provider-neutral, versioned, editable fixture proposal after accepted
 manufacturing orientation. Ask only for missing essential intent, use the
@@ -267,5 +271,27 @@ Acceptance still requires focused and full automated validation, real OCP and
 Windows viewer acceptance, independent Codex review, and user engineering
 visual acceptance. No production approval, autonomous iteration, learned global
 rules, supplier scraping, or paid-service enablement is included.
+
+**Recommended level:** Sol
+
+## Milestone 32 - Multi-station weld-fixture synthesis
+
+**Status:** Locally verified; unmerged review PR and hosted acceptance pending
+
+Turn an accepted proposal and deterministic manufacturing intent into the first
+practical editable multi-station OCP fixture assembly. The supported family is
+`linear_multi_station_weld_fixture` for small repeatable fabricated assemblies;
+other fixture families fail explicitly. The build must compose the established
+fixture-build, placement, manufacturing-geometry, validation, project, export,
+proposal, and workbench contracts rather than creating a parallel fixture model.
+
+Acceptance requires stable immutable-source product review instances, editable
+one-to-eight station intent, deterministic pitch/length fit and smaller-count
+proposal, connected base/rail/braces, repeated supports/locators/stops/clamp
+brackets/generic clamp review solids, actual OCP authoring and VTK display,
+validation and export reconciliation, save/reload, full regression evidence,
+hosted pinned-OCP acceptance, and Windows visual/engineering acceptance. It
+does not add released vendor CAD, structural certification, automatic production
+release, paid-provider calls, or customer geometry.
 
 **Recommended level:** Sol

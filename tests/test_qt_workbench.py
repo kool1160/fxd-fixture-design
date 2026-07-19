@@ -302,6 +302,43 @@ class QtWorkbenchTests(unittest.TestCase):
         self.assertGreater(self.window.fabrication_components.count(), 0)
         self.assertIn("REAL OCP B-REP", self.window.fabrication_components.item(0).text())
 
+    def test_m32_multi_station_controls_author_real_meshes_and_persist_station_intent(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = self._real_step(directory, compound=True)
+            self.window.document = load_step_for_workbench(source)
+            self.window.viewport.load_document(self.window.document)
+            self.window._replace_project(self._project(source))
+        self.window.workflow = InteractiveWorkflow(
+            self.window.project.product.source_sha256,
+            ProcessSetup(
+                "M32 workbench",
+                manufacturing_orientation=source_orientation(
+                    self.window.project.product.source_sha256, accepted=True,
+                ),
+            ),
+            concepts_generated=True,
+        )
+        self.window.process_fixture_type.setCurrentText("Full weld fixture")
+        self.window.process_construction.setCurrentText("Laser-cut fabricated")
+        self.window.process_lifecycle.setCurrentText("Full permanent fixture")
+        self.window.process_weld_access.setChecked(True)
+        self.window.process_unload_clearance.setChecked(True)
+        self.window.process_adjustment_state.setCurrentText("Locked production position")
+        self.window.process_fixture_family.setCurrentText("Linear multi-station weld fixture")
+        self.window.process_station_count.setValue(5)
+        self.window.process_max_fixture_length.setValue(3000.0)
+        self.window.process_compare_multi_up.setChecked(True)
+        self.window.generate_fixture_build_plan()
+        plan = self.window.project.fixture_build
+        self.assertIsNotNone(plan)
+        self.assertEqual(len(plan.multi_station_layout.stations), 5)
+        self.assertIn("Alternative comparison", self.window.fabrication_status.text())
+        self.window.author_real_fixture_geometry()
+        items = self.window._review_geometry_items()
+        self.assertTrue(any(item["kind"] == "authored_mesh" for item in items))
+        self.assertEqual(sum(item["kind"] == "product_review_mesh" for item in items), 5)
+        self.assertFalse(any("debug_bounds" in item["kind"] for item in items))
+
     def test_m30_authored_geometry_cache_is_cleared_and_identity_gated(self):
         plan, authored = self._author_m30_tack_build()
         self.assertIs(self.window._active_authored_fixture_build(), authored)

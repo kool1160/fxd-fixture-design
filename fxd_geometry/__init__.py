@@ -87,14 +87,17 @@ from .manufacturing_orientation import (
     source_orientation,
 )
 from .fabrication_workflow import (
-    M30_SCHEMA, RULE_CATALOG, RULES_BY_ID, AdjustmentState, AuthoredFixtureAssembly,
+    M30_SCHEMA, M32_SCHEMA, RULE_CATALOG, RULES_BY_ID, AdjustmentState, AuthoredFixtureAssembly,
     AuthoredFixtureComponent, BuildComponentRole, ClecoSpec, ClecoStrategy,
     ConstructionMethod, FixtureBuildComparison, FixtureBuildComponent, FixtureBuildError,
     FixtureBuildFinding, FixtureBuildPlan, FixtureBuildRequirements, FixtureBuildValidation,
-    FixtureLifecycle, FixturePurpose, GeometryAuthority, HoleProcess, HoleProcessSpec,
+    FixtureFamily, FixtureLifecycle, FixturePurpose, GeometryAuthority, HoleProcess, HoleProcessSpec,
+    MultiStationLayout, MultiStationRequirements, SlotProcessSpec, StationTransform,
     M30Rule, NestClassification, PokaYokeSpec, TabSlotJoint, author_fixture_build,
     build_fixture_build_package, compare_fixture_build_plans, generate_fixture_build_plan,
-    validate_fixture_build_plan, write_fixture_build_package,
+    generate_multi_station_fixture_alternatives, generate_multi_station_fixture_build_plan,
+    generate_multi_station_layout,
+    propose_multi_station_count, validate_fixture_build_plan, write_fixture_build_package,
 )
 from .ai_fixture_engineer import (
     PROMPT_CONTRACT_VERSION, PROPOSAL_REQUEST_SCHEMA, PROPOSAL_SCHEMA,
@@ -165,14 +168,17 @@ __all__ += ["CoordinateSystem", "ManufacturingOrientation", "ManufacturingOrient
             "OrientationMethod", "OrientationRecommendation", "ReferencePlane",
             "orientation_from_face", "orientation_from_faces", "orientation_from_plane", "recommend_orientations",
             "reference_plane_orientation", "source_orientation"]
-__all__ += ["M30_SCHEMA", "RULE_CATALOG", "RULES_BY_ID", "AdjustmentState", "AuthoredFixtureAssembly",
+__all__ += ["M30_SCHEMA", "M32_SCHEMA", "RULE_CATALOG", "RULES_BY_ID", "AdjustmentState", "AuthoredFixtureAssembly",
             "AuthoredFixtureComponent", "BuildComponentRole", "ClecoSpec", "ClecoStrategy",
             "ConstructionMethod", "FixtureBuildComparison", "FixtureBuildComponent", "FixtureBuildError",
             "FixtureBuildFinding", "FixtureBuildPlan", "FixtureBuildRequirements", "FixtureBuildValidation",
-            "FixtureLifecycle", "FixturePurpose", "GeometryAuthority", "HoleProcess", "HoleProcessSpec",
+            "FixtureFamily", "FixtureLifecycle", "FixturePurpose", "GeometryAuthority", "HoleProcess", "HoleProcessSpec",
+            "MultiStationLayout", "MultiStationRequirements", "SlotProcessSpec", "StationTransform",
             "M30Rule", "NestClassification", "PokaYokeSpec", "TabSlotJoint", "author_fixture_build",
             "build_fixture_build_package", "compare_fixture_build_plans", "generate_fixture_build_plan",
-            "validate_fixture_build_plan", "write_fixture_build_package"]
+            "generate_multi_station_fixture_alternatives", "generate_multi_station_fixture_build_plan",
+            "generate_multi_station_layout",
+            "propose_multi_station_count", "validate_fixture_build_plan", "write_fixture_build_package"]
 __all__ += ["PROMPT_CONTRACT_VERSION", "PROPOSAL_REQUEST_SCHEMA", "PROPOSAL_SCHEMA",
             "AiFixtureProvider", "AiProposalRequest", "CancellationToken", "EditableParameter",
             "FixtureProposal", "FixtureProposalError", "GuidedValidationIssue", "HttpJsonAiProvider",

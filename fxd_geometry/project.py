@@ -37,7 +37,8 @@ class ProjectFormatError(ValueError):
 SUPPORTED_LAYERS = frozenset({
     "product", "fixture", "structure", "risers", "datums", "locators",
     "supports", "stops", "clamps", "welds", "access", "keep_out",
-    "warnings", "provisional",
+    "warnings", "provisional", "product_instances", "purchased_tooling",
+    "access_envelopes", "findings",
 })
 PROJECT_FORMAT = "fxd-neutral-project-v5"
 

@@ -182,3 +182,27 @@ nor baseline output proves physical fixture adequacy.
 **Supporting evidence:** `docs/AI_FIXTURE_PROPOSAL_CONTRACT.md`,
 `fxd_geometry/ai_fixture_engineer.py`, and
 `tests/test_ai_fixture_engineer.py`.
+
+### 2026-07-19 - Synthesize only one governed multi-station fixture family
+
+**Decision:** M32 extends the existing `FixtureBuildPlan` with typed
+multi-station layout evidence and supports only
+`linear_multi_station_weld_fixture`. It uses deterministic pitch, length,
+source-instance, connectivity, clamp-reach, and access checks before real OCP
+authoring. Generic toggle-clamp solids are vendor-neutral review geometry, not
+released supplier CAD.
+
+**Reasoning:** The existing construction, component, export, persistence, and
+validation contracts already define the authoritative fixture path. A parallel
+assembly model or AI-authored free-form B-Rep would split engineering truth and
+weaken traceability. Explicit source-referenced instances preserve immutable
+product evidence while making repeated stations reviewable.
+
+**Risks and tradeoffs:** Equal pitch and explicit review allowances are a first
+supported archetype, not a universal fixture rule. The geometry does not prove
+clamp force, structural adequacy, thermal behaviour, released vendor fit, or
+physical process safety. Human fixture and weld-process review remains required.
+
+**Supporting evidence:** `docs/M32_MULTI_STATION_WELD_FIXTURE.md`,
+`fxd_geometry/fabrication_workflow.py`, and
+`tests/test_multi_station_fixture.py`.
