@@ -1,0 +1,53 @@
+name: Publish audited project binders
+
+on:
+  push:
+    branches:
+      - docs/audit-binders-through-milestone-31
+    paths:
+      - scripts/generate_project_binders.py
+      - docs/project-records/AUDIT_MILESTONES_01_31.md
+      - assets/branding/logos/fxd-logo-approved-dark-1600x900.png
+      - .github/workflows/project-binder-publication.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out documentation branch
+        uses: actions/checkout@v4
+        with:
+          ref: docs/audit-binders-through-milestone-31
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install binder dependencies
+        run: python -m pip install --disable-pip-version-check reportlab pypdf pillow
+
+      - name: Generate and preflight audited binders
+        run: python scripts/generate_project_binders.py
+
+      - name: Publish generated PDFs and integrity hashes
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/project-records/print/FXD_Engineering_Binder_Volume_1_Milestones_01-25_Final.pdf
+          git add docs/project-records/print/FXD_Engineering_Binder_Volume_2_Milestones_26-31_Final.pdf
+          git add docs/project-records/print/FXD_Engineering_Binder_Complete_Milestones_01-31_Final.pdf
+          git add docs/project-records/BINDER_SHA256SUMS.txt
+          if git diff --cached --quiet; then
+            echo "Generated binder files are already current."
+            exit 0
+          fi
+          git commit -m "Docs: publish audited binder PDFs through Milestone 31"
+          git push origin HEAD:docs/audit-binders-through-milestone-31
