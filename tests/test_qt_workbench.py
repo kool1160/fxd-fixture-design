@@ -38,6 +38,7 @@ from fxd_geometry import (
     source_orientation,
 )
 from fxd_geometry.project import FxdProject
+from fxd_geometry.ai_fixture_engineer import deterministic_baseline_proposal
 from fxd_qt_app import (
     EVIDENCE_PROVISIONAL,
     EVIDENCE_REAL,
@@ -338,6 +339,51 @@ class QtWorkbenchTests(unittest.TestCase):
         self.assertTrue(any(item["kind"] == "authored_mesh" for item in items))
         self.assertEqual(sum(item["kind"] == "product_review_mesh" for item in items), 5)
         self.assertFalse(any("debug_bounds" in item["kind"] for item in items))
+
+    def test_fixture_build_validation_source_is_independent_and_routes_to_visible_controls(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = self._real_step(directory, compound=True)
+            self.window.document = load_step_for_workbench(source)
+            self.window.viewport.load_document(self.window.document)
+            self.window._replace_project(self._project(source))
+        self.window.workflow = InteractiveWorkflow(
+            self.window.project.product.source_sha256,
+            ProcessSetup("M32 validation source", manufacturing_orientation=source_orientation(
+                self.window.project.product.source_sha256, accepted=True,
+            )),
+            concepts_generated=True,
+        )
+        self.window.process_fixture_type.setCurrentText("Full weld fixture")
+        self.window.process_construction.setCurrentText("Laser-cut fabricated")
+        self.window.process_lifecycle.setCurrentText("Full permanent fixture")
+        self.window.process_weld_access.setChecked(True)
+        self.window.process_unload_clearance.setChecked(True)
+        self.window.process_adjustment_state.setCurrentText("Locked production position")
+        self.window.process_fixture_family.setCurrentText("Linear multi-station weld fixture")
+        self.window.process_station_count.setValue(5)
+        self.window.process_max_fixture_length.setValue(3000.0)
+        self.window.generate_fixture_build_plan()
+        self.assertIsNotNone(self.window.project.fixture_build)
+        build_digest = self.window.project.fixture_build_validation.evidence_digest
+        proposal = deterministic_baseline_proposal(self.window.project)
+        self.window._replace_project(self.window.project.with_fixture_proposal(proposal))
+        self.window.workflow = self.window.project.workflow
+        self.window._refresh_all()
+        self.assertEqual(self.window.project.fixture_build_validation.evidence_digest, build_digest)
+        self.window.validation_source_selector.setCurrentText("Fixture Build Plan")
+        self.assertIn("Active validation source: Fixture Build Plan", self.window.validation_source_summary.text())
+        self.assertGreater(self.window.findings.count(), 0)
+        self.assertGreater(self.window.guided_issues.count(), 0)
+        issue = self.window._selected_guided_issue()
+        if issue is None:
+            self.window.guided_issues.setCurrentRow(0)
+            issue = self.window._selected_guided_issue()
+        self.assertIsNotNone(issue)
+        self.assertTrue(hasattr(issue, "fix_target"))
+        self.window.validation_source_selector.setCurrentText("Fixture Proposal")
+        self.assertIn("Fixture Proposal", self.window.validation_source_summary.text())
+        self.window.validation_source_selector.setCurrentText("Authored Manufacturing Geometry")
+        self.assertIn("Authored Manufacturing Geometry", self.window.validation_source_summary.text())
 
     def test_m30_authored_geometry_cache_is_cleared_and_identity_gated(self):
         plan, authored = self._author_m30_tack_build()

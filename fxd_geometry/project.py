@@ -183,17 +183,27 @@ class FxdProject:
     def active_validation(self) -> ValidationResult:
         return self.validation_for(self.active)
 
-    def validation_for(self, concept: CompleteFixtureConcept) -> ValidationResult:
-        """Compose deterministic validation evidence available to this project."""
+    @property
+    def fixture_build_validation(self):
+        """Dedicated deterministic evidence for the active build, never AI-owned."""
+        if self.fixture_build is None or self.fixture_build.concept_identity != self.active_concept:
+            return None
+        from .fabrication_workflow import validate_fixture_build_plan
+        return validate_fixture_build_plan(self.product, self.fixture_build)
+
+    def assembly_validation_for(self, concept: CompleteFixtureConcept) -> ValidationResult:
+        """Return assembly analysis only, without folding fixture-build evidence into it."""
         access = None
         weld = None
         if self.workflow is not None and self.workflow.analysis_completed:
             access = evaluate_access(self.product, concept.fixture, self.annotations)
             if self.annotations.weld_joints:
                 weld = evaluate_weld_rules(self.product, concept.fixture, self.annotations)
-        result = validate_fixture_concept(
-            self.product, concept, access=access, weld=weld,
-        )
+        return validate_fixture_concept(self.product, concept, access=access, weld=weld)
+
+    def validation_for(self, concept: CompleteFixtureConcept) -> ValidationResult:
+        """Compose release-gate evidence while preserving source-specific evidence APIs."""
+        result = self.assembly_validation_for(concept)
         if self.fixture_build is None or self.fixture_build.concept_identity != concept.identity:
             return result
         from .fabrication_workflow import validate_fixture_build_plan
@@ -219,13 +229,20 @@ class FxdProject:
         return replace(self, drawing_intent=None, optimization_intent=None, fixture_build=None)
 
     def with_fixture_proposal(self, proposal: "FixtureProposal") -> "FxdProject":
-        """Persist reviewed proposal evidence and invalidate authored downstream geometry."""
+        """Persist initial proposal evidence without discarding an independent build plan.
+
+        An engineer's later recommendation decision or edit changes design intent
+        and therefore still invalidates downstream authored/build evidence.
+        """
         if proposal.source_sha256 != self.product.source_sha256:
             raise ProjectFormatError("fixture proposal does not match the immutable source geometry")
         from .ai_fixture_engineer import validate_fixture_proposal
+        preserve_existing_build = self.fixture_proposal is None
         candidate = replace(
             self, fixture_proposal=None, drawing_intent=None,
-            optimization_intent=None, fixture_build=None, approved_revision=None,
+            optimization_intent=None,
+            fixture_build=self.fixture_build if preserve_existing_build else None,
+            approved_revision=None,
         )
         proposal = validate_fixture_proposal(candidate, proposal)
         candidate = replace(candidate, fixture_proposal=proposal)
@@ -575,6 +592,10 @@ class FxdProject:
             if validation.blocked:
                 raise ProjectFormatError(
                     "invalid deterministic validation result cannot be approved for engineering review")
+            build = self.fixture_build_validation
+            if build is not None and build.status != "valid":
+                raise ProjectFormatError(
+                    "provisional or invalid fixture-build evidence cannot be approved for engineering review")
             if self.suppressed_features or self.active.corrections:
                 raise ProjectFormatError(
                     "edited concepts must be regenerated and deterministically revalidated before approval")

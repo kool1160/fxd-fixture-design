@@ -445,6 +445,10 @@ class MultiStationRequirements:
     weld_clearance_mm: float = 25.0
     adjustment_allowance_mm: float = 10.0
     clamp_sweep_mm: float | None = None
+    # The accepted count may be lower than the engineer's original request.
+    # Keep that request as immutable review evidence instead of silently
+    # rewriting the stated production intent.
+    requested_intent_station_count: int | None = None
 
     def __post_init__(self) -> None:
         if self.fixture_family != FixtureFamily.LINEAR_MULTI_STATION_WELD:
@@ -452,6 +456,9 @@ class MultiStationRequirements:
             raise FixtureBuildError(f"unsupported fixture family {value!r}")
         if not 1 <= self.requested_station_count <= 8:
             raise FixtureBuildError("multi-station fixture count must be between 1 and 8")
+        if (self.requested_intent_station_count is not None
+                and not 1 <= self.requested_intent_station_count <= 8):
+            raise FixtureBuildError("original multi-station request must be between 1 and 8")
         numeric = (self.maximum_fixture_length_mm, self.hand_clearance_mm,
                    self.weld_clearance_mm, self.adjustment_allowance_mm)
         if any(not math.isfinite(value) or value <= 0 for value in numeric):
@@ -486,6 +493,7 @@ class MultiStationRequirements:
             "weld_clearance_mm": self.weld_clearance_mm,
             "adjustment_allowance_mm": self.adjustment_allowance_mm,
             "clamp_sweep_mm": self.clamp_sweep_mm,
+            "requested_intent_station_count": self.requested_intent_station_count,
         }
 
     @classmethod
@@ -499,6 +507,7 @@ class MultiStationRequirements:
             bool(data.get("compare_one_up_and_multi_up", True)),
             float(data.get("hand_clearance_mm", 75.0)), float(data.get("weld_clearance_mm", 25.0)),
             float(data.get("adjustment_allowance_mm", 10.0)), data.get("clamp_sweep_mm"),
+            data.get("requested_intent_station_count"),
         )
 
 
@@ -566,6 +575,7 @@ class MultiStationLayout:
     proposed_smaller_station_count: int | None
     stations: tuple[StationTransform, ...]
     rationale: tuple[str, ...]
+    requested_intent_required_length_mm: float | None = None
 
     def __post_init__(self) -> None:
         if self.primary_axis not in {"x", "y"} or self.station_pitch_mm <= 0:
@@ -584,6 +594,7 @@ class MultiStationLayout:
             "station_pitch_mm": self.station_pitch_mm,
             "required_fixture_length_mm": self.required_fixture_length_mm,
             "proposed_smaller_station_count": self.proposed_smaller_station_count,
+            "requested_intent_required_length_mm": self.requested_intent_required_length_mm,
             "stations": [item.to_dict() for item in self.stations],
             "rationale": list(self.rationale),
         }
@@ -598,6 +609,7 @@ class MultiStationLayout:
             float(data["required_fixture_length_mm"]), data.get("proposed_smaller_station_count"),
             tuple(StationTransform.from_dict(item) for item in data["stations"]),
             tuple(data.get("rationale", ())),
+            data.get("requested_intent_required_length_mm"),
         )
 
 
@@ -622,6 +634,7 @@ class FixtureBuildRequirements:
     cleco_strategy: ClecoStrategy = ClecoStrategy.NONE
     product_hole_approved: bool = False
     product_hole_justification: str | None = None
+    confirmed_weld_intent: bool = False
 
     def __post_init__(self) -> None:
         if not re.fullmatch(r"[0-9a-f]{64}", self.source_sha256):
@@ -646,6 +659,7 @@ class FixtureBuildRequirements:
             "cleco_strategy": self.cleco_strategy.value,
             "product_hole_approved": self.product_hole_approved,
             "product_hole_justification": self.product_hole_justification,
+            "confirmed_weld_intent": self.confirmed_weld_intent,
         }
 
     @classmethod
@@ -658,7 +672,8 @@ class FixtureBuildRequirements:
                    data.get("unload_clearance_evaluated"), AdjustmentState(data.get("adjustment_state", AdjustmentState.PROVISIONAL.value)),
                    tuple(data.get("assumptions", ())), tuple(data.get("evidence", ())),
                    ClecoStrategy(data.get("cleco_strategy", ClecoStrategy.NONE.value)),
-                   bool(data.get("product_hole_approved", False)), data.get("product_hole_justification"))
+                   bool(data.get("product_hole_approved", False)), data.get("product_hole_justification"),
+                   bool(data.get("confirmed_weld_intent", False)))
 
 
 @dataclass(frozen=True)
@@ -765,6 +780,7 @@ class FixtureBuildPlan:
     evidence: tuple[str, ...] = ()
     poka_yokes: tuple[PokaYokeSpec, ...] = ()
     multi_station_layout: MultiStationLayout | None = None
+    authoring_state: str = "not_authored"
 
     def __post_init__(self) -> None:
         if not self.identity.strip() or not self.concept_identity.strip():
@@ -779,6 +795,8 @@ class FixtureBuildPlan:
             raise FixtureBuildError("Cleco identities must be unique")
         if len({item.identity for item in self.poka_yokes}) != len(self.poka_yokes):
             raise FixtureBuildError("poka-yoke identities must be unique")
+        if self.authoring_state not in {"not_authored", "normal", "provisional"}:
+            raise FixtureBuildError("fixture build authoring state is unsupported")
 
     @property
     def evidence_digest(self) -> str:
@@ -798,6 +816,7 @@ class FixtureBuildPlan:
             "evidence": list(self.evidence),
             "poka_yokes": [item.to_dict() for item in sorted(self.poka_yokes, key=lambda item: item.identity)],
             "multi_station_layout": self.multi_station_layout.to_dict() if self.multi_station_layout else None,
+            "authoring_state": self.authoring_state,
         }
 
     @classmethod
@@ -817,6 +836,7 @@ class FixtureBuildPlan:
             tuple(PokaYokeSpec.from_dict(item) for item in data.get("poka_yokes", ())),
             MultiStationLayout.from_dict(data["multi_station_layout"])
             if data.get("multi_station_layout") else None,
+            str(data.get("authoring_state", "not_authored")),
         )
 
 
@@ -832,6 +852,7 @@ class FixtureBuildFinding:
     evidence: tuple[str, ...] = ()
     assumptions: tuple[str, ...] = ()
     confidence: str = "deterministic"
+    disposition: str = ""
 
     def __post_init__(self) -> None:
         if self.rule_id not in RULES_BY_ID:
@@ -840,6 +861,8 @@ class FixtureBuildFinding:
             raise FixtureBuildError("fixture build finding severity is unsupported")
         if self.status not in {"valid", "provisional", "invalid", "not_evaluated"}:
             raise FixtureBuildError("fixture build finding status is unsupported")
+        if self.disposition not in {"authoring_blocker", "review_blocker", "export_blocker", "warning", "informational"}:
+            raise FixtureBuildError("fixture build finding disposition is unsupported")
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -849,6 +872,7 @@ class FixtureBuildFinding:
             "geometry_references": [item.__dict__ for item in self.geometry_references],
             "evidence": list(self.evidence), "assumptions": list(self.assumptions),
             "confidence": self.confidence,
+            "disposition": self.disposition,
         }
 
 
@@ -867,6 +891,22 @@ class FixtureBuildValidation:
     @property
     def blocked(self) -> bool:
         return self.status == "invalid"
+
+    @property
+    def authoring_blocked(self) -> bool:
+        """Only deterministic computational/safety prerequisites stop review solids."""
+        return any(item.disposition == "authoring_blocker" for item in self.findings)
+
+    @property
+    def review_blocked(self) -> bool:
+        return any(item.disposition == "review_blocker" for item in self.findings)
+
+    @property
+    def export_blocked(self) -> bool:
+        return self.status != "valid" or any(
+            item.disposition in {"authoring_blocker", "review_blocker", "export_blocker"}
+            for item in self.findings
+        )
 
 
 @dataclass(frozen=True)
@@ -901,6 +941,8 @@ class AuthoredFixtureAssembly:
     components: tuple[AuthoredFixtureComponent, ...]
     model: object
     validation: FixtureBuildValidation
+    provisional: bool = False
+    review_labels: tuple[str, ...] = ()
 
     @property
     def blocked(self) -> bool:
@@ -911,6 +953,7 @@ class AuthoredFixtureAssembly:
         payload = json.dumps({
             "plan": self.plan_identity, "source": self.source_sha256,
             "validation": self.validation.evidence_digest,
+            "provisional": self.provisional, "review_labels": self.review_labels,
             "components": [(item.component.identity, hashlib.sha256(item.step_bytes).hexdigest()) for item in self.components],
         }, sort_keys=True, separators=(",", ":"))
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()
@@ -918,14 +961,18 @@ class AuthoredFixtureAssembly:
 
 def _finding(rule_id: str, severity: str, message: str, *, components: tuple[str, ...] = (),
              references: tuple[GeometryReference, ...] = (), evidence: tuple[str, ...] = (),
-             assumptions: tuple[str, ...] = (), status: str | None = None) -> FixtureBuildFinding:
+             assumptions: tuple[str, ...] = (), status: str | None = None,
+             disposition: str | None = None) -> FixtureBuildFinding:
     payload = (rule_id, severity, message, tuple(sorted(components)),
                tuple(sorted((item.component_identity, item.body_identity or "", item.face_identity or "") for item in references)),
                tuple(sorted(evidence)), tuple(sorted(assumptions)))
     identity = "m30-" + hashlib.sha256(repr(payload).encode("utf-8")).hexdigest()[:20]
+    resolved_disposition = disposition or (
+        "informational" if severity == "info" else "warning" if severity == "warning" else "review_blocker"
+    )
     return FixtureBuildFinding(identity, rule_id, severity, status or ("invalid" if severity == "error" else "provisional"),
                                message, tuple(sorted(components)), references, tuple(sorted(evidence)),
-                               tuple(sorted(assumptions)))
+                               tuple(sorted(assumptions)), "deterministic", resolved_disposition)
 
 
 def _reference_valid(product: ProductModel, reference: GeometryReference) -> bool:
@@ -1144,9 +1191,43 @@ def _translated(bounds: Aabb, translation: Vec3) -> Aabb:
     return Aabb(bounds.minimum + translation, bounds.maximum + translation)
 
 
-def propose_multi_station_count(product: ProductModel,
-                                requirements: MultiStationRequirements) -> int:
-    """Return the largest equal-pitch count that fits the explicit length limit."""
+@dataclass(frozen=True)
+class MultiStationFitProposal:
+    """Deterministic, explicitly accepted response to a length-constrained request."""
+
+    requested_station_count: int
+    feasible_station_count: int
+    primary_axis: str
+    station_pitch_mm: float
+    requested_required_length_mm: float
+    feasible_required_length_mm: float
+    maximum_fixture_length_mm: float
+    station_span_mm: float
+    clamp_sweep_mm: float
+    end_allowance_mm: float
+    hand_clearance_mm: float
+    weld_clearance_mm: float
+    adjustment_allowance_mm: float
+
+    @property
+    def requires_explicit_acceptance(self) -> bool:
+        return self.feasible_station_count < self.requested_station_count
+
+    @property
+    def explanation(self) -> tuple[str, ...]:
+        return (
+            f"requested_station_count={self.requested_station_count}",
+            f"feasible_station_count={self.feasible_station_count}",
+            f"station_pitch_mm={self.station_pitch_mm:.3f}",
+            f"requested_required_length_mm={self.requested_required_length_mm:.3f}",
+            f"feasible_required_length_mm={self.feasible_required_length_mm:.3f}",
+            f"maximum_fixture_length_mm={self.maximum_fixture_length_mm:.3f}",
+            "limiting_margin=product envelope + clamp sweep + hand clearance + weld clearance + adjustment allowance + end margins",
+        )
+
+
+def _multi_station_fit(product: ProductModel,
+                       requirements: MultiStationRequirements) -> MultiStationFitProposal:
     bounds = _product_bounds(product)
     axis = "x" if _axis_span(bounds, "x") >= _axis_span(bounds, "y") else "y"
     station_span = _axis_span(bounds, axis)
@@ -1157,23 +1238,37 @@ def propose_multi_station_count(product: ProductModel,
                 + requirements.weld_clearance_mm + requirements.adjustment_allowance_mm)
     end_allowance = max(45.0, requirements.hand_clearance_mm * 0.5)
     usable = requirements.maximum_fixture_length_mm - (2.0 * end_allowance) - station_span
-    return max(0, min(8, int(math.floor(usable / pitch)) + 1))
+    feasible = max(0, min(8, int(math.floor(usable / pitch)) + 1))
+    requested_intent = requirements.requested_intent_station_count or requirements.requested_station_count
+    length_for = lambda count: 2.0 * end_allowance + station_span + pitch * (count - 1)
+    return MultiStationFitProposal(
+        requested_intent, feasible, axis, pitch, length_for(requested_intent),
+        length_for(max(1, feasible)), requirements.maximum_fixture_length_mm,
+        station_span, clamp_sweep, end_allowance, requirements.hand_clearance_mm,
+        requirements.weld_clearance_mm, requirements.adjustment_allowance_mm,
+    )
+
+
+def propose_multi_station_fit(product: ProductModel,
+                              requirements: MultiStationRequirements) -> MultiStationFitProposal:
+    """Expose the governed fit basis before any station-count reduction is accepted."""
+    return _multi_station_fit(product, requirements)
+
+
+def propose_multi_station_count(product: ProductModel,
+                                requirements: MultiStationRequirements) -> int:
+    """Return the largest equal-pitch count that fits the explicit length limit."""
+    return _multi_station_fit(product, requirements).feasible_station_count
 
 
 def generate_multi_station_layout(product: ProductModel,
                                   requirements: MultiStationRequirements) -> MultiStationLayout:
     """Derive equal-pitch source review instances without copying source CAD."""
     bounds = _product_bounds(product)
-    axis = "x" if _axis_span(bounds, "x") >= _axis_span(bounds, "y") else "y"
-    station_span = _axis_span(bounds, axis)
-    secondary = _axis_span(bounds, "y" if axis == "x" else "x")
-    clamp_sweep = requirements.clamp_sweep_mm or max(30.0, secondary * 0.60)
-    minimum_pitch = station_span + clamp_sweep + requirements.hand_clearance_mm + \
-        requirements.weld_clearance_mm + requirements.adjustment_allowance_mm
-    pitch = max(requirements.preferred_station_pitch_mm or 0.0, minimum_pitch)
-    end_allowance = max(45.0, requirements.hand_clearance_mm * 0.5)
-    required_length = 2.0 * end_allowance + station_span + pitch * (requirements.requested_station_count - 1)
-    proposed = propose_multi_station_count(product, requirements)
+    fit = _multi_station_fit(product, requirements)
+    axis, pitch, end_allowance = fit.primary_axis, fit.station_pitch_mm, fit.end_allowance_mm
+    required_length, proposed = (2.0 * end_allowance + fit.station_span_mm
+                                 + pitch * (requirements.requested_station_count - 1)), fit.feasible_station_count
     if proposed < 1:
         raise FixtureBuildError("maximum fixture length cannot fit one product station with its explicit access allowances")
     if requirements.requested_station_count > proposed:
@@ -1202,12 +1297,14 @@ def generate_multi_station_layout(product: ProductModel,
     return MultiStationLayout(
         "m32-layout-" + hashlib.sha256(payload.encode("utf-8")).hexdigest()[:20], requirements,
         axis, round(pitch, 6), round(required_length, 6),
-        proposed if proposed < 8 else None, tuple(stations),
+        proposed if proposed < (requirements.requested_intent_station_count or requirements.requested_station_count) else None, tuple(stations),
         (
             f"primary_axis={axis} derived from the largest product horizontal envelope span.",
             f"pitch={pitch:.3f} mm combines product envelope, clamp sweep, hand clearance, weld clearance, and adjustment allowance.",
+            *fit.explanation,
             "Product stations are immutable review instances referencing the original source SHA-256 and component identities.",
         ),
+        round(fit.requested_required_length_mm, 6),
     )
 
 
@@ -1421,27 +1518,27 @@ def _multi_station_findings(plan: FixtureBuildPlan) -> tuple[FixtureBuildFinding
     findings: list[FixtureBuildFinding] = []
     req = layout.requirements
     if req.fixture_family != FixtureFamily.LINEAR_MULTI_STATION_WELD:
-        findings.append(_finding("FXD-M32-STA", "error", "unsupported multi-station fixture family"))
+        findings.append(_finding("FXD-M32-STA", "error", "unsupported multi-station fixture family", disposition="review_blocker"))
     if layout.required_fixture_length_mm > req.maximum_fixture_length_mm + 1e-7:
-        findings.append(_finding("FXD-M32-STA", "error", "station layout exceeds the requested maximum fixture length"))
+        findings.append(_finding("FXD-M32-STA", "error", "station layout exceeds the requested maximum fixture length", disposition="review_blocker"))
     if len(layout.stations) != req.requested_station_count:
-        findings.append(_finding("FXD-M32-STA", "error", "station layout does not contain the requested count"))
+        findings.append(_finding("FXD-M32-STA", "error", "station layout does not contain the accepted station count", disposition="review_blocker"))
     for left, right in zip(layout.stations, layout.stations[1:]):
         if left.product_bounds.intersects(right.product_bounds):
-            findings.append(_finding("FXD-M32-STA", "error", "product review instances overlap", components=(left.identity, right.identity)))
+            findings.append(_finding("FXD-M32-STA", "error", "product review instances overlap", components=(left.identity, right.identity), disposition="review_blocker"))
         left_axis = getattr(left.translation_mm, layout.primary_axis)
         right_axis = getattr(right.translation_mm, layout.primary_axis)
         if right_axis - left_axis + 1e-7 < layout.station_pitch_mm:
-            findings.append(_finding("FXD-M32-STA", "error", "station transforms are not stable equal-pitch placements", components=(left.identity, right.identity)))
+            findings.append(_finding("FXD-M32-STA", "error", "station transforms are not stable equal-pitch placements", components=(left.identity, right.identity), disposition="review_blocker"))
     base = next((item for item in plan.components if item.role == BuildComponentRole.BASEPLATE), None)
     rail = next((item for item in plan.components if item.role == BuildComponentRole.DATUM_RAIL), None)
     if base is None or rail is None:
-        findings.append(_finding("FXD-M32-CON", "error", "multi-station fixture requires one baseplate and one upright datum rail"))
+        findings.append(_finding("FXD-M32-CON", "error", "multi-station fixture requires one baseplate and one upright datum rail", disposition="authoring_blocker"))
     elif _axis_span(base.bounds, layout.primary_axis) + 1e-7 < layout.required_fixture_length_mm:
-        findings.append(_finding("FXD-M32-CON", "error", "baseplate does not span the deterministic station layout"))
+        findings.append(_finding("FXD-M32-CON", "error", "baseplate does not span the deterministic station layout", disposition="review_blocker"))
     braces = [item for item in plan.components if item.role == BuildComponentRole.END_BRACE]
     if len(braces) < 2:
-        findings.append(_finding("FXD-M32-CON", "error", "upright datum structure requires end braces"))
+        findings.append(_finding("FXD-M32-CON", "error", "upright datum structure requires end braces", disposition="review_blocker"))
     component_ids = {item.identity for item in plan.components}
     for station in layout.stations:
         prefix = station.identity + "-"
@@ -1452,29 +1549,29 @@ def _multi_station_findings(plan: FixtureBuildPlan) -> tuple[FixtureBuildFinding
             BuildComponentRole.TOGGLE_CLAMP,
         )}
         if any(role_counts[role] < 1 for role in role_counts):
-            findings.append(_finding("FXD-M32-STA", "error", "station is missing required support, locating, stop, clamp-mount, or clamp geometry", components=(station.identity,)))
+            findings.append(_finding("FXD-M32-STA", "error", "station is missing required support, locating, stop, clamp-mount, or clamp geometry", components=(station.identity,), disposition="review_blocker"))
         if role_counts[BuildComponentRole.SUPPORT_PAD] > 3:
-            findings.append(_finding("FXD-DAT-001", "error", "station uses more than three fixed primary supports", components=(station.identity,)))
+            findings.append(_finding("FXD-DAT-001", "error", "station uses more than three fixed primary supports", components=(station.identity,), disposition="review_blocker"))
         if not station.clamp_tip_reaches_surface:
-            findings.append(_finding("FXD-M32-CLP", "error", "clamp tip cannot reach its intended clamp surface", components=(station.identity,)))
+            findings.append(_finding("FXD-M32-CLP", "error", "clamp tip cannot reach its intended clamp surface", components=(station.identity,), disposition="review_blocker"))
         if not station.open_clamp_envelope_clear:
-            findings.append(_finding("FXD-M32-CLP", "error", "open-clamp envelope blocks loading or release", components=(station.identity,)))
+            findings.append(_finding("FXD-M32-CLP", "error", "open-clamp envelope blocks loading or release", components=(station.identity,), disposition="review_blocker"))
         if not station.hand_access_clear:
-            findings.append(_finding("FXD-M32-ACC", "error", "operator hand clearance is blocked at station", components=(station.identity,)))
+            findings.append(_finding("FXD-M32-ACC", "error", "operator hand clearance is blocked at station", components=(station.identity,), disposition="review_blocker"))
         if not station.weld_access_clear:
-            findings.append(_finding("FXD-M32-ACC", "error", "weld access is blocked at station", components=(station.identity,)))
+            findings.append(_finding("FXD-M32-ACC", "error", "weld access is blocked at station", components=(station.identity,), disposition="review_blocker"))
         if not station.unload_path_clear or station.trapped_part:
-            findings.append(_finding("FXD-M32-ACC", "error", "station has a trapped-part or unloading-path conflict", components=(station.identity,)))
+            findings.append(_finding("FXD-M32-ACC", "error", "station has a trapped-part or unloading-path conflict", components=(station.identity,), disposition="review_blocker"))
         if station.product_source_sha256 != plan.requirements.source_sha256:
-            findings.append(_finding("FXD-M32-STA", "error", "product review instance does not reference immutable plan source", components=(station.identity,)))
+            findings.append(_finding("FXD-M32-STA", "error", "product review instance does not reference immutable plan source", components=(station.identity,), disposition="authoring_blocker"))
         if not station.source_component_identities:
-            findings.append(_finding("FXD-M32-STA", "error", "product review instance has no immutable source-component references", components=(station.identity,)))
+            findings.append(_finding("FXD-M32-STA", "error", "product review instance has no immutable source-component references", components=(station.identity,), disposition="authoring_blocker"))
     if any(item.role == BuildComponentRole.TOGGLE_CLAMP and "generic_vendor_neutral=true" not in item.evidence
            for item in plan.components):
-        findings.append(_finding("FXD-M32-CLP", "error", "toggle-clamp geometry must state its vendor-neutral review boundary"))
+        findings.append(_finding("FXD-M32-CLP", "error", "toggle-clamp geometry must state its vendor-neutral review boundary", disposition="review_blocker"))
     if any(item.parent_component_identity and item.parent_component_identity not in component_ids
            for item in plan.components):
-        findings.append(_finding("FXD-M32-CON", "error", "multi-station fixture contains an unknown structural parent"))
+        findings.append(_finding("FXD-M32-CON", "error", "multi-station fixture contains an unknown structural parent", disposition="authoring_blocker"))
     return tuple(findings)
 
 
@@ -1483,11 +1580,20 @@ def validate_fixture_build_plan(product: ProductModel, plan: FixtureBuildPlan) -
     findings: list[FixtureBuildFinding] = []
     req = plan.requirements
     if product.source_sha256 != req.source_sha256:
-        findings.append(_finding("FXD-MFG-001", "error", "fixture build source identity does not match immutable product source"))
+        findings.append(_finding("FXD-MFG-001", "error", "fixture build source identity does not match immutable product source", disposition="authoring_blocker"))
     if req.production_quantity is None:
         findings.append(_finding("FXD-COST-001", "warning", "production quantity is missing; lifecycle comparison is provisional"))
     if not req.weld_process:
         findings.append(_finding("FXD-WLD-001", "warning", "weld process is missing; access and distortion intent remain provisional"))
+    if (plan.multi_station_layout is not None and req.fixture_purpose == FixturePurpose.FULL_WELD
+            and not req.confirmed_weld_intent):
+        findings.append(_finding(
+            "FXD-WLD-001", "error",
+            "No confirmed weld intent is recorded. Geometry can show only unconfirmed candidate interfaces; weld location, side, length, process, and sequence require engineer confirmation before weld access is validated.",
+            evidence=("candidate_weld_interfaces=unconfirmed",),
+            assumptions=("No weld symbols, sizes, locations, or sequence are invented from STEP geometry.",),
+            disposition="review_blocker",
+        ))
     if req.lifecycle in {FixtureLifecycle.DISPOSABLE_RECUT, FixtureLifecycle.REUSABLE_TOOLING_ON_DISPOSABLE} and not req.job_revision:
         findings.append(_finding("FXD-COST-001", "error", "disposable or recut fixture is not tied to an explicit job revision"))
     if req.adjustment_state in {AdjustmentState.PROVISIONAL, AdjustmentState.PROVE_OUT, AdjustmentState.REVALIDATION_REQUIRED}:
@@ -1500,23 +1606,23 @@ def validate_fixture_build_plan(product: ProductModel, plan: FixtureBuildPlan) -
         if req.full_weld_access_available is None:
             findings.append(_finding("FXD-ACC-001", "info", "full-weld access was not evaluated because this is a tack/location fixture", status="not_evaluated"))
     elif req.full_weld_access_available is not True:
-        findings.append(_finding("FXD-ACC-001", "warning", "full-weld access is not evidenced for this fixture purpose"))
+        findings.append(_finding("FXD-ACC-001", "warning", "full-weld access is not evidenced for this fixture purpose; contact geometry supplies only unconfirmed candidate interfaces"))
     components = _component_by_id(plan)
     roots = tuple(item for item in plan.components if item.parent_component_identity is None)
     if len(roots) != 1:
-        findings.append(_finding("FXD-MFG-001", "error", "fixture build must have exactly one connected root component", components=tuple(item.identity for item in roots)))
+        findings.append(_finding("FXD-MFG-001", "error", "fixture build must have exactly one connected root component", components=tuple(item.identity for item in roots), disposition="authoring_blocker"))
     for item in plan.components:
         if item.geometry_authority not in {GeometryAuthority.AUTHORED_MANUFACTURING, GeometryAuthority.PURCHASED_COMPONENT}:
-            findings.append(_finding("FXD-MFG-001", "error", "provisional or source geometry cannot be labeled as manufacturing fixture geometry", components=(item.identity,)))
+            findings.append(_finding("FXD-MFG-001", "error", "provisional or source geometry cannot be labeled as manufacturing fixture geometry", components=(item.identity,), disposition="authoring_blocker"))
         for reference in item.source_references:
             if not _reference_valid(product, reference):
-                findings.append(_finding("FXD-MFG-001", "error", "fixture component has an invalid source geometry reference", components=(item.identity,), references=(reference,)))
+                findings.append(_finding("FXD-MFG-001", "error", "fixture component has an invalid source geometry reference", components=(item.identity,), references=(reference,), disposition="authoring_blocker"))
         if item.parent_component_identity:
             parent = components.get(item.parent_component_identity)
             if parent is None:
-                findings.append(_finding("FXD-MFG-001", "error", "fixture component has an unknown parent component", components=(item.identity,)))
+                findings.append(_finding("FXD-MFG-001", "error", "fixture component has an unknown parent component", components=(item.identity,), disposition="authoring_blocker"))
             elif parent.bounds.clearance_to(item.bounds) > 0.1:
-                findings.append(_finding("FXD-MFG-001", "error", "fixture component is physically disconnected from its parent", components=(parent.identity, item.identity)))
+                findings.append(_finding("FXD-MFG-001", "error", "fixture component is physically disconnected from its parent", components=(parent.identity, item.identity), disposition="authoring_blocker"))
         if item.role == BuildComponentRole.CLAMP_PLATE and not item.reaction_support_identity:
             findings.append(_finding("FXD-SUP-001", "error", "clamp plate has no explicit reaction support", components=(item.identity,)))
         if item.reaction_support_identity and item.reaction_support_identity not in components:
@@ -1719,10 +1825,18 @@ def _dxf_for(component: FixtureBuildComponent) -> bytes | None:
 
 
 def author_fixture_build(plan: FixtureBuildPlan, product: ProductModel, kernel: RealKernel) -> AuthoredFixtureAssembly:
-    """Author real OCP B-Rep components after the deterministic build gate passes."""
+    """Author real OCP B-Rep components without weakening deterministic release gates.
+
+    Engineering-review findings can be inspected as real, explicitly labelled
+    provisional solids.  Source identity, graph connectivity, and other
+    computational prerequisites remain hard authoring blockers.
+    """
     validation = validate_fixture_build_plan(product, plan)
-    if validation.blocked:
-        raise FixtureBuildError("invalid fixture build plan cannot author manufacturing geometry")
+    if validation.authoring_blocked:
+        reasons = tuple(item.message for item in validation.findings
+                        if item.disposition == "authoring_blocker")
+        summary = "; ".join(reasons[:3]) or "deterministic authoring prerequisites are missing"
+        raise FixtureBuildError(f"fixture build has {len(reasons)} authoring-blocking finding(s): {summary}")
     if not kernel.capabilities.is_complete:
         raise FixtureBuildError("complete reviewed OCP capabilities are required for manufacturing geometry")
     authored: list[AuthoredFixtureComponent] = []
@@ -1735,8 +1849,11 @@ def author_fixture_build(plan: FixtureBuildPlan, product: ProductModel, kernel: 
         authored.append(AuthoredFixtureComponent(component, shape, kernel.topology_counts(shape), kernel.export_step(shape), _dxf_for(component)))
     if not authored:
         raise FixtureBuildError("fixture build plan contains no authored manufacturing components")
+    provisional = validation.status != "valid"
+    labels = (("PROVISIONAL", "NOT APPROVED", "INVALID BUILD PLAN") if provisional else ())
     return AuthoredFixtureAssembly(plan.identity, plan.requirements.source_sha256, "mm", tuple(authored),
-                                   kernel.compound(tuple(item.shape for item in authored)), validation)
+                                   kernel.compound(tuple(item.shape for item in authored)), validation,
+                                   provisional, labels)
 
 
 def build_fixture_build_package(assembly: AuthoredFixtureAssembly, plan: FixtureBuildPlan,
@@ -1744,7 +1861,7 @@ def build_fixture_build_package(assembly: AuthoredFixtureAssembly, plan: Fixture
     """Create deterministic review-only manufacturing outputs behind all available gates."""
     if assembly.plan_identity != plan.identity or assembly.source_sha256 != plan.requirements.source_sha256:
         raise FixtureBuildError("authored fixture geometry does not match the construction plan")
-    if assembly.validation.status != "valid":
+    if assembly.validation.status != "valid" or assembly.provisional:
         raise FixtureBuildError("only a valid fixture build validation result can be exported")
     if assembly.blocked or plan.requirements.adjustment_state in {
             AdjustmentState.PROVISIONAL, AdjustmentState.PROVE_OUT, AdjustmentState.REVALIDATION_REQUIRED}:

@@ -546,10 +546,46 @@ def _engineering_annotations(product: ProductModel,
     critical = tuple(CriticalCharacteristic(
         item.identity, (item.reference,), notes=item.notes,
     ) for item in workflow.geometry_annotations if item.role == AnnotationRole.CRITICAL_FEATURE)
-    welds = tuple(WeldJoint(
-        item.identity, (item.reference,), setup.manufacturing_process, item.notes,
-        assumptions=item.assumptions,
-    ) for item in workflow.geometry_annotations if item.role == AnnotationRole.WELD_JOINT)
+    def _evidence_values(annotation: GeometryAnnotation) -> dict[str, str]:
+        values: dict[str, str] = {}
+        for evidence in annotation.evidence:
+            key, separator, value = evidence.partition("=")
+            if separator:
+                values[key] = value
+        return values
+
+    welds: list[WeldJoint] = []
+    for item in workflow.geometry_annotations:
+        if item.role != AnnotationRole.WELD_JOINT:
+            continue
+        values = _evidence_values(item)
+        # Legacy annotations predate explicit candidate state. They remain
+        # confirmed evidence for compatible existing projects; new M32
+        # annotations must explicitly state every weld-intent field.
+        status = values.get("weld_candidate_status")
+        if status is None:
+            welds.append(WeldJoint(
+                item.identity, (item.reference,), setup.manufacturing_process, item.notes,
+                assumptions=item.assumptions,
+            ))
+            continue
+        required = ("weld_side", "weld_length_mm", "weld_process", "weld_sequence")
+        if status != "confirmed" or any(not values.get(key) for key in required):
+            continue
+        try:
+            length = float(values["weld_length_mm"])
+            sequence = int(values["weld_sequence"])
+        except ValueError:
+            continue
+        if values["weld_side"] == "Unknown" or length <= 0.0 or sequence < 1:
+            continue
+        notes = (item.notes + " | " if item.notes else "") + (
+            f"side={values['weld_side']}; length_mm={length:.3f}; candidate_status=confirmed"
+        )
+        welds.append(WeldJoint(
+            item.identity, (item.reference,), values["weld_process"], notes, sequence,
+            direction=item.normal, assumptions=item.assumptions,
+        ))
     assumptions = [
         Assumption("fixture_type", setup.fixture_type or "unknown", "Engineer process setup."),
         Assumption("operation_mode", setup.operation_mode or "unknown", "Engineer process setup."),
@@ -576,7 +612,7 @@ def _engineering_annotations(product: ProductModel,
         product.source_sha256, product.source_name, build_orientation,
         loading_direction,
         f"{setup.operation_mode} {setup.manufacturing_process}", setup.production_quantity,
-        critical, permitted, forbidden, welds, setup.shop_capabilities,
+        critical, permitted, forbidden, tuple(welds), setup.shop_capabilities,
         tuple(assumptions),
     )
 
