@@ -11,6 +11,7 @@ from hashlib import sha256
 import json
 from pathlib import Path
 from queue import Empty, Queue
+import re
 import subprocess
 import tempfile
 from threading import Thread
@@ -69,6 +70,7 @@ from fxd_geometry import (
     AiFixtureProvider,
     AnnotationRole,
     CancellationToken,
+    ConfirmedWeldIntent,
     ConstructionMethod,
     FixtureLifecycle,
     FixturePurpose,
@@ -1357,6 +1359,19 @@ class FxdWorkbenchWindow(QMainWindow):
         self.weld_intent_sequence = QSpinBox()
         self.weld_intent_sequence.setRange(0, 999)
         self.weld_intent_sequence.setSpecialValueText("Unknown")
+        self.weld_intent_approach = self._combo(DIRECTION_OPTIONS, wheel_to_parent=True)
+        self.weld_intent_approach.setCurrentText("Unknown")
+        self.weld_intent_torch_width = QDoubleSpinBox()
+        self.weld_intent_torch_height = QDoubleSpinBox()
+        self.weld_intent_torch_length = QDoubleSpinBox()
+        for widget in (self.weld_intent_torch_width, self.weld_intent_torch_height,
+                       self.weld_intent_torch_length):
+            widget.setRange(0.0, 10000.0)
+            widget.setDecimals(1)
+            widget.setSpecialValueText("Unknown")
+            widget.setToolTip(
+                "Engineer-accepted torch/body envelope dimension in millimetres; zero remains unknown."
+            )
         self.weld_intent_note = QLineEdit()
         self.weld_intent_note.setPlaceholderText("Engineer seam note (candidate/confirmation/rejection evidence)")
         self.annotation_apply = QPushButton("Assign selected face role")
@@ -1369,6 +1384,12 @@ class FxdWorkbenchWindow(QMainWindow):
         annotation_layout.addWidget(self.weld_intent_side)
         annotation_layout.addWidget(self.weld_intent_length)
         annotation_layout.addWidget(self.weld_intent_sequence)
+        annotation_layout.addWidget(QLabel("Torch approach (manufacturing frame; explicit engineer input):"))
+        annotation_layout.addWidget(self.weld_intent_approach)
+        annotation_layout.addWidget(QLabel("Torch/body envelope width, height, and approach length (mm):"))
+        annotation_layout.addWidget(self.weld_intent_torch_width)
+        annotation_layout.addWidget(self.weld_intent_torch_height)
+        annotation_layout.addWidget(self.weld_intent_torch_length)
         annotation_layout.addWidget(self.weld_intent_note)
         annotation_layout.addWidget(self.annotation_apply)
         annotation_layout.addWidget(self.annotation_list, 1)
@@ -4180,13 +4201,25 @@ class FxdWorkbenchWindow(QMainWindow):
                     status = "unconfirmed"
                 notes = self.weld_intent_note.text().strip()
                 annotation = face_annotation(self.document, self.selected_reference, role, notes=notes)
-                annotation = replace(annotation, evidence=annotation.evidence + (
+                weld_evidence = (
                     f"weld_candidate_status={status}",
                     f"weld_side={self.weld_intent_side.currentText()}",
                     f"weld_length_mm={self.weld_intent_length.value():.3f}",
                     f"weld_process={process}",
                     f"weld_sequence={self.weld_intent_sequence.value()}",
-                ))
+                )
+                if self.weld_intent_approach.currentText() != "Unknown":
+                    weld_evidence += (
+                        f"weld_approach_direction_mfg={self.weld_intent_approach.currentText()}",
+                    )
+                for key, widget in (
+                    ("torch_envelope_width_mm", self.weld_intent_torch_width),
+                    ("torch_envelope_height_mm", self.weld_intent_torch_height),
+                    ("torch_envelope_length_mm", self.weld_intent_torch_length),
+                ):
+                    if widget.value() > 0.0:
+                        weld_evidence += (f"{key}={widget.value():.3f}",)
+                annotation = replace(annotation, evidence=annotation.evidence + weld_evidence)
             else:
                 annotation = face_annotation(self.document, self.selected_reference, role)
             self.workflow = self.workflow.with_annotation(annotation)
@@ -4348,23 +4381,50 @@ class FxdWorkbenchWindow(QMainWindow):
             raise ProjectFormatError("generate a fixture concept before creating manufacturing build evidence")
         setup = self._capture_process_setup()
         purpose = self._fixture_purpose_from_ui(self.process_fixture_type.currentText())
-        weld_evidence: tuple[str, ...] = ()
-        if self.project.annotations.weld_joints:
-            joint = self.project.annotations.weld_joints[0]
-            side = next((part.split("=", 1)[1].strip() for part in joint.notes.split(";")
-                         if part.strip().startswith("side=")), "")
-            length = next((part.split("=", 1)[1].strip() for part in joint.notes.split(";")
-                           if part.strip().startswith("length_mm=")), "")
-            direction = joint.direction
-            if (joint.references and side and length and joint.process and joint.sequence is not None
-                    and direction is not None):
-                weld_evidence = (
-                    f"joint_reference={joint.identity}", f"weld_side={side}",
-                    f"weld_length_mm={length}", f"weld_process={joint.process}",
-                    f"weld_sequence={joint.sequence}",
-                    f"approach_direction=({direction.x:.6g},{direction.y:.6g},{direction.z:.6g})",
-                    "torch_envelope_mm=25.0",
+        orientation = setup.manufacturing_orientation
+        workflow_welds = {
+            item.identity: item for item in (self.workflow.geometry_annotations if self.workflow else ())
+            if item.role == AnnotationRole.WELD_JOINT
+        }
+        confirmed_welds: list[ConfirmedWeldIntent] = []
+        weld_evidence: list[str] = []
+        for joint in self.project.annotations.weld_joints:
+            annotation = workflow_welds.get(joint.identity)
+            if annotation is None or orientation is None:
+                continue
+            values = {}
+            for item in annotation.evidence:
+                key, separator, value = item.partition("=")
+                if separator:
+                    values[key] = value.strip()
+            approach_manufacturing = self._direction(values.get("weld_approach_direction_mfg", ""))
+            try:
+                torch = Vec3(
+                    float(values["torch_envelope_width_mm"]),
+                    float(values["torch_envelope_height_mm"]),
+                    float(values["torch_envelope_length_mm"]),
                 )
+                length = float(values["weld_length_mm"])
+            except (KeyError, ValueError):
+                continue
+            if (approach_manufacturing is None or not joint.references or not values.get("weld_side")
+                    or not joint.process or joint.sequence is None
+                    or any(value <= 0.0 for value in torch.__dict__.values())):
+                continue
+            approach_source = orientation.manufacturing_vector_to_source(approach_manufacturing)
+            confirmed_welds.append(ConfirmedWeldIntent(
+                joint.identity, joint.references, values["weld_side"], length,
+                joint.process, joint.sequence, annotation.position_mm,
+                approach_manufacturing, approach_source, torch, orientation.identity,
+                ("Engineer-confirmed weld and torch evidence from the normal workbench.",),
+            ))
+            weld_evidence.extend((
+                f"joint_reference={joint.identity}", f"weld_side={values['weld_side']}",
+                f"weld_length_mm={length:.3f}", f"weld_process={joint.process}",
+                f"weld_sequence={joint.sequence}",
+                f"approach_direction_mfg={values['weld_approach_direction_mfg']}",
+                f"torch_envelope_mm=({torch.x:.3f},{torch.y:.3f},{torch.z:.3f})",
+            ))
         return FixtureBuildRequirements(
             self.project.product.source_sha256, purpose,
             self._construction_from_ui(self.process_construction.currentText()),
@@ -4379,12 +4439,36 @@ class FxdWorkbenchWindow(QMainWindow):
             self._cleco_strategy_from_ui(self.process_cleco_strategy.currentText()),
             self.process_product_hole_approval.isChecked(),
             self._optional_text(self.process_product_hole_justification),
-            bool(weld_evidence), weld_evidence,
+            bool(self.project.annotations.weld_joints), tuple(weld_evidence),
+            len(self.project.annotations.weld_joints), tuple(confirmed_welds),
         )
 
     def _multi_station_requirements(self, setup: ProcessSetup) -> MultiStationRequirements:
         if setup.fixture_family != FixtureFamily.LINEAR_MULTI_STATION_WELD.value:
             raise FixtureBuildError("select the supported linear multi-station weld fixture family before synthesis")
+        orientation = setup.manufacturing_orientation
+        if orientation is None or self.project is None:
+            raise FixtureBuildError("multi-station synthesis requires an accepted manufacturing orientation")
+        try:
+            orientation.require_accepted_for(self.project.product.source_sha256)
+        except ManufacturingOrientationError as exc:
+            raise FixtureBuildError(str(exc)) from exc
+        load_manufacturing = setup.manufacturing_loading_direction
+        unload_manufacturing = setup.manufacturing_unloading_direction
+        if load_manufacturing is None or unload_manufacturing is None:
+            raise FixtureBuildError("loading and unloading directions must be explicit manufacturing-frame axes")
+        loading_source = orientation.manufacturing_vector_to_source(load_manufacturing)
+        unloading_source = orientation.manufacturing_vector_to_source(unload_manufacturing)
+
+        def side_source(value: str, label: str) -> Vec3:
+            match = re.search(r"([+-][XYZ])", value.upper())
+            direction = self._direction(match.group(1)) if match else None
+            if direction is None:
+                raise FixtureBuildError(f"{label} must contain an explicit manufacturing-frame axis")
+            return orientation.manufacturing_vector_to_source(direction)
+
+        operator_source = side_source(self.process_operator_loading_side.currentText(), "operator loading side")
+        clamp_source = side_source(self.process_clamp_operating_side.currentText(), "clamp operating side")
         mode = {"Manual": "manual", "Cobot": "cobot", "Robotic": "robot"}.get(
             setup.operation_mode or "", "manual"
         )
@@ -4416,6 +4500,11 @@ class FxdWorkbenchWindow(QMainWindow):
             self.process_table_mounting.currentText(), setup.production_quantity or 1,
             self.process_compare_multi_up.isChecked(),
             requested_intent_station_count=intent_count,
+            loading_direction_source=loading_source,
+            unloading_direction_source=unloading_source,
+            operator_loading_direction_source=operator_source,
+            clamp_operating_direction_source=clamp_source,
+            manufacturing_orientation_identity=orientation.identity,
         )
 
     def _multi_station_fit_key(self, requested: int) -> tuple[int, float, float]:
@@ -4671,31 +4760,28 @@ class FxdWorkbenchWindow(QMainWindow):
                         "semantic": "immutable_source_product_instance",
                         "evidence": "immutable source-product review instance with deterministic station transform",
                     })
-                direction_vectors = {
-                    "+X": [1.0, 0.0, 0.0], "-X": [-1.0, 0.0, 0.0],
-                    "+Y": [0.0, 1.0, 0.0], "-Y": [0.0, -1.0, 0.0],
-                    "+Z": [0.0, 0.0, 1.0], "-Z": [0.0, 0.0, -1.0],
-                }
                 for station in layout.stations:
                     center = [
                         (station.product_bounds.minimum.x + station.product_bounds.maximum.x) * 0.5,
                         (station.product_bounds.minimum.y + station.product_bounds.maximum.y) * 0.5,
                         station.product_bounds.maximum.z + 26.0,
                     ]
-                    for label, token, color in (
-                        ("load", station.loading_direction, [1.0, 0.48, 0.0]),
-                        ("unload", station.unloading_direction, [0.72, 0.54, 0.97]),
+                    for label, token, direction, color in (
+                        ("load", station.loading_direction, station.loading_direction_source,
+                         [1.0, 0.48, 0.0]),
+                        ("unload", station.unloading_direction, station.unloading_direction_source,
+                         [0.72, 0.54, 0.97]),
                     ):
-                        if token not in direction_vectors:
+                        if direction is None:
                             continue
                         items.append({
                             "identity": f"m32-{label}:{station.identity}",
                             "kind": "orientation_arrow", "origin": center,
-                            "direction": direction_vectors[token],
+                            "direction": list(direction.__dict__.values()),
                             "length": max(28.0, layout.requirements.hand_clearance_mm * 0.72),
                             "status": "provisional", "color": color, "opacity": 0.98,
                             "representation": "surface", "semantic": f"{label}_direction",
-                            "evidence": f"{label} direction {token}; deterministic manufacturing-frame station evidence",
+                            "evidence": f"{label} direction {token}; accepted-orientation source-coordinate station evidence",
                         })
         return items + orientation_items
 

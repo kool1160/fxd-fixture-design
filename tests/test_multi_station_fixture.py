@@ -8,7 +8,7 @@ import tempfile
 import unittest
 
 from fxd_geometry import (
-    AdjustmentState, BuildComponentRole, ConstructionMethod, FixtureBuildError, GeometryAuthority,
+    AdjustmentState, BuildComponentRole, ConfirmedWeldIntent, ConstructionMethod, FixtureBuildError, GeometryAuthority,
     FixtureBuildPlan, FixtureBuildRequirements, FixtureFamily, FixtureLifecycle,
     FixturePurpose, MultiStationRequirements, OcpKernel, Vec3, AnnotationRole, GeometryReference, author_fixture_build,
     build_fixture_build_package, generate_fixture_concepts,
@@ -16,7 +16,7 @@ from fxd_geometry import (
     generate_multi_station_layout,
     load_step_for_workbench,
     product_from_workbench_document, InteractiveWorkflow, ProcessSetup, validate_fixture_build_plan,
-    source_orientation, face_annotation,
+    ReferencePlane, reference_plane_orientation, source_orientation, face_annotation,
 )
 from fxd_geometry.annotations import EngineeringAnnotations
 from fxd_geometry.project import FxdProject
@@ -51,28 +51,46 @@ class MultiStationFixtureTests(unittest.TestCase):
     def tearDownClass(cls):
         cls.directory.cleanup()
 
-    def build_requirements(self):
+    def build_requirements(self, product=None, *, welds=None):
+        product = product or self.product
+        body = product.components[0].bodies[0]
+        orientation = source_orientation(product.source_sha256, accepted=True)
+        confirmed = tuple(welds) if welds is not None else (ConfirmedWeldIntent(
+            "synthetic-bracket-joint",
+            (GeometryReference(product.components[0].identity, body.identity, body.faces[0].identity),),
+            "operator", 38.0, "synthetic MIG weld", 1,
+            Vec3(60.0, 0.0, 12.0), Vec3(0.0, 1.0, 0.0), Vec3(0.0, 1.0, 0.0),
+            Vec3(12.0, 12.0, 30.0), orientation.identity,
+            ("Synthetic engineer-confirmed torch evidence.",),
+        ),)
         return FixtureBuildRequirements(
-            self.product.source_sha256, FixturePurpose.FULL_WELD,
+            product.source_sha256, FixturePurpose.FULL_WELD,
             ConstructionMethod.LASER_CUT_FABRICATED, FixtureLifecycle.PERMANENT,
             None, "A", 100, "repeat production", "synthetic MIG weld",
             ("laser cutting", "fixture welding", "machining"), None, True, True,
             AdjustmentState.LOCKED,
             ("Synthetic public acceptance geometry; all dimensions remain editable review inputs.",),
             confirmed_weld_intent=True,
-            confirmed_weld_evidence=(
-                "joint_reference=synthetic-bracket-joint", "weld_side=operator",
-                "weld_length_mm=38.0", "weld_process=synthetic MIG weld",
-                "weld_sequence=1", "approach_direction=(0,1,0)",
-                "torch_envelope_mm=25.0",
-            ),
+            confirmed_weld_joint_count=len(confirmed),
+            confirmed_welds=confirmed,
         )
 
-    def station_requirements(self, *, count=5, maximum_length=3000.0):
+    def station_requirements(self, *, count=5, maximum_length=3000.0, product=None,
+                             loading_source=Vec3(0.0, -1.0, 0.0),
+                             unloading_source=Vec3(-1.0, 0.0, 0.0),
+                             operator_source=Vec3(0.0, 1.0, 0.0),
+                             clamp_source=Vec3(0.0, 1.0, 0.0)):
+        product = product or self.product
+        orientation = source_orientation(product.source_sha256, accepted=True)
         return MultiStationRequirements(
             FixtureFamily.LINEAR_MULTI_STATION_WELD, count, maximum_length, None,
             "Operator front (+Y)", "-X", "Operator front (+Y)", "manual",
             "Table mounting holes", 100, True,
+            loading_direction_source=loading_source,
+            unloading_direction_source=unloading_source,
+            operator_loading_direction_source=operator_source,
+            clamp_operating_direction_source=clamp_source,
+            manufacturing_orientation_identity=orientation.identity,
         )
 
     def plan(self, *, count=5, maximum_length=3000.0):
@@ -196,9 +214,21 @@ class MultiStationFixtureTests(unittest.TestCase):
 
     def test_local_station_plates_and_end_clearance_are_axis_neutral(self):
         def assert_layout(product, concept, *, unload="-X", operator_side="Operator front (+Y)"):
-            requirements = replace(self.build_requirements(), source_sha256=product.source_sha256)
+            unload_source = {"-X": Vec3(-1, 0, 0), "+X": Vec3(1, 0, 0)}[unload]
+            operator_source = (Vec3(1, 0, 0) if "+X" in operator_side else Vec3(0, 1, 0))
+            base_requirements = self.build_requirements(product)
+            requirements = self.build_requirements(product, welds=(replace(
+                base_requirements.confirmed_welds[0],
+                approach_direction_manufacturing=operator_source,
+                approach_direction_source=operator_source,
+            ),))
             station_requirements = replace(
-                self.station_requirements(count=4), unloading_direction=unload,
+                self.station_requirements(
+                    count=4, product=product,
+                    loading_source=Vec3(-operator_source.x, -operator_source.y, -operator_source.z),
+                    unloading_source=unload_source, operator_source=operator_source,
+                    clamp_source=operator_source,
+                ), unloading_direction=unload,
                 operator_loading_side=operator_side,
             )
             plan = generate_multi_station_fixture_build_plan(
@@ -232,8 +262,10 @@ class MultiStationFixtureTests(unittest.TestCase):
             )
             concept = generate_fixture_concepts(product, annotations).recommended
             conflicting = generate_multi_station_fixture_build_plan(
-                product, concept, replace(self.build_requirements(), source_sha256=product.source_sha256),
-                replace(self.station_requirements(count=4), unloading_direction="+X"),
+                product, concept, self.build_requirements(product),
+                replace(self.station_requirements(
+                    count=4, product=product, unloading_source=Vec3(1, 0, 0),
+                ), unloading_direction="+X"),
             )
             conflicting_validation = validate_fixture_build_plan(product, conflicting)
             self.assertTrue(conflicting_validation.review_blocked)
@@ -279,7 +311,7 @@ class MultiStationFixtureTests(unittest.TestCase):
 
     def test_confirmed_weld_contract_requires_complete_torch_evidence(self):
         incomplete_requirements = replace(
-            self.build_requirements(), confirmed_weld_evidence=("weld_side=operator",)
+            self.build_requirements(), confirmed_welds=(), confirmed_weld_joint_count=1,
         )
         plan = generate_multi_station_fixture_build_plan(
             self.product, self.concept, incomplete_requirements,
@@ -290,11 +322,130 @@ class MultiStationFixtureTests(unittest.TestCase):
                             for item in validation.findings))
         self.assertTrue(all(station.weld_access_clear is None
                             for station in plan.multi_station_layout.stations))
+        provisional = author_fixture_build(plan, self.product, self.kernel)
+        self.assertTrue(provisional.provisional)
+        with self.assertRaises(FixtureBuildError):
+            build_fixture_build_package(provisional, plan)
         complete = self.plan(count=4)
         self.assertTrue(all(station.weld_access_clear is True
                             for station in complete.multi_station_layout.stations))
         self.assertTrue(all(any("weld_access=clear" == value for value in station.access_evidence)
                             for station in complete.multi_station_layout.stations))
+
+    def test_non_identity_orientation_persists_source_frame_process_and_torch_directions(self):
+        orientation = reference_plane_orientation(
+            self.product.source_sha256, ReferencePlane.TOP,
+            rotation_degrees=90.0, accepted=True,
+        )
+        manufacturing_load = Vec3(1.0, 0.0, 0.0)
+        manufacturing_unload = Vec3(0.0, -1.0, 0.0)
+        manufacturing_operator = Vec3(-1.0, 0.0, 0.0)
+        manufacturing_torch = Vec3(-1.0, 0.0, 0.0)
+        base_weld = self.build_requirements().confirmed_welds[0]
+        weld = replace(
+            base_weld,
+            approach_direction_manufacturing=manufacturing_torch,
+            approach_direction_source=orientation.manufacturing_vector_to_source(manufacturing_torch),
+            manufacturing_orientation_identity=orientation.identity,
+        )
+        requirements = self.build_requirements(welds=(weld,))
+        station_requirements = replace(
+            self.station_requirements(count=4),
+            loading_direction_source=orientation.manufacturing_vector_to_source(manufacturing_load),
+            unloading_direction_source=orientation.manufacturing_vector_to_source(manufacturing_unload),
+            operator_loading_direction_source=orientation.manufacturing_vector_to_source(manufacturing_operator),
+            clamp_operating_direction_source=orientation.manufacturing_vector_to_source(manufacturing_operator),
+            manufacturing_orientation_identity=orientation.identity,
+        )
+        plan = generate_multi_station_fixture_build_plan(
+            self.product, self.concept, requirements, station_requirements,
+        )
+        station = plan.multi_station_layout.stations[0]
+        self.assertEqual(station.loading_direction_source,
+                         orientation.manufacturing_vector_to_source(manufacturing_load))
+        self.assertEqual(station.unloading_direction_source,
+                         orientation.manufacturing_vector_to_source(manufacturing_unload))
+        self.assertEqual(station.operator_direction_source,
+                         orientation.manufacturing_vector_to_source(manufacturing_operator))
+        self.assertEqual(station.weld_access_results[0].approach_direction_source,
+                         orientation.manufacturing_vector_to_source(manufacturing_torch))
+        self.assertTrue(validate_fixture_build_plan(self.product, plan).valid)
+
+        flipped = reference_plane_orientation(
+            self.product.source_sha256, ReferencePlane.TOP,
+            flip_normal=True, rotation_degrees=180.0, accepted=True,
+        )
+        flipped_operator = flipped.manufacturing_vector_to_source(Vec3(0.0, 1.0, 0.0))
+        flipped_requirements = replace(
+            station_requirements,
+            loading_direction_source=flipped.manufacturing_vector_to_source(Vec3(0.0, -1.0, 0.0)),
+            unloading_direction_source=flipped.manufacturing_vector_to_source(Vec3(0.0, 1.0, 0.0)),
+            operator_loading_direction_source=flipped_operator,
+            clamp_operating_direction_source=flipped_operator,
+            manufacturing_orientation_identity=flipped.identity,
+        )
+        flipped_weld = replace(
+            weld,
+            approach_direction_manufacturing=Vec3(0.0, 1.0, 0.0),
+            approach_direction_source=flipped_operator,
+            manufacturing_orientation_identity=flipped.identity,
+        )
+        flipped_plan = generate_multi_station_fixture_build_plan(
+            self.product, self.concept, self.build_requirements(welds=(flipped_weld,)),
+            flipped_requirements,
+        )
+        self.assertEqual(flipped_plan.multi_station_layout.stations[0].operator_direction_source,
+                         flipped_operator)
+
+    def test_confirmed_torch_approach_and_envelope_change_deterministic_access(self):
+        clear_weld = self.build_requirements().confirmed_welds[0]
+        clear = self.plan(count=4)
+        self.assertTrue(all(station.weld_access_clear is True
+                            for station in clear.multi_station_layout.stations))
+
+        blocked_weld = replace(
+            clear_weld,
+            approach_direction_manufacturing=Vec3(0.0, -1.0, 0.0),
+            approach_direction_source=Vec3(0.0, -1.0, 0.0),
+        )
+        blocked = generate_multi_station_fixture_build_plan(
+            self.product, self.concept, self.build_requirements(welds=(blocked_weld,)),
+            self.station_requirements(count=4),
+        )
+        self.assertTrue(any(station.weld_access_clear is False
+                            for station in blocked.multi_station_layout.stations))
+
+        oversized_weld = replace(clear_weld, torch_envelope_mm=Vec3(500.0, 500.0, 30.0))
+        oversized = generate_multi_station_fixture_build_plan(
+            self.product, self.concept, self.build_requirements(welds=(oversized_weld,)),
+            self.station_requirements(count=4),
+        )
+        self.assertTrue(any(station.weld_access_clear is False
+                            for station in oversized.multi_station_layout.stations))
+        self.assertNotEqual(
+            clear.multi_station_layout.stations[0].weld_access_results[0].torch_envelope,
+            oversized.multi_station_layout.stations[0].weld_access_results[0].torch_envelope,
+        )
+
+    def test_every_confirmed_weld_is_evaluated_and_one_blocked_joint_blocks_build(self):
+        clear_weld = self.build_requirements().confirmed_welds[0]
+        blocked_weld = replace(
+            clear_weld, identity="blocked-second-joint", sequence=2,
+            joint_position_source_mm=Vec3(60.0, 0.0, 12.0),
+            approach_direction_manufacturing=Vec3(0.0, -1.0, 0.0),
+            approach_direction_source=Vec3(0.0, -1.0, 0.0),
+        )
+        requirements = self.build_requirements(welds=(clear_weld, blocked_weld))
+        plan = generate_multi_station_fixture_build_plan(
+            self.product, self.concept, requirements, self.station_requirements(count=4),
+        )
+        for station in plan.multi_station_layout.stations:
+            self.assertEqual([item.joint_identity for item in station.weld_access_results],
+                             [clear_weld.identity, blocked_weld.identity])
+        validation = validate_fixture_build_plan(self.product, plan)
+        self.assertTrue(validation.review_blocked)
+        self.assertTrue(any(blocked_weld.identity in item.message for item in validation.findings))
+        self.assertFalse(any(clear_weld.identity in item.message for item in validation.findings))
 
     def test_candidate_weld_face_is_unconfirmed_until_engineer_records_required_intent(self):
         document = load_step_for_workbench(self.source)
@@ -329,6 +480,7 @@ class MultiStationFixtureTests(unittest.TestCase):
         )
         self.assertEqual(len(annotations.weld_joints), 1)
         self.assertEqual(annotations.weld_joints[0].sequence, 1)
+        self.assertIsNone(annotations.weld_joints[0].direction)
 
     def test_legacy_weld_face_is_not_confirmed_for_m32(self):
         document = load_step_for_workbench(self.source)
@@ -361,6 +513,10 @@ class MultiStationFixtureTests(unittest.TestCase):
             restored = FxdProject.load(path)
         self.assertEqual(restored.fixture_build.to_dict(), plan.to_dict())
         self.assertEqual(restored.fixture_build.authoring_state, "provisional")
+        self.assertEqual(restored.fixture_build.requirements.confirmed_welds,
+                         plan.requirements.confirmed_welds)
+        self.assertEqual(restored.fixture_build.multi_station_layout.stations[0].weld_access_results,
+                         plan.multi_station_layout.stations[0].weld_access_results)
         changed = project.edit_parameter("clearance", 3.0, "M32 material geometry review edit")
         self.assertIsNone(changed.fixture_build)
         self.assertIsNone(changed.approved_revision)

@@ -451,6 +451,15 @@ class MultiStationRequirements:
     # Keep that request as immutable review evidence instead of silently
     # rewriting the stated production intent.
     requested_intent_station_count: int | None = None
+    # Manufacturing-frame choices are converted at the accepted-orientation
+    # workflow boundary.  The deterministic geometry engine consumes only
+    # these source-coordinate vectors; the display strings above remain
+    # human-readable intent and persistence evidence.
+    loading_direction_source: Vec3 | None = None
+    unloading_direction_source: Vec3 | None = None
+    operator_loading_direction_source: Vec3 | None = None
+    clamp_operating_direction_source: Vec3 | None = None
+    manufacturing_orientation_identity: str | None = None
 
     def __post_init__(self) -> None:
         if self.fixture_family != FixtureFamily.LINEAR_MULTI_STATION_WELD:
@@ -496,6 +505,11 @@ class MultiStationRequirements:
             "adjustment_allowance_mm": self.adjustment_allowance_mm,
             "clamp_sweep_mm": self.clamp_sweep_mm,
             "requested_intent_station_count": self.requested_intent_station_count,
+            "loading_direction_source": self.loading_direction_source.__dict__ if self.loading_direction_source else None,
+            "unloading_direction_source": self.unloading_direction_source.__dict__ if self.unloading_direction_source else None,
+            "operator_loading_direction_source": self.operator_loading_direction_source.__dict__ if self.operator_loading_direction_source else None,
+            "clamp_operating_direction_source": self.clamp_operating_direction_source.__dict__ if self.clamp_operating_direction_source else None,
+            "manufacturing_orientation_identity": self.manufacturing_orientation_identity,
         }
 
     @classmethod
@@ -510,6 +524,48 @@ class MultiStationRequirements:
             float(data.get("hand_clearance_mm", 75.0)), float(data.get("weld_clearance_mm", 25.0)),
             float(data.get("adjustment_allowance_mm", 10.0)), data.get("clamp_sweep_mm"),
             data.get("requested_intent_station_count"),
+            Vec3(**data["loading_direction_source"]) if data.get("loading_direction_source") else None,
+            Vec3(**data["unloading_direction_source"]) if data.get("unloading_direction_source") else None,
+            Vec3(**data["operator_loading_direction_source"]) if data.get("operator_loading_direction_source") else None,
+            Vec3(**data["clamp_operating_direction_source"]) if data.get("clamp_operating_direction_source") else None,
+            data.get("manufacturing_orientation_identity"),
+        )
+
+
+@dataclass(frozen=True)
+class WeldJointAccessResult:
+    """One deterministic station/joint torch-envelope result."""
+
+    joint_identity: str
+    clear: bool
+    torch_envelope: Aabb
+    approach_direction_source: Vec3
+    blocking_component_identities: tuple[str, ...] = ()
+    evidence: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not self.joint_identity.strip():
+            raise FixtureBuildError("weld access result requires a joint identity")
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "joint_identity": self.joint_identity,
+            "clear": self.clear,
+            "torch_envelope": self.torch_envelope.as_dict(),
+            "approach_direction_source": self.approach_direction_source.__dict__,
+            "blocking_component_identities": list(self.blocking_component_identities),
+            "evidence": list(self.evidence),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, object]) -> "WeldJointAccessResult":
+        bounds = data["torch_envelope"]
+        return cls(
+            str(data["joint_identity"]), bool(data["clear"]),
+            Aabb(Vec3(**bounds["minimum"]), Vec3(**bounds["maximum"])),
+            Vec3(**data["approach_direction_source"]),
+            tuple(data.get("blocking_component_identities", ())),
+            tuple(data.get("evidence", ())),
         )
 
 
@@ -537,6 +593,10 @@ class StationTransform:
     open_clamp_envelope: Aabb | None = None
     closed_clamp_envelope: Aabb | None = None
     access_evidence: tuple[str, ...] = ()
+    loading_direction_source: Vec3 | None = None
+    unloading_direction_source: Vec3 | None = None
+    operator_direction_source: Vec3 | None = None
+    weld_access_results: tuple[WeldJointAccessResult, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.identity.strip() or self.station_index < 1 or len(self.product_source_sha256) != 64:
@@ -565,6 +625,10 @@ class StationTransform:
             "open_clamp_envelope": self.open_clamp_envelope.as_dict() if self.open_clamp_envelope else None,
             "closed_clamp_envelope": self.closed_clamp_envelope.as_dict() if self.closed_clamp_envelope else None,
             "access_evidence": list(self.access_evidence),
+            "loading_direction_source": self.loading_direction_source.__dict__ if self.loading_direction_source else None,
+            "unloading_direction_source": self.unloading_direction_source.__dict__ if self.unloading_direction_source else None,
+            "operator_direction_source": self.operator_direction_source.__dict__ if self.operator_direction_source else None,
+            "weld_access_results": [item.to_dict() for item in self.weld_access_results],
         }
 
     @classmethod
@@ -586,6 +650,10 @@ class StationTransform:
             str(data.get("operator_side", "")), optional_bounds("loading_envelope"),
             optional_bounds("unloading_envelope"), optional_bounds("open_clamp_envelope"),
             optional_bounds("closed_clamp_envelope"), tuple(data.get("access_evidence", ())),
+            Vec3(**data["loading_direction_source"]) if data.get("loading_direction_source") else None,
+            Vec3(**data["unloading_direction_source"]) if data.get("unloading_direction_source") else None,
+            Vec3(**data["operator_direction_source"]) if data.get("operator_direction_source") else None,
+            tuple(WeldJointAccessResult.from_dict(item) for item in data.get("weld_access_results", ())),
         )
 
 
@@ -640,6 +708,75 @@ class MultiStationLayout:
 
 
 @dataclass(frozen=True)
+class ConfirmedWeldIntent:
+    """Engineer-confirmed weld and torch evidence in both frame contexts."""
+
+    identity: str
+    references: tuple[GeometryReference, ...]
+    weld_side: str
+    weld_length_mm: float
+    process: str
+    sequence: int
+    joint_position_source_mm: Vec3
+    approach_direction_manufacturing: Vec3
+    approach_direction_source: Vec3
+    torch_envelope_mm: Vec3
+    manufacturing_orientation_identity: str
+    evidence: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not all((self.identity.strip(), self.weld_side.strip(), self.process.strip(),
+                    self.manufacturing_orientation_identity.strip())):
+            raise FixtureBuildError("confirmed weld identity, side, process, and orientation are required")
+        if not self.references:
+            raise FixtureBuildError("confirmed weld intent requires source geometry references")
+        if not math.isfinite(self.weld_length_mm) or self.weld_length_mm <= 0.0 or self.sequence < 1:
+            raise FixtureBuildError("confirmed weld length and sequence must be positive")
+        for vector, label in (
+                (self.approach_direction_manufacturing, "manufacturing torch approach"),
+                (self.approach_direction_source, "source torch approach")):
+            magnitude = math.sqrt(vector.x ** 2 + vector.y ** 2 + vector.z ** 2)
+            if not math.isfinite(magnitude) or magnitude <= 1e-9:
+                raise FixtureBuildError(f"{label} must be a finite non-zero vector")
+        if any(not math.isfinite(value) or value <= 0.0
+               for value in self.torch_envelope_mm.__dict__.values()):
+            raise FixtureBuildError("torch body width, height, and approach length must be positive millimetres")
+        if any(not math.isfinite(value) for value in self.joint_position_source_mm.__dict__.values()):
+            raise FixtureBuildError("confirmed weld joint position must be finite source-coordinate millimetres")
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "identity": self.identity,
+            "references": [item.__dict__ for item in self.references],
+            "weld_side": self.weld_side,
+            "weld_length_mm": self.weld_length_mm,
+            "process": self.process,
+            "sequence": self.sequence,
+            "joint_position_source_mm": self.joint_position_source_mm.__dict__,
+            "approach_direction_manufacturing": self.approach_direction_manufacturing.__dict__,
+            "approach_direction_source": self.approach_direction_source.__dict__,
+            "torch_envelope_mm": self.torch_envelope_mm.__dict__,
+            "manufacturing_orientation_identity": self.manufacturing_orientation_identity,
+            "evidence": list(self.evidence),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, object]) -> "ConfirmedWeldIntent":
+        return cls(
+            str(data["identity"]),
+            tuple(GeometryReference(**item) for item in data.get("references", ())),
+            str(data["weld_side"]), float(data["weld_length_mm"]),
+            str(data["process"]), int(data["sequence"]),
+            Vec3(**data["joint_position_source_mm"]),
+            Vec3(**data["approach_direction_manufacturing"]),
+            Vec3(**data["approach_direction_source"]),
+            Vec3(**data["torch_envelope_mm"]),
+            str(data["manufacturing_orientation_identity"]),
+            tuple(data.get("evidence", ())),
+        )
+
+
+@dataclass(frozen=True)
 class FixtureBuildRequirements:
     source_sha256: str
     fixture_purpose: FixturePurpose
@@ -662,6 +799,8 @@ class FixtureBuildRequirements:
     product_hole_justification: str | None = None
     confirmed_weld_intent: bool = False
     confirmed_weld_evidence: tuple[str, ...] = ()
+    confirmed_weld_joint_count: int = 0
+    confirmed_welds: tuple[ConfirmedWeldIntent, ...] = ()
 
     def __post_init__(self) -> None:
         if not re.fullmatch(r"[0-9a-f]{64}", self.source_sha256):
@@ -670,6 +809,10 @@ class FixtureBuildRequirements:
             raise FixtureBuildError("fixture revision is required")
         if self.production_quantity is not None and self.production_quantity < 1:
             raise FixtureBuildError("production quantity must be positive when supplied")
+        if self.confirmed_weld_joint_count < 0:
+            raise FixtureBuildError("confirmed weld joint count cannot be negative")
+        if len({item.identity for item in self.confirmed_welds}) != len(self.confirmed_welds):
+            raise FixtureBuildError("confirmed weld identities must be unique")
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -688,6 +831,8 @@ class FixtureBuildRequirements:
             "product_hole_justification": self.product_hole_justification,
             "confirmed_weld_intent": self.confirmed_weld_intent,
             "confirmed_weld_evidence": list(self.confirmed_weld_evidence),
+            "confirmed_weld_joint_count": self.confirmed_weld_joint_count,
+            "confirmed_welds": [item.to_dict() for item in self.confirmed_welds],
         }
 
     @classmethod
@@ -702,7 +847,9 @@ class FixtureBuildRequirements:
                    ClecoStrategy(data.get("cleco_strategy", ClecoStrategy.NONE.value)),
                    bool(data.get("product_hole_approved", False)), data.get("product_hole_justification"),
                    bool(data.get("confirmed_weld_intent", False)),
-                   tuple(data.get("confirmed_weld_evidence", ())))
+                   tuple(data.get("confirmed_weld_evidence", ())),
+                   int(data.get("confirmed_weld_joint_count", 0)),
+                   tuple(ConfirmedWeldIntent.from_dict(item) for item in data.get("confirmed_welds", ())))
 
 
 @dataclass(frozen=True)
@@ -1237,18 +1384,18 @@ def _oriented_point(primary: str, primary_value: float,
             else Vec3(secondary_value, primary_value, z_value))
 
 
-def _direction_vector(value: str) -> Vec3 | None:
-    token = value.strip().upper()
-    return {
-        "+X": Vec3(1.0, 0.0, 0.0), "-X": Vec3(-1.0, 0.0, 0.0),
-        "+Y": Vec3(0.0, 1.0, 0.0), "-Y": Vec3(0.0, -1.0, 0.0),
-        "+Z": Vec3(0.0, 0.0, 1.0), "-Z": Vec3(0.0, 0.0, -1.0),
-    }.get(token)
+def _unit_direction(value: Vec3, label: str) -> Vec3:
+    magnitude = math.sqrt(value.x ** 2 + value.y ** 2 + value.z ** 2)
+    if not math.isfinite(magnitude) or magnitude <= 1e-9:
+        raise FixtureBuildError(f"{label} must be a finite non-zero source-coordinate vector")
+    return Vec3(value.x / magnitude, value.y / magnitude, value.z / magnitude)
 
 
-def _operator_outward_vector(value: str) -> Vec3 | None:
-    match = re.search(r"([+-][XYZ])", value.upper())
-    return _direction_vector(match.group(1)) if match else None
+def _axis_token(value: Vec3) -> str:
+    values = ((abs(value.x), "X", value.x), (abs(value.y), "Y", value.y),
+              (abs(value.z), "Z", value.z))
+    _, axis, signed = max(values)
+    return ("+" if signed >= 0.0 else "-") + axis
 
 
 def _swept_bounds(bounds: Aabb, motion: Vec3, distance: float) -> Aabb:
@@ -1259,10 +1406,6 @@ def _swept_bounds(bounds: Aabb, motion: Vec3, distance: float) -> Aabb:
         Vec3(max(bounds.maximum.x, moved.maximum.x), max(bounds.maximum.y, moved.maximum.y),
              max(bounds.maximum.z, moved.maximum.z)),
     )
-
-
-def _bounds_intersect_any(bounds: Aabb, obstacles: tuple[Aabb, ...]) -> bool:
-    return any(bounds.intersects(obstacle) for obstacle in obstacles)
 
 
 def _positive_bounds_overlap(left: Aabb, right: Aabb, tolerance: float = 1e-7) -> bool:
@@ -1286,17 +1429,60 @@ def _motion_path_clear(bounds: Aabb, motion: Vec3, distance: float,
 
 
 def _confirmed_weld_evidence_complete(requirements: FixtureBuildRequirements) -> bool:
-    required = {
-        "joint_reference", "weld_side", "weld_length_mm", "weld_process",
-        "weld_sequence", "approach_direction", "torch_envelope_mm",
-    }
-    supplied = {value.partition("=")[0] for value in requirements.confirmed_weld_evidence
-                if "=" in value and value.partition("=")[2].strip()}
-    return requirements.confirmed_weld_intent and required <= supplied
+    expected = requirements.confirmed_weld_joint_count or len(requirements.confirmed_welds)
+    return (
+        requirements.confirmed_weld_intent
+        and expected > 0
+        and len(requirements.confirmed_welds) == expected
+    )
+
+
+def _cross(left: Vec3, right: Vec3) -> Vec3:
+    return Vec3(
+        left.y * right.z - left.z * right.y,
+        left.z * right.x - left.x * right.z,
+        left.x * right.y - left.y * right.x,
+    )
+
+
+def _torch_body_envelope(intent: ConfirmedWeldIntent, translation: Vec3) -> Aabb:
+    """Conservative source-coordinate AABB for one oriented torch body."""
+    direction = _unit_direction(intent.approach_direction_source, "torch approach direction")
+    seed = Vec3(0.0, 0.0, 1.0) if abs(direction.z) < 0.9 else Vec3(0.0, 1.0, 0.0)
+    width_axis = _unit_direction(_cross(direction, seed), "torch width axis")
+    height_axis = _unit_direction(_cross(direction, width_axis), "torch height axis")
+    origin = Vec3(
+        intent.joint_position_source_mm.x + translation.x,
+        intent.joint_position_source_mm.y + translation.y,
+        intent.joint_position_source_mm.z + translation.z,
+    )
+    points: list[Vec3] = []
+    for length in (0.0, intent.torch_envelope_mm.z):
+        for width in (-intent.torch_envelope_mm.x * 0.5, intent.torch_envelope_mm.x * 0.5):
+            for height in (-intent.torch_envelope_mm.y * 0.5, intent.torch_envelope_mm.y * 0.5):
+                points.append(Vec3(
+                    origin.x + direction.x * length + width_axis.x * width + height_axis.x * height,
+                    origin.y + direction.y * length + width_axis.y * width + height_axis.y * height,
+                    origin.z + direction.z * length + width_axis.z * width + height_axis.z * height,
+                ))
+    return Aabb(
+        Vec3(*(min(getattr(point, axis) for point in points) for axis in ("x", "y", "z"))),
+        Vec3(*(max(getattr(point, axis) for point in points) for axis in ("x", "y", "z"))),
+    )
 
 
 def _clamp_review_bounds(product: Aabb, operator_outward: Vec3) -> tuple[Aabb, Aabb, Aabb]:
     """Return connected bracket, closed clamp, and open operating envelope."""
+    operator_outward = _unit_direction(operator_outward, "clamp operating direction")
+    # Review geometry is AABB-based.  Use the dominant source-coordinate
+    # horizontal component after orientation conversion; never reinterpret a
+    # manufacturing token as a source axis.
+    if abs(operator_outward.z) > max(abs(operator_outward.x), abs(operator_outward.y)):
+        raise FixtureBuildError("clamp operating side cannot be normal to the source fixture plane")
+    if abs(operator_outward.x) >= abs(operator_outward.y):
+        operator_outward = Vec3(1.0 if operator_outward.x >= 0.0 else -1.0, 0.0, 0.0)
+    else:
+        operator_outward = Vec3(0.0, 1.0 if operator_outward.y >= 0.0 else -1.0, 0.0)
     z0, z1 = 0.0, product.maximum.z
     if operator_outward.y > 0:
         bracket = Aabb(Vec3(product.maximum.x + 4.0, product.maximum.y + 12.0, z0),
@@ -1460,6 +1646,13 @@ def generate_multi_station_fixture_build_plan(
         raise FixtureBuildError("multi-station requirements do not match immutable source geometry")
     if concept.fixture.source_sha256 != product.source_sha256:
         raise FixtureBuildError("multi-station concept does not match immutable source geometry")
+    if not multi_station.manufacturing_orientation_identity:
+        raise FixtureBuildError("multi-station synthesis requires accepted manufacturing orientation identity")
+    for weld in requirements.confirmed_welds:
+        if weld.manufacturing_orientation_identity != multi_station.manufacturing_orientation_identity:
+            raise FixtureBuildError("confirmed weld approach does not match the accepted manufacturing orientation")
+        if any(not _reference_valid(product, reference) for reference in weld.references):
+            raise FixtureBuildError("confirmed weld intent contains an invalid immutable source reference")
     layout = generate_multi_station_layout(product, multi_station)
     source_bounds = _product_bounds(product)
     primary = layout.primary_axis
@@ -1506,12 +1699,21 @@ def generate_multi_station_fixture_build_plan(
         Vec3(0.0, 0.0, -1.0), True, True, False, index,
         ("Rail tab-and-slot fit is explicit review evidence, not a final tolerance release.",),
     ) for index in (1, 2))
-    operator_outward = _operator_outward_vector(multi_station.operator_loading_side)
-    clamp_outward = _operator_outward_vector(multi_station.clamp_operating_side)
-    unload_direction = _direction_vector(multi_station.unloading_direction)
-    if operator_outward is None or clamp_outward is None or unload_direction is None:
-        raise FixtureBuildError("multi-station loading, clamp, and unloading directions must use explicit manufacturing axes")
-    insertion_direction = Vec3(-operator_outward.x, -operator_outward.y, -operator_outward.z)
+    source_directions = (
+        multi_station.loading_direction_source,
+        multi_station.unloading_direction_source,
+        multi_station.operator_loading_direction_source,
+        multi_station.clamp_operating_direction_source,
+    )
+    if any(value is None for value in source_directions):
+        raise FixtureBuildError(
+            "multi-station process directions require accepted-orientation source-coordinate evidence"
+        )
+    insertion_direction = _unit_direction(source_directions[0], "loading direction")
+    unload_direction = _unit_direction(source_directions[1], "unloading direction")
+    operator_outward = _unit_direction(source_directions[2], "operator loading side")
+    clamp_outward = _unit_direction(source_directions[3], "clamp operating side")
+    loading_outward = Vec3(-insertion_direction.x, -insertion_direction.y, -insertion_direction.z)
     clamp_review: dict[str, tuple[Aabb, Aabb, Aabb]] = {}
     for station in layout.stations:
         box = station.product_bounds
@@ -1640,20 +1842,23 @@ def generate_multi_station_fixture_build_plan(
             thickness=12.0, rule_ids=("FXD-MFG-001", "FXD-M32-CON"),
             evidence=("Compact end gusset connects the low rail to the backbone outside both end-station product envelopes.",),
         ))
-    structural_obstacles = tuple((rail, *brace_bounds))
     access_obstacles = tuple(
         component.bounds for component in components
         if component.role != BuildComponentRole.TOGGLE_CLAMP
     )
+    weld_fixture_obstacles = tuple(
+        (component.identity, component.bounds) for component in components
+        if component.role != BuildComponentRole.CLAMP_OPEN_ENVELOPE
+    )
     evaluated_stations: list[StationTransform] = []
     for station in layout.stations:
         bracket, closed, opened = clamp_review[station.identity]
-        loading_envelope = _swept_bounds(station.product_bounds, operator_outward,
+        loading_envelope = _swept_bounds(station.product_bounds, loading_outward,
                                          multi_station.hand_clearance_mm)
         unloading_envelope = _swept_bounds(station.product_bounds, unload_direction,
                                            multi_station.hand_clearance_mm)
         loading_clear = _motion_path_clear(
-            station.product_bounds, operator_outward, multi_station.hand_clearance_mm,
+            station.product_bounds, loading_outward, multi_station.hand_clearance_mm,
             access_obstacles,
         )
         unloading_clear = _motion_path_clear(
@@ -1663,10 +1868,44 @@ def generate_multi_station_fixture_build_plan(
         open_clear = not opened.intersects(station.product_bounds)
         hand_clear = loading_clear and open_clear
         weld_clear: bool | None = None
+        weld_results: list[WeldJointAccessResult] = []
         if _confirmed_weld_evidence_complete(requirements) and requirements.full_weld_access_available is True:
-            torch_envelope = _swept_bounds(station.product_bounds, operator_outward,
-                                           multi_station.weld_clearance_mm)
-            weld_clear = not _bounds_intersect_any(torch_envelope, structural_obstacles + (opened,))
+            adjacent_products = tuple(
+                (other.identity, other.product_bounds) for other in layout.stations
+                if other.identity != station.identity
+            )
+            for weld in requirements.confirmed_welds:
+                torch_envelope = _torch_body_envelope(weld, station.translation_mm)
+                blockers = list(
+                    identity for identity, bounds in weld_fixture_obstacles + adjacent_products
+                    if _positive_bounds_overlap(torch_envelope, bounds)
+                )
+                approach = _unit_direction(weld.approach_direction_source, "torch approach direction")
+                side_alignment = (approach.x * operator_outward.x + approach.y * operator_outward.y
+                                  + approach.z * operator_outward.z)
+                normalized_side = weld.weld_side.strip().lower()
+                side_conflict = (("opposite" in normalized_side and side_alignment >= -1e-7)
+                                 or ("operator" in normalized_side and "opposite" not in normalized_side
+                                     and side_alignment <= 1e-7))
+                blockers_tuple = tuple(blockers)
+                clear = not blockers_tuple and not side_conflict
+                weld_results.append(WeldJointAccessResult(
+                    weld.identity, clear, torch_envelope,
+                    approach,
+                    blockers_tuple,
+                    (
+                        f"joint={weld.identity}",
+                        f"weld_side={weld.weld_side}",
+                        f"weld_length_mm={weld.weld_length_mm:.3f}",
+                        f"weld_process={weld.process}",
+                        f"weld_sequence={weld.sequence}",
+                        f"orientation={weld.manufacturing_orientation_identity}",
+                        f"torch_envelope_mm=({weld.torch_envelope_mm.x:.3f},{weld.torch_envelope_mm.y:.3f},{weld.torch_envelope_mm.z:.3f})",
+                        "weld_side_vs_approach=" + ("conflict" if side_conflict else "consistent"),
+                        "torch_body_vs_fixture_clamps_adjacent_stations=" + ("clear" if clear else "blocked"),
+                    ),
+                ))
+            weld_clear = all(item.clear for item in weld_results)
         evaluated_stations.append(replace(
             station,
             clamp_tip_reaches_surface=closed.intersects(station.product_bounds),
@@ -1675,18 +1914,23 @@ def generate_multi_station_fixture_build_plan(
             weld_access_clear=weld_clear,
             unload_path_clear=unloading_clear,
             trapped_part=not (loading_clear and unloading_clear),
-            loading_direction=("-" if operator_outward.x + operator_outward.y + operator_outward.z > 0 else "+")
-                              + ("X" if operator_outward.x else "Y" if operator_outward.y else "Z"),
-            unloading_direction=multi_station.unloading_direction,
+            loading_direction=_axis_token(insertion_direction),
+            unloading_direction=_axis_token(unload_direction),
             operator_side=multi_station.operator_loading_side,
             loading_envelope=loading_envelope,
             unloading_envelope=unloading_envelope,
             open_clamp_envelope=opened,
             closed_clamp_envelope=closed,
+            loading_direction_source=insertion_direction,
+            unloading_direction_source=unload_direction,
+            operator_direction_source=operator_outward,
+            weld_access_results=tuple(weld_results),
             access_evidence=(
                 f"operator_side={multi_station.operator_loading_side}",
                 f"insertion_direction=({insertion_direction.x:.0f},{insertion_direction.y:.0f},{insertion_direction.z:.0f})",
-                f"unloading_direction={multi_station.unloading_direction}",
+                f"unloading_direction_source=({unload_direction.x:.6g},{unload_direction.y:.6g},{unload_direction.z:.6g})",
+                f"clamp_direction_source=({clamp_outward.x:.6g},{clamp_outward.y:.6g},{clamp_outward.z:.6g})",
+                f"manufacturing_orientation={multi_station.manufacturing_orientation_identity or 'unrecorded'}",
                 f"hand_clearance_mm={multi_station.hand_clearance_mm:.3f}",
                 "loading_sweep_vs_rail_station_plate_locator_stop_open_clamp_brace=" + ("clear" if loading_clear else "blocked"),
                 "unloading_sweep_vs_rail_station_plate_locator_stop_open_clamp_brace=" + ("clear" if unloading_clear else "blocked"),
@@ -1802,7 +2046,17 @@ def _multi_station_findings(plan: FixtureBuildPlan) -> tuple[FixtureBuildFinding
                                          components=(station.identity,),
                                          evidence=station.access_evidence,
                                          disposition="review_blocker"))
-        if station.weld_access_clear is False:
+        if station.weld_access_results:
+            for result in station.weld_access_results:
+                if not result.clear:
+                    findings.append(_finding(
+                        "FXD-M32-ACC", "error",
+                        f"station weld/torch access is blocked for confirmed joint {result.joint_identity}",
+                        components=(station.identity,) + result.blocking_component_identities,
+                        evidence=result.evidence,
+                        disposition="review_blocker",
+                    ))
+        elif station.weld_access_clear is False:
             findings.append(_finding("FXD-M32-ACC", "error", "station weld/torch access envelope is blocked",
                                      components=(station.identity,), evidence=station.access_evidence,
                                      disposition="review_blocker"))
@@ -1845,6 +2099,21 @@ def validate_fixture_build_plan(product: ProductModel, plan: FixtureBuildPlan) -
     req = plan.requirements
     if product.source_sha256 != req.source_sha256:
         findings.append(_finding("FXD-MFG-001", "error", "fixture build source identity does not match immutable product source", disposition="authoring_blocker"))
+    for weld in req.confirmed_welds:
+        if any(not _reference_valid(product, reference) for reference in weld.references):
+            findings.append(_finding(
+                "FXD-WLD-001", "error",
+                f"confirmed weld {weld.identity} contains an invalid immutable source reference",
+                evidence=(f"joint={weld.identity}",), disposition="authoring_blocker",
+            ))
+        if (plan.multi_station_layout is not None
+                and weld.manufacturing_orientation_identity
+                != plan.multi_station_layout.requirements.manufacturing_orientation_identity):
+            findings.append(_finding(
+                "FXD-WLD-001", "error",
+                f"confirmed weld {weld.identity} is stale for the active manufacturing orientation",
+                evidence=(f"joint={weld.identity}",), disposition="review_blocker",
+            ))
     if req.production_quantity is None:
         findings.append(_finding("FXD-COST-001", "warning", "production quantity is missing; lifecycle comparison is provisional"))
     if not req.weld_process:
@@ -1862,8 +2131,10 @@ def validate_fixture_build_plan(product: ProductModel, plan: FixtureBuildPlan) -
           and not _confirmed_weld_evidence_complete(req)):
         findings.append(_finding(
             "FXD-WLD-001", "error",
-            "Confirmed weld intent is incomplete. Joint reference, side, length, process, sequence, approach direction, and torch envelope are required before weld access can be evaluated.",
-            evidence=("confirmed_weld_contract=incomplete",),
+            "Confirmed weld intent is incomplete. Every joint requires its own source reference, side, length, process, sequence, engineer-accepted approach direction, and torch body envelope before weld access can be evaluated.",
+            evidence=("confirmed_weld_contract=incomplete",
+                      f"confirmed_joint_count={req.confirmed_weld_joint_count}",
+                      f"complete_joint_count={len(req.confirmed_welds)}"),
             disposition="review_blocker",
         ))
     if req.lifecycle in {FixtureLifecycle.DISPOSABLE_RECUT, FixtureLifecycle.REUSABLE_TOOLING_ON_DISPOSABLE} and not req.job_revision:

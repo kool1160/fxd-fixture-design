@@ -22,12 +22,14 @@ from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QCheckBox, QComboBox, QPushButton, QWidget
 
 from fxd_geometry import (
+    AnnotationRole,
     EngineeringAnnotations,
     ExportError,
     KernelOperationError,
     InteractiveWorkflow,
     OcpKernel,
     ProcessSetup,
+    ReferencePlane,
     RenderDiagnostics,
     Vec3,
     generate_fixture_proposal,
@@ -35,6 +37,7 @@ from fxd_geometry import (
     load_step_for_workbench,
     minimal_intent_questions,
     product_from_workbench_document,
+    reference_plane_orientation,
     source_orientation,
 )
 from fxd_geometry.project import FxdProject
@@ -346,6 +349,8 @@ class QtWorkbenchTests(unittest.TestCase):
         self.assertGreater(len({tuple(item["color"]) for item in items if "color" in item}), 5)
 
     def test_editing_accepted_station_count_creates_new_intent(self):
+        self.window._replace_project(self._project())
+        orientation = source_orientation(self.window.project.product.source_sha256, accepted=True)
         self.window.process_fixture_family.setCurrentText("Linear multi-station weld fixture")
         self.window.process_station_count.setValue(3)
         self.window.process_max_fixture_length.setValue(1219.2)
@@ -355,9 +360,95 @@ class QtWorkbenchTests(unittest.TestCase):
         requirements = self.window._multi_station_requirements(ProcessSetup(
             "station intent edit", fixture_family="linear_multi_station_weld_fixture",
             operation_mode="Manual", production_quantity=1,
+            manufacturing_orientation=orientation,
+            manufacturing_loading_direction=Vec3(1, 0, 0),
+            manufacturing_unloading_direction=Vec3(-1, 0, 0),
         ))
         self.assertEqual(requirements.requested_station_count, 3)
         self.assertIsNone(requirements.requested_intent_station_count)
+
+    def test_m32_process_directions_convert_through_rotated_and_flipped_orientation(self):
+        self.window._replace_project(self._project())
+        source_sha = self.window.project.product.source_sha256
+        self.window.process_fixture_family.setCurrentText("Linear multi-station weld fixture")
+        self.window.process_operator_loading_side.setCurrentText("Operator front (+Y)")
+        self.window.process_clamp_operating_side.setCurrentText("Operator right (+X)")
+        rotated = reference_plane_orientation(
+            source_sha, ReferencePlane.TOP, rotation_degrees=90.0, accepted=True,
+        )
+        setup = ProcessSetup(
+            "rotated M32 directions", fixture_family="linear_multi_station_weld_fixture",
+            operation_mode="Manual", production_quantity=1,
+            manufacturing_orientation=rotated,
+            manufacturing_loading_direction=Vec3(1, 0, 0),
+            manufacturing_unloading_direction=Vec3(0, -1, 0),
+        )
+        requirements = self.window._multi_station_requirements(setup)
+        self.assertEqual(requirements.loading_direction_source,
+                         rotated.manufacturing_vector_to_source(Vec3(1, 0, 0)))
+        self.assertEqual(requirements.unloading_direction_source,
+                         rotated.manufacturing_vector_to_source(Vec3(0, -1, 0)))
+        self.assertEqual(requirements.operator_loading_direction_source,
+                         rotated.manufacturing_vector_to_source(Vec3(0, 1, 0)))
+        self.assertEqual(requirements.clamp_operating_direction_source,
+                         rotated.manufacturing_vector_to_source(Vec3(1, 0, 0)))
+        self.assertEqual(requirements.manufacturing_orientation_identity, rotated.identity)
+
+        flipped = reference_plane_orientation(
+            source_sha, ReferencePlane.TOP, flip_normal=True,
+            rotation_degrees=180.0, accepted=True,
+        )
+        flipped_requirements = self.window._multi_station_requirements(replace(
+            setup, manufacturing_orientation=flipped,
+        ))
+        self.assertEqual(flipped_requirements.operator_loading_direction_source,
+                         flipped.manufacturing_vector_to_source(Vec3(0, 1, 0)))
+        self.assertNotEqual(flipped_requirements.operator_loading_direction_source,
+                            Vec3(0, 1, 0))
+
+    def test_weld_confirmation_does_not_invent_torch_approach_or_envelope(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = self._real_step(directory)
+            document = load_step_for_workbench(source)
+            product = product_from_workbench_document(document)
+            self.window.document = document
+            self.window.viewport.load_document(document)
+            self.window._replace_project(self._project(source))
+        orientation = source_orientation(product.source_sha256, accepted=True)
+        self.window.workflow = InteractiveWorkflow(
+            product.source_sha256,
+            ProcessSetup(
+                "explicit weld evidence", fixture_family="linear_multi_station_weld_fixture",
+                fixture_type="Full weld fixture", manufacturing_process="MIG welding",
+                operation_mode="Manual", production_quantity=1,
+                manufacturing_orientation=orientation,
+                manufacturing_build_direction=Vec3(0, 0, 1),
+                manufacturing_loading_direction=Vec3(1, 0, 0),
+                manufacturing_unloading_direction=Vec3(-1, 0, 0),
+            ),
+        )
+        component = product.components[0]
+        body = component.bodies[0]
+        from fxd_geometry import GeometryReference
+        self.window.selected_reference = GeometryReference(
+            component.identity, body.identity, body.faces[0].identity,
+        )
+        self.window.annotation_role.setCurrentIndex(tuple(AnnotationRole).index(AnnotationRole.WELD_JOINT))
+        self.window.weld_intent_state.setCurrentText("Confirm selected weld seam")
+        self.window.weld_intent_side.setCurrentText("Operator side")
+        self.window.weld_intent_length.setValue(20.0)
+        self.window.weld_intent_sequence.setValue(1)
+        self.window.process_method.setCurrentText("MIG welding")
+        self.assertEqual(self.window.weld_intent_approach.currentText(), "Unknown")
+        self.assertEqual(self.window.weld_intent_torch_width.value(), 0.0)
+        self.assertEqual(self.window.weld_intent_torch_height.value(), 0.0)
+        self.assertEqual(self.window.weld_intent_torch_length.value(), 0.0)
+        with patch("fxd_qt_app.QMessageBox.warning") as warning:
+            self.window.assign_selected_annotation()
+        warning.assert_not_called()
+        evidence = self.window.workflow.geometry_annotations[-1].evidence
+        self.assertFalse(any(item.startswith("weld_approach_direction_mfg=") for item in evidence))
+        self.assertFalse(any(item.startswith("torch_envelope_") for item in evidence))
 
     def test_fixture_build_validation_source_is_independent_and_routes_to_visible_controls(self):
         with tempfile.TemporaryDirectory() as directory:

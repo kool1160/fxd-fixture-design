@@ -55,8 +55,20 @@ span, brace connectivity, both end-station clearances, clamp-tip reach,
 clamp-open envelope, hand access, loading and unloading sweeps, and trapped
 parts. Station access values default to unevaluated and therefore fail closed;
 the generator must write explicit directions, envelopes, results, and evidence.
-Weld/torch access remains unevaluated until confirmed joint reference, side,
-length, process, sequence, approach direction, and envelope evidence exist.
+Loading, unloading, operator-side, clamp-side, and torch-approach choices are
+recorded in the manufacturing frame and converted through the accepted
+source-SHA-linked orientation before any source-coordinate AABB or OCP check.
+Manufacturing-axis labels are never compared directly with source geometry.
+
+Weld/torch access remains unevaluated until every confirmed joint has its own
+source reference, side, length, process, sequence, engineer-accepted
+manufacturing-frame approach, joint position, and three-dimensional torch/body
+envelope. The normal workbench leaves approach and envelope fields unknown by
+default; it does not promote the selected face normal or a fixed clearance into
+confirmed evidence. Each complete joint is transformed to source coordinates
+and evaluated independently against authored fixture components, closed clamp
+review geometry, station plates, rails, adjacent product stations, and end
+structure. One incomplete or blocked joint keeps approval and export blocked.
 The existing parent-connectivity,
 source-SHA, locating, clamp-reaction, access, manufacturing-authority, and
 export gates remain active.
