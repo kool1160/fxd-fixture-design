@@ -1,6 +1,7 @@
 """Unified PySide6 engineering workbench with an embedded VTK viewport."""
 from __future__ import annotations
 
+import argparse
 import logging
 import os
 import sys
@@ -382,6 +383,27 @@ class VtkWorkerSceneProxy:
     def set_review_geometry(self, items: list[dict[str, object]]) -> None:
         self._send("set_review_geometry", items=items)
 
+    def set_review_geometry_verified(self, items: list[dict[str, object]]) -> dict[str, object]:
+        """Replace review actors and wait for native VTK to confirm the result."""
+        self._request_id += 1
+        request_id = self._request_id
+        self._send("set_review_geometry", items=items, request_id=request_id)
+        deadline = monotonic() + 30.0
+        while monotonic() < deadline:
+            response = self._responses.pop(request_id, None)
+            if response is not None:
+                if response.get("event") == "error":
+                    raise RuntimeError("native VTK rejected visual-review geometry")
+                return response
+            try:
+                message = self.messages.get(timeout=0.25)
+            except Empty:
+                if self.process.poll() is not None:
+                    raise RuntimeError("native VTK exited during visual-review display")
+                continue
+            self._route_message(message)
+        raise TimeoutError("native VTK did not confirm visual-review geometry")
+
     def render(self) -> None:
         self._send("render")
 
@@ -692,7 +714,10 @@ class FxdWorkbenchWindow(QMainWindow):
         self._geometry_references: dict[str, GeometryReference] = {}
         self._finding_records: dict[str, object] = {}
         self._ui_active_stage: str | None = None
-        self._settings_enabled = os.environ.get("QT_QPA_PLATFORM") != "offscreen"
+        self._settings_enabled = (
+            os.environ.get("QT_QPA_PLATFORM") != "offscreen"
+            and os.environ.get("FXD_M32_VISUAL_REVIEW_SESSION") != "1"
+        )
         self.settings = QSettings("FXD", "EngineeringWorkbench")
         self._validation_source = str(self.settings.value(
             "review/validation_source", "Fixture Proposal"
@@ -2803,7 +2828,7 @@ class FxdWorkbenchWindow(QMainWindow):
         if name:
             self.load_project_path(Path(name))
 
-    def load_project_path(self, source: Path) -> None:
+    def load_project_path(self, source: Path, *, require_real_display: bool = False) -> None:
         self._invalidate_pending_proposal_generation()
         self._replace_project(FxdProject.load(source))
         self.workflow = self.project.workflow
@@ -2815,11 +2840,15 @@ class FxdWorkbenchWindow(QMainWindow):
                 source_name=self.project.product.source_name,
             )
             self.viewport.load_document(self.document)
-        except Exception:
+        except Exception as exc:
             # A renderer failure cannot invalidate an otherwise readable project.
             logger.exception("project source has no authoritative real-kernel display evidence")
             self.viewport.clear()
             self.document = None
+            if require_real_display:
+                raise RuntimeError(
+                    "M32 visual review requires successful real OCP and native VTK project display"
+                ) from exc
         self._refresh_all()
         self._show_active_concept_geometry()
         if self.workflow is not None and not self.workflow.has_accepted_manufacturing_orientation():
@@ -4655,6 +4684,54 @@ class FxdWorkbenchWindow(QMainWindow):
         if scene is not None:
             scene.set_review_geometry(self._review_geometry_items())
 
+    def prepare_m32_visual_review(self, screenshot_path: Path) -> None:
+        """Re-author and verify the governed provisional M32 review display."""
+        if self.project is None or self.document is None or self.project.fixture_build is None:
+            raise RuntimeError("M32 visual-review project is incomplete")
+        plan = self.project.fixture_build
+        layout = plan.multi_station_layout
+        if (layout is None or len(layout.stations) != 4
+                or layout.requirements.requested_intent_station_count != 5
+                or abs(layout.requirements.maximum_fixture_length_mm - 1219.2) > 1e-6):
+            raise RuntimeError("M32 visual-review project does not contain the governed 5-to-4 scenario")
+        if self.workflow is None or not self.workflow.has_accepted_manufacturing_orientation():
+            raise RuntimeError("M32 visual-review project lacks accepted manufacturing orientation")
+        authored = author_fixture_build(plan, self.project.product, self.kernel)
+        if (not authored.provisional
+                or authored.review_labels != ("PROVISIONAL", "NOT APPROVED", "INVALID BUILD PLAN")
+                or not authored.components
+                or not all(component.topology.solids >= 1 for component in authored.components)):
+            raise RuntimeError("M32 visual-review OCP authoring evidence is invalid")
+        self.authored_fixture_build = authored
+        items = self._review_geometry_items()
+        authored_items = [item for item in items if item.get("kind") == "authored_mesh"]
+        product_items = [item for item in items if item.get("kind") == "product_review_mesh"]
+        if (len(authored_items) != len(authored.components) or len(product_items) != 4
+                or any(not item.get("triangles") for item in authored_items)
+                or any(item.get("kind") == "authored_manufacturing_debug_bounds" for item in items)):
+            raise RuntimeError("M32 visual review requires tessellated OCP geometry without AABB fallback")
+        scene = self._scene()
+        if scene is None or not hasattr(scene, "set_review_geometry_verified"):
+            raise RuntimeError("M32 visual review requires the native VTK scene")
+        confirmation = scene.set_review_geometry_verified(items)
+        if (int(confirmation.get("review_actor_count", 0)) < len(authored_items) + len(product_items)
+                or not bool(confirmation.get("rendered"))):
+            raise RuntimeError("native VTK did not confirm the governed review actors")
+        self._navigate_stage("Manufacturing")
+        if hasattr(self, "validation_source_selector"):
+            self.validation_source_selector.setCurrentText("Fixture Build Plan")
+        self.setWindowTitle(
+            "FXD M32 VISUAL REVIEW - PROVISIONAL / NOT APPROVED / INVALID BUILD PLAN"
+        )
+        self.statusBar().showMessage(
+            "M32 synthetic 5-to-4 review loaded with real OCP solids; qualified engineering review remains required."
+        )
+        QApplication.processEvents()
+        screenshot_path.parent.mkdir(parents=True, exist_ok=True)
+        screen = self.screen()
+        if screen is None or not screen.grabWindow(int(self.winId())).save(str(screenshot_path), "PNG"):
+            raise RuntimeError("M32 visual-review application screenshot could not be captured")
+
     def _populate_concept_comparison(self) -> None:
         self.concept_table.setRowCount(0)
         if (self.project is None or self.workflow is None or not self.workflow.concepts_generated
@@ -4942,15 +5019,49 @@ def create_application(argv: list[str] | None = None) -> QApplication:
     return application
 
 
-def main(step_path: Path | None = None) -> int:
+def main(step_path: Path | None = None, *, project_path: Path | None = None,
+         require_m32_visual_review: bool = False,
+         screenshot_path: Path | None = None) -> int:
     logging.basicConfig(level=logging.INFO)
     application = create_application()
     window = FxdWorkbenchWindow()
     window.show()
-    if step_path is not None:
+    if step_path is not None and project_path is not None:
+        raise ValueError("load either a STEP source or an FXD project, not both")
+    if project_path is not None:
+        def load_project() -> None:
+            try:
+                window.load_project_path(
+                    project_path, require_real_display=require_m32_visual_review,
+                )
+                if require_m32_visual_review:
+                    if screenshot_path is None:
+                        raise RuntimeError("M32 visual review requires an external screenshot path")
+                    window.prepare_m32_visual_review(screenshot_path)
+                    print("FXD_M32_VISUAL_REVIEW=ready", flush=True)
+            except Exception:
+                logger.exception("M32 visual-review application launch failed closed")
+                print("FXD_M32_VISUAL_REVIEW=failed", flush=True)
+                application.exit(1)
+        QTimer.singleShot(0, load_project)
+    elif step_path is not None:
         QTimer.singleShot(0, lambda: window.load_step_path(step_path))
     return application.exec()
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    parser = argparse.ArgumentParser(description="Launch the FXD local engineering workbench.")
+    source = parser.add_mutually_exclusive_group()
+    source.add_argument("--step", type=Path)
+    source.add_argument("--project", type=Path)
+    parser.add_argument("--require-m32-visual-review", action="store_true")
+    parser.add_argument("--screenshot", type=Path)
+    args = parser.parse_args()
+    if args.require_m32_visual_review and args.project is None:
+        parser.error("--require-m32-visual-review requires --project")
+    raise SystemExit(main(
+        args.step,
+        project_path=args.project,
+        require_m32_visual_review=args.require_m32_visual_review,
+        screenshot_path=args.screenshot,
+    ))

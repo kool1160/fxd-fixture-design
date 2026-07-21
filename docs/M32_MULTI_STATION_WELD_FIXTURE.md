@@ -54,6 +54,24 @@ their stored station transforms. All geometry, validation, and exports remain
 engineering-review-only; no structural capacity, clamp force, weld procedure,
 safety, or production approval is inferred.
 
+## Windows qualified-engineering visual review
+
+From the clean M32 implementation branch, run:
+
+```powershell
+powershell.exe -ExecutionPolicy Bypass -File ".\scripts\run_m32_visual_review.ps1"
+```
+
+The command creates a persistent, redacted bundle outside the repository and
+opens the actual FXD Qt/VTK application on the governed synthetic five-requested
+to four-feasible project. The application stays open until the reviewer closes
+it. The bundle retains its synthetic STEP, reloadable FXD project, reports,
+initial screenshots, and qualified-engineering checklist after closure. Provider
+configuration is removed only from child processes; no network provider request
+is permitted. Passing software checks does not approve the fixture or replace
+qualified judgment for access, practicality, clamps, weld intent,
+manufacturability, structure, safety, or production release.
+
 ## Autonomous Windows software self-check
 
 Run the complete repeatable M32 software scenario from the checked-out M32

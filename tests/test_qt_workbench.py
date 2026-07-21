@@ -1440,6 +1440,19 @@ print(json.dumps(result, sort_keys=True))
             window.close()
             self.application.processEvents()
 
+    def test_strict_visual_review_project_load_fails_when_native_renderer_fails(self):
+        window = FxdWorkbenchWindow(viewport_factory=FailingViewport)
+        try:
+            with tempfile.TemporaryDirectory() as directory:
+                source = Path(directory) / "project.fxd.json"
+                self._project().save(source)
+                with patch("fxd_qt_app.load_step_for_workbench", return_value=object()):
+                    with self.assertRaisesRegex(RuntimeError, "real OCP and native VTK"):
+                        window.load_project_path(source, require_real_display=True)
+        finally:
+            window.close()
+            self.application.processEvents()
+
     def test_export_passes_real_ocp_kernel_to_manufacturing_package(self):
         self.window.project = self._project()
         clean_validation = SimpleNamespace(blocked=False)

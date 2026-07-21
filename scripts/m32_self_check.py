@@ -47,6 +47,7 @@ from fxd_geometry.project import FxdProject, ProjectFormatError
 
 
 SELF_CHECK_SCHEMA = "fxd-m32-self-check-v1"
+VISUAL_REVIEW_SCHEMA = "fxd-m32-visual-review-v1"
 _PROVISIONAL_LABELS = ("PROVISIONAL", "NOT APPROVED", "INVALID BUILD PLAN")
 _FAILURE_CATEGORIES = {
     AssertionError: "deterministic_contract_assertion_failed",
@@ -198,32 +199,32 @@ def _write_summary_screenshot(report: dict[str, object], destination: Path) -> N
     image.save(destination, format="PNG")
 
 
-def run_m32_self_check() -> dict[str, object]:
-    """Execute the fully deterministic M32 scenario and return a redacted report."""
+def _run_m32_scenario(directory: Path) -> tuple[dict[str, object], Path, Path]:
+    """Execute the governed scenario and retain its reloadable local artifacts."""
+    directory.mkdir(parents=True, exist_ok=True)
     kernel = OcpKernel()
-    with tempfile.TemporaryDirectory(prefix="fxd-m32-self-check-") as temporary:
-        source_path, source_before = _public_source(kernel, Path(temporary))
-        source_digest = sha256(source_before).hexdigest()
-        document = load_step_for_workbench(source_path)
-        product = product_from_workbench_document(document)
-        if document.source_sha256 != source_digest or product.source_sha256 != source_digest:
-            raise AssertionError("STEP import did not retain its immutable source identity")
+    source_path, source_before = _public_source(kernel, directory)
+    source_digest = sha256(source_before).hexdigest()
+    document = load_step_for_workbench(source_path)
+    product = product_from_workbench_document(document)
+    if document.source_sha256 != source_digest or product.source_sha256 != source_digest:
+        raise AssertionError("STEP import did not retain its immutable source identity")
 
-        bottom, front, planar_references, flip_bottom = _selected_orientation_references(document)
-        orientation = orientation_from_faces(
-            document, bottom, front, flip_bottom=flip_bottom, accepted=True,
-        )
-        if not orientation.accepted or orientation.is_stale_for(product.source_sha256):
-            raise AssertionError("guided bottom/front orientation was not accepted for the imported source")
+    bottom, front, planar_references, flip_bottom = _selected_orientation_references(document)
+    orientation = orientation_from_faces(
+        document, bottom, front, flip_bottom=flip_bottom, accepted=True,
+    )
+    if not orientation.accepted or orientation.is_stale_for(product.source_sha256):
+        raise AssertionError("guided bottom/front orientation was not accepted for the imported source")
 
-        roles = (
-            AnnotationRole.PRIMARY_DATUM,
-            AnnotationRole.SECONDARY_DATUM,
-            AnnotationRole.TERTIARY_DATUM,
-        )
-        if len(planar_references) < len(roles):
-            raise AssertionError("self-check STEP has insufficient planar datum evidence")
-        workflow = InteractiveWorkflow(
+    roles = (
+        AnnotationRole.PRIMARY_DATUM,
+        AnnotationRole.SECONDARY_DATUM,
+        AnnotationRole.TERTIARY_DATUM,
+    )
+    if len(planar_references) < len(roles):
+        raise AssertionError("self-check STEP has insufficient planar datum evidence")
+    workflow = InteractiveWorkflow(
             product.source_sha256,
             ProcessSetup(
                 project_name="M32 public software self-check",
@@ -250,14 +251,14 @@ def run_m32_self_check() -> dict[str, object]:
                 face_annotation(document, reference, role)
                 for reference, role in zip(planar_references, roles)
             ),
-        )
-        project = analyze_engineering_workflow(document, workflow)
-        if project.workflow is None or not project.workflow.analysis_completed:
-            raise AssertionError("assembly analysis did not complete through the shared workflow command")
-        workflow = replace(project.workflow, concepts_generated=True, active_stage="Concepts")
-        project = project.with_workflow(workflow)
+    )
+    project = analyze_engineering_workflow(document, workflow)
+    if project.workflow is None or not project.workflow.analysis_completed:
+        raise AssertionError("assembly analysis did not complete through the shared workflow command")
+    workflow = replace(project.workflow, concepts_generated=True, active_stage="Concepts")
+    project = project.with_workflow(workflow)
 
-        requested = MultiStationRequirements(
+    requested = MultiStationRequirements(
             FixtureFamily.LINEAR_MULTI_STATION_WELD,
             5,
             1219.2,
@@ -269,79 +270,79 @@ def run_m32_self_check() -> dict[str, object]:
             "Table mounting holes",
             100,
             True,
-        )
-        fit = propose_multi_station_fit(product, requested)
-        if (fit.requested_station_count, fit.feasible_station_count) != (5, 4):
-            raise AssertionError("the governed 5-station request did not propose the expected 4-station fit")
-        if not fit.requires_explicit_acceptance:
-            raise AssertionError("station-count reduction was not kept behind explicit acceptance")
-        accepted = replace(
-            requested,
-            requested_station_count=fit.feasible_station_count,
-            requested_intent_station_count=fit.requested_station_count,
-        )
-        alternatives = generate_multi_station_fixture_alternatives(
-            product, project.active, _fixture_build_requirements(product.source_sha256), accepted,
-        )
-        plan = alternatives[-1]
-        layout = plan.multi_station_layout
-        if layout is None or len(layout.stations) != 4:
-            raise AssertionError("accepted feasible station count was not used for the fixture build plan")
-        if layout.requirements.requested_intent_station_count != 5:
-            raise AssertionError("original 5-station engineering intent was silently overwritten")
-        if layout.required_fixture_length_mm > 1219.2:
-            raise AssertionError("accepted fixture layout exceeds its maximum fixture length")
-        if layout.requested_intent_required_length_mm is None or layout.requested_intent_required_length_mm <= 1219.2:
-            raise AssertionError("requested station intent lacks explicit infeasible-length evidence")
+    )
+    fit = propose_multi_station_fit(product, requested)
+    if (fit.requested_station_count, fit.feasible_station_count) != (5, 4):
+        raise AssertionError("the governed 5-station request did not propose the expected 4-station fit")
+    if not fit.requires_explicit_acceptance:
+        raise AssertionError("station-count reduction was not kept behind explicit acceptance")
+    accepted = replace(
+        requested,
+        requested_station_count=fit.feasible_station_count,
+        requested_intent_station_count=fit.requested_station_count,
+    )
+    alternatives = generate_multi_station_fixture_alternatives(
+        product, project.active, _fixture_build_requirements(product.source_sha256), accepted,
+    )
+    plan = alternatives[-1]
+    layout = plan.multi_station_layout
+    if layout is None or len(layout.stations) != 4:
+        raise AssertionError("accepted feasible station count was not used for the fixture build plan")
+    if layout.requirements.requested_intent_station_count != 5:
+        raise AssertionError("original 5-station engineering intent was silently overwritten")
+    if layout.required_fixture_length_mm > 1219.2:
+        raise AssertionError("accepted fixture layout exceeds its maximum fixture length")
+    if layout.requested_intent_required_length_mm is None or layout.requested_intent_required_length_mm <= 1219.2:
+        raise AssertionError("requested station intent lacks explicit infeasible-length evidence")
 
-        project = project.with_fixture_build(plan)
-        validation = validate_fixture_build_plan(product, plan)
-        weld_finding = next((item for item in validation.findings if item.rule_id == "FXD-WLD-001"), None)
-        if weld_finding is None or weld_finding.disposition != "review_blocker":
-            raise AssertionError("unconfirmed weld intent did not remain a visible review blocker")
-        if validation.authoring_blocked:
-            raise AssertionError("review-only M32 finding incorrectly blocked safe OCP authoring")
+    project = project.with_fixture_build(plan)
+    validation = validate_fixture_build_plan(product, plan)
+    weld_finding = next((item for item in validation.findings if item.rule_id == "FXD-WLD-001"), None)
+    if weld_finding is None or weld_finding.disposition != "review_blocker":
+        raise AssertionError("unconfirmed weld intent did not remain a visible review blocker")
+    if validation.authoring_blocked:
+        raise AssertionError("review-only M32 finding incorrectly blocked safe OCP authoring")
 
-        authored = author_fixture_build(plan, product, kernel)
-        if not authored.provisional or authored.review_labels != _PROVISIONAL_LABELS:
-            raise AssertionError("provisional review geometry was not unmistakably labelled")
-        triangle_count = sum(
-            len(mesh.triangles)
-            for component in authored.components
-            for mesh in kernel.tessellate(component.shape)
-        )
-        if not authored.components or triangle_count < 1 or not all(item.topology.solids >= 1 for item in authored.components):
-            raise AssertionError("fixture authoring did not produce real OCP solids and tessellation evidence")
+    authored = author_fixture_build(plan, product, kernel)
+    if not authored.provisional or authored.review_labels != _PROVISIONAL_LABELS:
+        raise AssertionError("provisional review geometry was not unmistakably labelled")
+    triangle_count = sum(
+        len(mesh.triangles)
+        for component in authored.components
+        for mesh in kernel.tessellate(component.shape)
+    )
+    if not authored.components or triangle_count < 1 or not all(item.topology.solids >= 1 for item in authored.components):
+        raise AssertionError("fixture authoring did not produce real OCP solids and tessellation evidence")
 
-        persisted_plan = replace(plan, authoring_state="provisional")
-        project = project.with_fixture_build(persisted_plan)
-        export_blocked = _expect_blocked(
-            lambda: build_fixture_build_package(authored, persisted_plan), FixtureBuildError,
-        )
-        approval_blocked = _expect_blocked(
-            lambda: project.decide("approve_for_review"), ProjectFormatError,
-        )
-        source_unchanged = (
-            source_path.read_bytes() == source_before
-            and document.source_bytes == source_before
-            and sha256(source_path.read_bytes()).hexdigest() == source_digest
-        )
-        if not source_unchanged:
-            raise AssertionError("the autonomous workflow changed source STEP bytes")
+    persisted_plan = replace(plan, authoring_state="provisional")
+    project = project.with_fixture_build(persisted_plan)
+    export_blocked = _expect_blocked(
+        lambda: build_fixture_build_package(authored, persisted_plan), FixtureBuildError,
+    )
+    approval_blocked = _expect_blocked(
+        lambda: project.decide("approve_for_review"), ProjectFormatError,
+    )
+    source_unchanged = (
+        source_path.read_bytes() == source_before
+        and document.source_bytes == source_before
+        and sha256(source_path.read_bytes()).hexdigest() == source_digest
+    )
+    if not source_unchanged:
+        raise AssertionError("the autonomous workflow changed source STEP bytes")
 
-        project_path = Path(temporary) / "m32-self-check.fxd.json"
-        project.save(project_path)
-        restored = FxdProject.load(project_path)
-        persistence_passed = (
-            restored.fixture_build is not None
-            and restored.fixture_build.to_dict() == persisted_plan.to_dict()
-            and restored.product.source_bytes == source_before
-            and restored.product.source_sha256 == source_digest
-        )
-        if not persistence_passed:
-            raise AssertionError("project save/reload did not retain governed M32 evidence")
+    project_path = directory / "m32-visual-review.fxd.json"
+    project.save(project_path)
+    restored = FxdProject.load(project_path)
+    persistence_passed = (
+        restored.fixture_build is not None
+        and restored.fixture_build.to_dict() == persisted_plan.to_dict()
+        and restored.product.source_bytes == source_before
+        and restored.product.source_sha256 == source_digest
+    )
+    if not persistence_passed:
+        raise AssertionError("project save/reload did not retain governed M32 evidence")
 
-    return {
+    report = {
         "schema": SELF_CHECK_SCHEMA,
         "status": "passed",
         "scenario": "legally shareable synthetic two-piece fabricated bracket",
@@ -410,6 +411,14 @@ def run_m32_self_check() -> dict[str, object]:
             "final production approval",
         ],
     }
+    return report, source_path, project_path
+
+
+def run_m32_self_check() -> dict[str, object]:
+    """Execute the fully deterministic M32 scenario and return a redacted report."""
+    with tempfile.TemporaryDirectory(prefix="fxd-m32-self-check-") as temporary:
+        report, _, _ = _run_m32_scenario(Path(temporary))
+        return report
 
 
 def _write_json(destination: Path, report: dict[str, object]) -> None:
