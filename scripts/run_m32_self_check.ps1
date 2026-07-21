@@ -110,6 +110,13 @@ function Resolve-M32BashExecutable {
     throw "Git Bash is required for governed M32 CI but was not found on PATH or at the standard Git for Windows location."
 }
 
+function Get-M32GovernedCiCommand {
+    # Git Bash cannot reliably activate a Windows venv with its POSIX activate
+    # script. Prefixing its child-only PATH selects the same .venv Python used
+    # by every other runner stage without changing the caller environment.
+    return 'export PATH="$PWD/.venv/Scripts:$PATH" && bash scripts/ci-contract.sh && bash scripts/ci.sh'
+}
+
 function Read-M32SelfCheckReport {
     param([string]$Path)
 
@@ -316,7 +323,7 @@ function Invoke-M32SelfCheck {
         $bashOnPath = if ($null -eq $bashCommand) { "" } else { [string]$bashCommand.Source }
         $bash = Resolve-M32BashExecutable -OnPath $bashOnPath -GitForWindowsPath (Join-Path $env:ProgramFiles "Git\bin\bash.exe")
         $governedResult = Invoke-M32Python -Python $bash -Arguments @(
-            "-lc", "source .venv/Scripts/activate && bash scripts/ci-contract.sh && bash scripts/ci.sh"
+            "-lc", (Get-M32GovernedCiCommand)
         )
         if ($governedResult.ExitCode -ne 0) {
             throw "Governed CI failed."

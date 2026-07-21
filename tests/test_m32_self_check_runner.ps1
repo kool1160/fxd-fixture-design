@@ -72,4 +72,8 @@ Describe "M32 autonomous self-check runner" {
 
         (Resolve-M32BashExecutable -OnPath "" -GitForWindowsPath $fallback) | Should Be $fallback
     }
+
+    It "uses the repository virtual environment for governed CI under Git Bash" {
+        (Get-M32GovernedCiCommand) | Should Be 'export PATH="$PWD/.venv/Scripts:$PATH" && bash scripts/ci-contract.sh && bash scripts/ci.sh'
+    }
 }
