@@ -701,6 +701,7 @@ class FxdWorkbenchWindow(QMainWindow):
         self._multi_station_comparison_plan_identity: str | None = None
         self._pending_multi_station_fit = None
         self._accepted_multi_station_fit_key: tuple[int, float, float] | None = None
+        self._accepted_multi_station_feasible_count: int | None = None
         self.project_path: Path | None = None
         self.selected_identity: str | None = None
         self.selected_reference: GeometryReference | None = None
@@ -4135,6 +4136,7 @@ class FxdWorkbenchWindow(QMainWindow):
                         multi_station.requirements.maximum_fixture_length_mm,
                         multi_station.requirements.preferred_station_pitch_mm or 0.0,
                     )
+                    self._accepted_multi_station_feasible_count = multi_station.requirements.requested_station_count
             self.process_adjustment_state.setCurrentText({
                 AdjustmentState.PROVISIONAL: "Provisional adjustment",
                 AdjustmentState.PROVE_OUT: "Prove-out setting",
@@ -4346,6 +4348,23 @@ class FxdWorkbenchWindow(QMainWindow):
             raise ProjectFormatError("generate a fixture concept before creating manufacturing build evidence")
         setup = self._capture_process_setup()
         purpose = self._fixture_purpose_from_ui(self.process_fixture_type.currentText())
+        weld_evidence: tuple[str, ...] = ()
+        if self.project.annotations.weld_joints:
+            joint = self.project.annotations.weld_joints[0]
+            side = next((part.split("=", 1)[1].strip() for part in joint.notes.split(";")
+                         if part.strip().startswith("side=")), "")
+            length = next((part.split("=", 1)[1].strip() for part in joint.notes.split(";")
+                           if part.strip().startswith("length_mm=")), "")
+            direction = joint.direction
+            if (joint.references and side and length and joint.process and joint.sequence is not None
+                    and direction is not None):
+                weld_evidence = (
+                    f"joint_reference={joint.identity}", f"weld_side={side}",
+                    f"weld_length_mm={length}", f"weld_process={joint.process}",
+                    f"weld_sequence={joint.sequence}",
+                    f"approach_direction=({direction.x:.6g},{direction.y:.6g},{direction.z:.6g})",
+                    "torch_envelope_mm=25.0",
+                )
         return FixtureBuildRequirements(
             self.project.product.source_sha256, purpose,
             self._construction_from_ui(self.process_construction.currentText()),
@@ -4360,7 +4379,7 @@ class FxdWorkbenchWindow(QMainWindow):
             self._cleco_strategy_from_ui(self.process_cleco_strategy.currentText()),
             self.process_product_hole_approval.isChecked(),
             self._optional_text(self.process_product_hole_justification),
-            bool(self.project.annotations.weld_joints),
+            bool(weld_evidence), weld_evidence,
         )
 
     def _multi_station_requirements(self, setup: ProcessSetup) -> MultiStationRequirements:
@@ -4370,8 +4389,17 @@ class FxdWorkbenchWindow(QMainWindow):
             setup.operation_mode or "", "manual"
         )
         accepted_key = self._accepted_multi_station_fit_key
-        intent_count = (accepted_key[0] if accepted_key is not None
-                        and self.process_station_count.value() != accepted_key[0] else None)
+        accepted_dimensions_match = (
+            accepted_key is not None
+            and abs(accepted_key[1] - self.process_max_fixture_length.value()) < 1e-7
+            and abs(accepted_key[2] - self.process_station_pitch.value()) < 1e-7
+        )
+        intent_count = (
+            accepted_key[0]
+            if accepted_dimensions_match
+            and self._accepted_multi_station_feasible_count == self.process_station_count.value()
+            else None
+        )
         if intent_count is None and self.project is not None and self.project.fixture_build is not None:
             layout = self.project.fixture_build.multi_station_layout
             if (layout is not None and layout.requirements.requested_intent_station_count is not None
@@ -4410,6 +4438,7 @@ class FxdWorkbenchWindow(QMainWindow):
             QMessageBox.warning(self, "Station fit blocked", "The maximum length cannot fit one station with the stated allowances.")
             return
         self._accepted_multi_station_fit_key = self._multi_station_fit_key(fit.requested_station_count)
+        self._accepted_multi_station_feasible_count = fit.feasible_station_count
         self.process_station_count.setValue(fit.feasible_station_count)
         self._show_multi_station_fit(fit)
         self.process_accept_station_fit.setEnabled(False)
@@ -4542,6 +4571,22 @@ class FxdWorkbenchWindow(QMainWindow):
                 and "provisional" not in self.project.hidden_layers]
         active_authored = self._active_authored_fixture_build()
         if active_authored is not None:
+            semantic_styles = {
+                "baseplate": ("fixture_backbone", [0.26, 0.34, 0.44]),
+                "local_station_plate": ("fixture_station_plate", [0.34, 0.43, 0.54]),
+                "datum_rail_or_backplate": ("fixture_datum_structure", [0.42, 0.52, 0.62]),
+                "end_brace": ("fixture_structure", [0.42, 0.52, 0.62]),
+                "support_pad": ("replaceable_support", [0.24, 0.68, 0.43]),
+                "shim_pack": ("replaceable_wear_item", [0.42, 0.78, 0.55]),
+                "locator_plate": ("locator", [0.10, 0.67, 0.76]),
+                "hard_stop": ("hard_stop", [0.08, 0.58, 0.70]),
+                "toggle_clamp_mounting_bracket": ("clamp_mount", [0.58, 0.42, 0.76]),
+            }
+            finding_components = {
+                identity
+                for finding in active_authored.validation.findings
+                for identity in finding.component_identities
+            }
             for authored in active_authored.components:
                 bounds = authored.component.bounds
                 layer = (
@@ -4571,12 +4616,18 @@ class FxdWorkbenchWindow(QMainWindow):
                         "evidence": "debug fallback bounds after authored OCP tessellation failure; not fixture geometry",
                     })
                     continue
+                semantic, color = semantic_styles.get(
+                    authored.component.role.value, ("authored_fixture", [0.37, 0.47, 0.58])
+                )
+                selected = self.selected_identity == authored.component.identity
+                affected = authored.component.identity in finding_components
                 items.append({
                     "identity": "manufacturing:" + authored.component.identity,
                     "kind": "authored_mesh", "vertices": vertices, "triangles": triangles,
                     "status": "provisional" if active_authored.provisional else "valid",
-                    "color": [0.95, 0.54, 0.12] if active_authored.provisional else [0.30, 0.72, 0.45],
-                    "representation": "surface", "opacity": 0.92,
+                    "color": ([1.0, 0.86, 0.20] if selected else [0.90, 0.24, 0.24] if affected else color),
+                    "representation": "surface", "opacity": 0.96,
+                    "semantic": "selected_component" if selected else "finding_component" if affected else semantic,
                     "evidence": (
                         "PROVISIONAL / NOT APPROVED / INVALID BUILD PLAN; tessellated real OCP review solid; never source CAD"
                         if active_authored.provisional else
@@ -4585,6 +4636,22 @@ class FxdWorkbenchWindow(QMainWindow):
                 })
             layout = self.project.fixture_build.multi_station_layout
             if layout is not None and self.document is not None and "product_instances" not in self.project.hidden_layers:
+                for component in self.project.fixture_build.components:
+                    if component.geometry_authority.value != "purchased_component_geometry":
+                        continue
+                    is_open = component.role.value == "vendor_neutral_clamp_open_envelope"
+                    items.append({
+                        "identity": "tooling-review:" + component.identity,
+                        "kind": "clamp_open_envelope" if is_open else "purchased_tooling_closed",
+                        "minimum": list(component.bounds.minimum.__dict__.values()),
+                        "maximum": list(component.bounds.maximum.__dict__.values()),
+                        "status": "provisional",
+                        "color": [0.91, 0.32, 0.76] if is_open else [0.95, 0.76, 0.22],
+                        "representation": "wireframe" if is_open else "surface",
+                        "opacity": 0.40 if is_open else 0.82,
+                        "semantic": "clamp_open_sweep" if is_open else "provisional_purchased_tooling_closed",
+                        "evidence": "; ".join(component.evidence),
+                    })
                 source_vertices = tuple((mesh.vertices_mm, mesh.triangles) for mesh in self.document.meshes)
                 for station in layout.stations:
                     vertices = []
@@ -4600,9 +4667,36 @@ class FxdWorkbenchWindow(QMainWindow):
                         "identity": "product-review:" + station.identity,
                         "kind": "product_review_mesh", "vertices": vertices, "triangles": triangles,
                         "status": "valid", "color": [0.30, 0.61, 0.96],
-                        "representation": "surface", "opacity": 0.35,
+                        "representation": "surface", "opacity": 0.58,
+                        "semantic": "immutable_source_product_instance",
                         "evidence": "immutable source-product review instance with deterministic station transform",
                     })
+                direction_vectors = {
+                    "+X": [1.0, 0.0, 0.0], "-X": [-1.0, 0.0, 0.0],
+                    "+Y": [0.0, 1.0, 0.0], "-Y": [0.0, -1.0, 0.0],
+                    "+Z": [0.0, 0.0, 1.0], "-Z": [0.0, 0.0, -1.0],
+                }
+                for station in layout.stations:
+                    center = [
+                        (station.product_bounds.minimum.x + station.product_bounds.maximum.x) * 0.5,
+                        (station.product_bounds.minimum.y + station.product_bounds.maximum.y) * 0.5,
+                        station.product_bounds.maximum.z + 26.0,
+                    ]
+                    for label, token, color in (
+                        ("load", station.loading_direction, [1.0, 0.48, 0.0]),
+                        ("unload", station.unloading_direction, [0.72, 0.54, 0.97]),
+                    ):
+                        if token not in direction_vectors:
+                            continue
+                        items.append({
+                            "identity": f"m32-{label}:{station.identity}",
+                            "kind": "orientation_arrow", "origin": center,
+                            "direction": direction_vectors[token],
+                            "length": max(28.0, layout.requirements.hand_clearance_mm * 0.72),
+                            "status": "provisional", "color": color, "opacity": 0.98,
+                            "representation": "surface", "semantic": f"{label}_direction",
+                            "evidence": f"{label} direction {token}; deterministic manufacturing-frame station evidence",
+                        })
         return items + orientation_items
 
     def _orientation_review_items(self) -> list[dict[str, object]]:
@@ -4706,10 +4800,17 @@ class FxdWorkbenchWindow(QMainWindow):
         items = self._review_geometry_items()
         authored_items = [item for item in items if item.get("kind") == "authored_mesh"]
         product_items = [item for item in items if item.get("kind") == "product_review_mesh"]
+        closed_clamps = [item for item in items if item.get("kind") == "purchased_tooling_closed"]
+        open_clamps = [item for item in items if item.get("kind") == "clamp_open_envelope"]
+        load_arrows = [item for item in items if item.get("semantic") == "load_direction"]
+        unload_arrows = [item for item in items if item.get("semantic") == "unload_direction"]
         if (len(authored_items) != len(authored.components) or len(product_items) != 4
+                or len(closed_clamps) != 4 or len(open_clamps) != 4
+                or len(load_arrows) != 4 or len(unload_arrows) != 4
                 or any(not item.get("triangles") for item in authored_items)
+                or len({tuple(item["color"]) for item in authored_items}) < 4
                 or any(item.get("kind") == "authored_manufacturing_debug_bounds" for item in items)):
-            raise RuntimeError("M32 visual review requires tessellated OCP geometry without AABB fallback")
+            raise RuntimeError("M32 visual review requires tessellated OCP geometry and deterministic product/fixture/tooling/access semantics")
         scene = self._scene()
         if scene is None or not hasattr(scene, "set_review_geometry_verified"):
             raise RuntimeError("M32 visual review requires the native VTK scene")

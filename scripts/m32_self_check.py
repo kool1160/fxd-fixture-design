@@ -39,7 +39,7 @@ from fxd_geometry import (
     validate_fixture_build_plan,
 )
 from fxd_geometry.fabrication_workflow import (
-    FixtureBuildRequirements,
+    BuildComponentRole, FixtureBuildRequirements, GeometryAuthority,
     generate_multi_station_fixture_alternatives,
 )
 from fxd_geometry.manufacturing_orientation import orientation_from_faces
@@ -294,6 +294,26 @@ def _run_m32_scenario(directory: Path) -> tuple[dict[str, object], Path, Path]:
         raise AssertionError("accepted fixture layout exceeds its maximum fixture length")
     if layout.requested_intent_required_length_mm is None or layout.requested_intent_required_length_mm <= 1219.2:
         raise AssertionError("requested station intent lacks explicit infeasible-length evidence")
+    station_plates = tuple(item for item in plan.components if item.role == BuildComponentRole.STATION_PLATE)
+    clamp_closed = tuple(item for item in plan.components if item.role == BuildComponentRole.TOGGLE_CLAMP)
+    clamp_open = tuple(item for item in plan.components if item.role == BuildComponentRole.CLAMP_OPEN_ENVELOPE)
+    braces = tuple(item for item in plan.components if item.role == BuildComponentRole.END_BRACE)
+    if len(station_plates) != 4 or len(clamp_closed) != 4 or len(clamp_open) != 4:
+        raise AssertionError("product-driven station or clamp review geometry is incomplete")
+    if any(item.geometry_authority != GeometryAuthority.PURCHASED_COMPONENT
+           for item in clamp_closed + clamp_open):
+        raise AssertionError("supplier-neutral clamp review geometry gained manufacturing authority")
+    if any(value is not True for station in layout.stations for value in (
+            station.clamp_tip_reaches_surface, station.open_clamp_envelope_clear,
+            station.hand_access_clear, station.unload_path_clear)):
+        raise AssertionError("station access evidence was not deterministically evaluated")
+    if any(station.trapped_part is not False or not station.access_evidence
+           or station.loading_envelope is None or station.unloading_envelope is None
+           for station in layout.stations):
+        raise AssertionError("load/unload or trapped-part evidence is incomplete")
+    if any(station.product_bounds.intersects(brace.bounds)
+           for station in (layout.stations[0], layout.stations[-1]) for brace in braces):
+        raise AssertionError("end structure interferes with an end station")
 
     project = project.with_fixture_build(plan)
     validation = validate_fixture_build_plan(product, plan)
@@ -389,6 +409,19 @@ def _run_m32_scenario(directory: Path) -> tuple[dict[str, object], Path, Path]:
             "aabb_fallback_used": False,
             "provisional": authored.provisional,
             "labels": list(authored.review_labels),
+            "local_station_plate_count": len(station_plates),
+            "provisional_closed_clamp_count": len(clamp_closed),
+            "provisional_open_clamp_envelope_count": len(clamp_open),
+            "supplier_neutral_clamps_excluded_from_authored_ocp": all(
+                item.component.role not in {BuildComponentRole.TOGGLE_CLAMP, BuildComponentRole.CLAMP_OPEN_ENVELOPE}
+                for item in authored.components
+            ),
+        },
+        "access_review": {
+            "loading_and_unloading_evaluated": True,
+            "trapped_part_detected": False,
+            "first_and_last_station_end_clearance": True,
+            "weld_access_status": "not_evaluated_unconfirmed_weld_intent",
         },
         "release_gates": {
             "engineering_approval_blocked": approval_blocked,

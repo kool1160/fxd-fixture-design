@@ -8,11 +8,12 @@ import tempfile
 import unittest
 
 from fxd_geometry import (
-    AdjustmentState, BuildComponentRole, ConstructionMethod, FixtureBuildError,
+    AdjustmentState, BuildComponentRole, ConstructionMethod, FixtureBuildError, GeometryAuthority,
     FixtureBuildPlan, FixtureBuildRequirements, FixtureFamily, FixtureLifecycle,
     FixturePurpose, MultiStationRequirements, OcpKernel, Vec3, AnnotationRole, GeometryReference, author_fixture_build,
     build_fixture_build_package, generate_fixture_concepts,
     generate_multi_station_fixture_alternatives, generate_multi_station_fixture_build_plan,
+    generate_multi_station_layout,
     load_step_for_workbench,
     product_from_workbench_document, InteractiveWorkflow, ProcessSetup, validate_fixture_build_plan,
     source_orientation, face_annotation,
@@ -59,6 +60,12 @@ class MultiStationFixtureTests(unittest.TestCase):
             AdjustmentState.LOCKED,
             ("Synthetic public acceptance geometry; all dimensions remain editable review inputs.",),
             confirmed_weld_intent=True,
+            confirmed_weld_evidence=(
+                "joint_reference=synthetic-bracket-joint", "weld_side=operator",
+                "weld_length_mm=38.0", "weld_process=synthetic MIG weld",
+                "weld_sequence=1", "approach_direction=(0,1,0)",
+                "torch_envelope_mm=25.0",
+            ),
         )
 
     def station_requirements(self, *, count=5, maximum_length=3000.0):
@@ -96,7 +103,14 @@ class MultiStationFixtureTests(unittest.TestCase):
         self.assertGreaterEqual(roles.count(BuildComponentRole.SUPPORT_PAD), 15)
         self.assertEqual(roles.count(BuildComponentRole.HARD_STOP), 5)
         self.assertEqual(roles.count(BuildComponentRole.CLAMP_BRACKET), 5)
-        self.assertEqual(roles.count(BuildComponentRole.TOGGLE_CLAMP), 5)
+        self.assertEqual(roles.count(BuildComponentRole.TOGGLE_CLAMP), 0)
+        self.assertEqual(sum(item.role == BuildComponentRole.TOGGLE_CLAMP for item in plan.components), 5)
+        self.assertEqual(sum(item.role == BuildComponentRole.CLAMP_OPEN_ENVELOPE for item in plan.components), 5)
+        self.assertTrue(all(
+            item.geometry_authority == GeometryAuthority.PURCHASED_COMPONENT
+            for item in plan.components
+            if item.role in {BuildComponentRole.TOGGLE_CLAMP, BuildComponentRole.CLAMP_OPEN_ENVELOPE}
+        ))
         self.assertGreaterEqual(roles.count(BuildComponentRole.END_BRACE), 2)
         self.assertTrue(all(item.topology.solids >= 1 for item in assembly.components))
         self.assertEqual(before, self.source.read_bytes())
@@ -113,8 +127,12 @@ class MultiStationFixtureTests(unittest.TestCase):
         five_bom = json.loads(five_package["bom.json"])
         three_bom = json.loads(three_package["bom.json"])
         count_role = lambda bom, token: sum(token in item["description"] for item in bom)
-        self.assertEqual(count_role(five_bom, "vendor-neutral toggle-clamp"), 5)
-        self.assertEqual(count_role(three_bom, "vendor-neutral toggle-clamp"), 3)
+        self.assertEqual(count_role(five_bom, "vendor-neutral toggle-clamp"), 0)
+        self.assertEqual(count_role(three_bom, "vendor-neutral toggle-clamp"), 0)
+        self.assertFalse(any(item["geometry_authority"] == "purchased_component_geometry" for item in five_bom))
+        self.assertFalse(any("toggle" in name or "clamp-open" in name for name in five_package))
+        self.assertFalse(any(item["classification"] == "purchased_tooling"
+                             for item in json.loads(five_package["nest-classification.json"])))
         self.assertIn("adjustment-slot-map.json", five_package)
         self.assertIn("multi_station_layout", json.loads(five_package["manifest.json"]))
 
@@ -155,6 +173,76 @@ class MultiStationFixtureTests(unittest.TestCase):
         with self.assertRaises(FixtureBuildError):
             author_fixture_build(stale, self.product, self.kernel)
 
+    def test_station_access_is_explicit_and_unknown_evidence_fails_closed(self):
+        raw_layout = generate_multi_station_layout(self.product, self.station_requirements(count=4))
+        self.assertTrue(all(station.hand_access_clear is None and station.unload_path_clear is None
+                            and station.trapped_part is None for station in raw_layout.stations))
+        plan = self.plan(count=4)
+        layout = plan.multi_station_layout
+        assert layout is not None
+        self.assertTrue(all(station.loading_envelope and station.unloading_envelope for station in layout.stations))
+        self.assertTrue(all(station.access_evidence for station in layout.stations))
+        unknown = replace(
+            layout.stations[0], clamp_tip_reaches_surface=None,
+            open_clamp_envelope_clear=None, hand_access_clear=None,
+            unload_path_clear=None, trapped_part=None,
+        )
+        invalid = replace(plan, multi_station_layout=replace(
+            layout, stations=(unknown,) + layout.stations[1:]
+        ))
+        findings = validate_fixture_build_plan(self.product, invalid).findings
+        self.assertTrue(any("not evaluated" in item.message for item in findings))
+        self.assertTrue(any(item.disposition == "review_blocker" for item in findings))
+
+    def test_local_station_plates_and_end_clearance_are_axis_neutral(self):
+        def assert_layout(product, concept, *, unload="-X", operator_side="Operator front (+Y)"):
+            requirements = replace(self.build_requirements(), source_sha256=product.source_sha256)
+            station_requirements = replace(
+                self.station_requirements(count=4), unloading_direction=unload,
+                operator_loading_side=operator_side,
+            )
+            plan = generate_multi_station_fixture_build_plan(
+                product, concept, requirements, station_requirements,
+            )
+            layout = plan.multi_station_layout
+            assert layout is not None
+            plates = [item for item in plan.components if item.role == BuildComponentRole.STATION_PLATE]
+            braces = [item for item in plan.components if item.role == BuildComponentRole.END_BRACE]
+            self.assertEqual(len(plates), 4)
+            self.assertEqual({item.parent_component_identity for item in plates}, {"m32-backbone"})
+            self.assertTrue(all(
+                not station.product_bounds.intersects(brace.bounds)
+                for station in (layout.stations[0], layout.stations[-1])
+                for brace in braces
+            ))
+            validation = validate_fixture_build_plan(product, plan)
+            self.assertTrue(validation.valid, [item.message for item in validation.findings])
+            return layout.primary_axis
+
+        self.assertEqual(assert_layout(self.product, self.concept), "x")
+        with tempfile.TemporaryDirectory() as directory:
+            horizontal = self.kernel.make_box((0, 0, 0), (38, 120, 5))
+            upright = self.kernel.make_box((0, 0, 5), (38, 5, 62))
+            path = Path(directory) / "synthetic_y_primary.step"
+            path.write_bytes(self.kernel.export_step(self.kernel.compound((horizontal, upright))))
+            product = product_from_workbench_document(load_step_for_workbench(path))
+            annotations = EngineeringAnnotations.for_product(
+                product, build_orientation=Vec3(0, 0, 1), loading_direction=Vec3(1, 0, 0),
+                process_type="synthetic MIG weld", production_quantity=100,
+            )
+            concept = generate_fixture_concepts(product, annotations).recommended
+            conflicting = generate_multi_station_fixture_build_plan(
+                product, concept, replace(self.build_requirements(), source_sha256=product.source_sha256),
+                replace(self.station_requirements(count=4), unloading_direction="+X"),
+            )
+            conflicting_validation = validate_fixture_build_plan(product, conflicting)
+            self.assertTrue(conflicting_validation.review_blocked)
+            self.assertTrue(any("operator hand clearance is blocked" in item.message
+                                for item in conflicting_validation.findings))
+            self.assertEqual(assert_layout(
+                product, concept, unload="+X", operator_side="Operator right (+X)"
+            ), "y")
+
     def test_length_constrained_reduction_is_explicit_and_preserves_requested_intent(self):
         requested = self.station_requirements(count=5, maximum_length=1219.2)
         from fxd_geometry import propose_multi_station_fit
@@ -189,6 +277,25 @@ class MultiStationFixtureTests(unittest.TestCase):
         with self.assertRaises(FixtureBuildError):
             build_fixture_build_package(assembly, plan)
 
+    def test_confirmed_weld_contract_requires_complete_torch_evidence(self):
+        incomplete_requirements = replace(
+            self.build_requirements(), confirmed_weld_evidence=("weld_side=operator",)
+        )
+        plan = generate_multi_station_fixture_build_plan(
+            self.product, self.concept, incomplete_requirements,
+            self.station_requirements(count=4),
+        )
+        validation = validate_fixture_build_plan(self.product, plan)
+        self.assertTrue(any("Confirmed weld intent is incomplete" in item.message
+                            for item in validation.findings))
+        self.assertTrue(all(station.weld_access_clear is None
+                            for station in plan.multi_station_layout.stations))
+        complete = self.plan(count=4)
+        self.assertTrue(all(station.weld_access_clear is True
+                            for station in complete.multi_station_layout.stations))
+        self.assertTrue(all(any("weld_access=clear" == value for value in station.access_evidence)
+                            for station in complete.multi_station_layout.stations))
+
     def test_candidate_weld_face_is_unconfirmed_until_engineer_records_required_intent(self):
         document = load_step_for_workbench(self.source)
         component = self.product.components[0]
@@ -222,6 +329,27 @@ class MultiStationFixtureTests(unittest.TestCase):
         )
         self.assertEqual(len(annotations.weld_joints), 1)
         self.assertEqual(annotations.weld_joints[0].sequence, 1)
+
+    def test_legacy_weld_face_is_not_confirmed_for_m32(self):
+        document = load_step_for_workbench(self.source)
+        component = self.product.components[0]
+        body = component.bodies[0]
+        candidate = face_annotation(
+            document, GeometryReference(component.identity, body.identity, body.faces[0].identity),
+            AnnotationRole.WELD_JOINT,
+        )
+        setup = ProcessSetup(
+            "M32 legacy weld boundary", fixture_family=FixtureFamily.LINEAR_MULTI_STATION_WELD.value,
+            fixture_type="Weld fixture", manufacturing_process="MIG welding", operation_mode="Manual",
+            production_quantity=100, manufacturing_orientation=source_orientation(
+                self.product.source_sha256, accepted=True,
+            ), manufacturing_loading_direction=Vec3(1, 0, 0),
+            manufacturing_unloading_direction=Vec3(-1, 0, 0),
+        )
+        annotations = _engineering_annotations(
+            self.product, InteractiveWorkflow(self.product.source_sha256, setup, (candidate,)),
+        )
+        self.assertEqual(annotations.weld_joints, ())
 
     def test_persistence_preserves_station_identity_and_material_edit_revokes_build(self):
         plan = replace(self.plan(), authoring_state="provisional")

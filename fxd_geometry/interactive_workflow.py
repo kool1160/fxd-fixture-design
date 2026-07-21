@@ -564,6 +564,10 @@ def _engineering_annotations(product: ProductModel,
         # annotations must explicitly state every weld-intent field.
         status = values.get("weld_candidate_status")
         if status is None:
+            if setup.fixture_family == "linear_multi_station_weld_fixture":
+                # M32 never promotes a legacy face tag into confirmed weld
+                # intent.  Side, length, process, and sequence must be explicit.
+                continue
             welds.append(WeldJoint(
                 item.identity, (item.reference,), setup.manufacturing_process, item.notes,
                 assumptions=item.assumptions,

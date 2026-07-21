@@ -31,26 +31,43 @@ Each station persists a stable `m32-station-NN` identity and a translation-only
 review transform. The instance references the immutable source SHA-256 and
 source component identities; it is not a copied or modified source B-Rep.
 
-The supported generator adds a connected baseplate with table holes and real
-through-slot operations, an upright datum rail, rail tab-and-slot evidence,
-end braces, repeated three-rest support stations, locator plates with actual
-adjustment-slot cuts, hard stops, clamp brackets, vendor-neutral toggle-clamp
-review solids, and replaceable shim/wear evidence. The generic clamp is an
-authored review representation only, never released supplier CAD.
+The supported generator adds a low table-mounted backbone, a deliberately low
+common datum rail, and product-bounded local laser-cut station plates. Each
+station plate carries its own three-point supports, locator plate, hard stop,
+clamp mount, and replaceable wear/shim evidence. Compact end gussets remain
+outside the first and last product envelopes. The recorded rationale explains
+why the four repeated local plates share a backbone and explicitly avoids a
+tall product-sized wall; it is stiffness intent, not a certified capacity
+claim.
+
+Supplier-neutral clamp geometry is purchased/provisional review evidence, not
+authored manufacturing geometry. Closed clamp and open handle/sweep envelopes
+are stored and displayed separately with the operating side, contact target,
+and reaction-support relationship. They are excluded from authored fixture
+STEP/DXF, nesting, and manufacturable BOM output unless authorized exact
+tooling is supplied through a later governed boundary.
 
 ## Validation and review boundary
 
 M32 adds deterministic checks for family, count, pitch, length, stable source
 instance identity, product-instance overlap, station completeness, rail/base
-span, brace connectivity, clamp-tip reach, clamp-open envelope, hand access,
-weld access, unloading, and trapped parts. The existing parent-connectivity,
+span, brace connectivity, both end-station clearances, clamp-tip reach,
+clamp-open envelope, hand access, loading and unloading sweeps, and trapped
+parts. Station access values default to unevaluated and therefore fail closed;
+the generator must write explicit directions, envelopes, results, and evidence.
+Weld/torch access remains unevaluated until confirmed joint reference, side,
+length, process, sequence, approach direction, and envelope evidence exist.
+The existing parent-connectivity,
 source-SHA, locating, clamp-reaction, access, manufacturing-authority, and
 export gates remain active.
 
 An authored component is tessellated from its actual OCP shape for the VTK
 workbench. Bounds remain only an explicitly labelled debug fallback if that
 tessellation fails. Product review instances use the immutable source mesh plus
-their stored station transforms. All geometry, validation, and exports remain
+their stored station transforms. The scene uses stable visual semantics for
+source product, fixture structure, supports/wear items, locators/stops, clamp
+mounts, closed purchased tooling, open clamp sweep, selected/finding state, and
+per-station load/unload arrows. All geometry, validation, and exports remain
 engineering-review-only; no structural capacity, clamp force, weld procedure,
 safety, or production approval is inferred.
 

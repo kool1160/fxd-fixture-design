@@ -339,6 +339,25 @@ class QtWorkbenchTests(unittest.TestCase):
         self.assertTrue(any(item["kind"] == "authored_mesh" for item in items))
         self.assertEqual(sum(item["kind"] == "product_review_mesh" for item in items), 5)
         self.assertFalse(any("debug_bounds" in item["kind"] for item in items))
+        self.assertEqual(sum(item["kind"] == "purchased_tooling_closed" for item in items), 5)
+        self.assertEqual(sum(item["kind"] == "clamp_open_envelope" for item in items), 5)
+        self.assertEqual(sum(item.get("semantic") == "load_direction" for item in items), 5)
+        self.assertEqual(sum(item.get("semantic") == "unload_direction" for item in items), 5)
+        self.assertGreater(len({tuple(item["color"]) for item in items if "color" in item}), 5)
+
+    def test_editing_accepted_station_count_creates_new_intent(self):
+        self.window.process_fixture_family.setCurrentText("Linear multi-station weld fixture")
+        self.window.process_station_count.setValue(3)
+        self.window.process_max_fixture_length.setValue(1219.2)
+        self.window.process_station_pitch.setValue(0.0)
+        self.window._accepted_multi_station_fit_key = (5, 1219.2, 0.0)
+        self.window._accepted_multi_station_feasible_count = 4
+        requirements = self.window._multi_station_requirements(ProcessSetup(
+            "station intent edit", fixture_family="linear_multi_station_weld_fixture",
+            operation_mode="Manual", production_quantity=1,
+        ))
+        self.assertEqual(requirements.requested_station_count, 3)
+        self.assertIsNone(requirements.requested_intent_station_count)
 
     def test_fixture_build_validation_source_is_independent_and_routes_to_visible_controls(self):
         with tempfile.TemporaryDirectory() as directory:
