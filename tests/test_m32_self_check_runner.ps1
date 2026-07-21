@@ -43,7 +43,7 @@ Describe "M32 autonomous self-check runner" {
     It "keeps the runner offline and does not launch the GUI" {
         $content = Get-Content -LiteralPath $runner -Raw
 
-        $content.Contains("scripts/m32_self_check.py") | Should Be $true
+        $content.Contains("scripts.m32_self_check") | Should Be $true
         $content.Contains("network_provider_used") | Should Be $true
         $content.Contains("fxd_qt_app.py") | Should Be $false
     }
@@ -56,5 +56,13 @@ Describe "M32 autonomous self-check runner" {
         ($reportGate -ge 0) | Should Be $true
         ($focusedInvocation -ge 0) | Should Be $true
         ($reportGate -lt $focusedInvocation) | Should Be $true
+    }
+
+    It "maps only an allowlisted self-check failure category from a redacted report" {
+        $report = Join-Path $TestDrive "failed-m32-report.json"
+        '{"schema":"fxd-m32-self-check-v1","status":"failed","network_provider_used":false,"failure_category":"synthetic source detail"}' |
+            Set-Content -LiteralPath $report -Encoding UTF8
+
+        (Get-M32SelfCheckFailureCategory -Path $report) | Should Be "unexpected_internal_failure"
     }
 }

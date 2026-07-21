@@ -43,11 +43,17 @@ from fxd_geometry.fabrication_workflow import (
     generate_multi_station_fixture_alternatives,
 )
 from fxd_geometry.manufacturing_orientation import orientation_from_faces
-from fxd_geometry.project import ProjectFormatError
+from fxd_geometry.project import FxdProject, ProjectFormatError
 
 
 SELF_CHECK_SCHEMA = "fxd-m32-self-check-v1"
 _PROVISIONAL_LABELS = ("PROVISIONAL", "NOT APPROVED", "INVALID BUILD PLAN")
+_FAILURE_CATEGORIES = {
+    AssertionError: "deterministic_contract_assertion_failed",
+    FixtureBuildError: "fixture_build_authoring_or_release_gate_failed",
+    ProjectFormatError: "project_persistence_or_approval_gate_failed",
+    OSError: "local_artifact_operation_failed",
+}
 
 
 def _reference(component: object, face: object) -> GeometryReference:
@@ -139,6 +145,57 @@ def _expect_blocked(action: Any, expected: type[Exception]) -> bool:
     except expected:
         return True
     raise AssertionError("a fail-closed release gate unexpectedly allowed the action")
+
+
+def _safe_failure_category(error: Exception) -> str:
+    """Classify only the allowlisted failure class; never persist exception text."""
+    for error_type, category in _FAILURE_CATEGORIES.items():
+        if isinstance(error, error_type):
+            return category
+    return "unexpected_internal_failure"
+
+
+def _write_summary_screenshot(report: dict[str, object], destination: Path) -> None:
+    """Render a headless evidence snapshot without opening the engineering GUI."""
+    from PIL import Image, ImageDraw, ImageFont
+
+    fixture_build = report["fixture_build"]
+    validation = report["fixture_build_validation"]
+    geometry = report["authored_geometry"]
+    gates = report["release_gates"]
+    persistence = report["project_persistence"]
+    image = Image.new("RGB", (1500, 900), "#111827")
+    draw = ImageDraw.Draw(image)
+    title = ImageFont.load_default(size=28)
+    subtitle = ImageFont.load_default(size=16)
+    body = ImageFont.load_default(size=18)
+    draw.text((56, 46), "FXD M32 autonomous software self-check", font=title, fill="#f8fafc")
+    draw.text((56, 100), "OFFLINE SYNTHETIC REVIEW EVIDENCE - HUMAN ENGINEERING REVIEW REQUIRED", font=subtitle, fill="#a7f3d0")
+    lines = (
+        "Scenario: 5 requested stations -> 4 feasible stations at 1219.2 mm maximum length",
+        f"Calculated pitch: {float(fixture_build['calculated_pitch_mm']):.1f} mm",
+        f"Fixture-build validation: {validation['status']} (review-only provisional authoring permitted)",
+        f"Authored real OCP components: {int(geometry['real_ocp_component_count'])}",
+        f"Product review instances: {int(geometry['product_instance_count'])}",
+        f"Tessellated triangles: {int(geometry['tessellated_triangle_count'])}",
+        "AABB fallback: not used",
+        "Authoring state: PROVISIONAL - NOT APPROVED - INVALID BUILD PLAN",
+        f"Engineering approval gate blocked: {bool(gates['engineering_approval_blocked'])}",
+        f"Release export gate blocked: {bool(gates['release_export_blocked'])}",
+        f"Source CAD immutable: {bool(report['step_import']['source_cad_unchanged'])}",
+        f"Project save/reload preserved governed state: {bool(persistence['passed'])}",
+    )
+    y = 170
+    for line in lines:
+        draw.text((80, y), line, font=body, fill="#e2e8f0")
+        y += 52
+    draw.text(
+        (56, 836),
+        "Automated software-evidence snapshot only; it is not production approval or a substitute for human engineering judgment.",
+        font=subtitle,
+        fill="#fbbf24",
+    )
+    image.save(destination, format="PNG")
 
 
 def run_m32_self_check() -> dict[str, object]:
@@ -272,6 +329,18 @@ def run_m32_self_check() -> dict[str, object]:
         if not source_unchanged:
             raise AssertionError("the autonomous workflow changed source STEP bytes")
 
+        project_path = Path(temporary) / "m32-self-check.fxd.json"
+        project.save(project_path)
+        restored = FxdProject.load(project_path)
+        persistence_passed = (
+            restored.fixture_build is not None
+            and restored.fixture_build.to_dict() == persisted_plan.to_dict()
+            and restored.product.source_bytes == source_before
+            and restored.product.source_sha256 == source_digest
+        )
+        if not persistence_passed:
+            raise AssertionError("project save/reload did not retain governed M32 evidence")
+
     return {
         "schema": SELF_CHECK_SCHEMA,
         "status": "passed",
@@ -299,6 +368,14 @@ def run_m32_self_check() -> dict[str, object]:
         },
         "fixture_build_validation": {
             "status": validation.status,
+            "finding_totals": {
+                severity: sum(1 for item in validation.findings if item.severity == severity)
+                for severity in ("error", "warning", "info")
+            },
+            "disposition_totals": {
+                disposition: sum(1 for item in validation.findings if item.disposition == disposition)
+                for disposition in ("authoring_blocker", "review_blocker", "export_blocker", "warning", "informational")
+            },
             "review_blocker_rule_ids": sorted(
                 item.rule_id for item in validation.findings if item.disposition == "review_blocker"
             ),
@@ -306,6 +383,7 @@ def run_m32_self_check() -> dict[str, object]:
         },
         "authored_geometry": {
             "real_ocp_component_count": len(authored.components),
+            "product_instance_count": len(layout.stations),
             "tessellated_triangle_count": triangle_count,
             "aabb_fallback_used": False,
             "provisional": authored.provisional,
@@ -314,6 +392,11 @@ def run_m32_self_check() -> dict[str, object]:
         "release_gates": {
             "engineering_approval_blocked": approval_blocked,
             "release_export_blocked": export_blocked,
+        },
+        "project_persistence": {
+            "passed": persistence_passed,
+            "fixture_build_retained": True,
+            "source_cad_unchanged": True,
         },
         "human_engineering_review_required": [
             "fixture practicality",
@@ -329,24 +412,46 @@ def run_m32_self_check() -> dict[str, object]:
     }
 
 
-def write_report(destination: Path) -> dict[str, object]:
-    """Run the scenario and atomically persist only redacted acceptance evidence."""
-    report = run_m32_self_check()
+def _write_json(destination: Path, report: dict[str, object]) -> None:
     destination.parent.mkdir(parents=True, exist_ok=True)
     temporary = destination.with_suffix(destination.suffix + ".tmp")
     temporary.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     temporary.replace(destination)
+
+
+def write_report(destination: Path, *, artifact_directory: Path | None = None) -> dict[str, object]:
+    """Run the scenario and atomically persist only redacted acceptance evidence."""
+    try:
+        report = run_m32_self_check()
+        artifacts = artifact_directory or destination.parent
+        artifacts.mkdir(parents=True, exist_ok=True)
+        screenshot_name = "m32-self-check-evidence.png"
+        _write_summary_screenshot(report, artifacts / screenshot_name)
+        report["evidence_artifacts"] = {"summary_screenshot": screenshot_name}
+    except Exception as error:
+        report = {
+            "schema": SELF_CHECK_SCHEMA,
+            "status": "failed",
+            "network_provider_used": False,
+            "failure_category": _safe_failure_category(error),
+        }
+    _write_json(destination, report)
     return report
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run the offline M32 software self-check.")
     parser.add_argument("--report", type=Path, required=True, help="Destination for the redacted JSON report.")
+    parser.add_argument("--artifact-directory", type=Path, help="External directory for the evidence screenshot.")
     args = parser.parse_args(argv)
-    report = write_report(args.report)
-    print("FXD_M32_SELF_CHECK=passed")
-    print(f"FXD_M32_SELF_CHECK_SCHEMA={report['schema']}")
-    return 0
+    report = write_report(args.report, artifact_directory=args.artifact_directory)
+    if report["status"] == "passed":
+        print("FXD_M32_SELF_CHECK=passed")
+        print(f"FXD_M32_SELF_CHECK_SCHEMA={report['schema']}")
+        return 0
+    print("FXD_M32_SELF_CHECK=failed")
+    print(f"FXD_M32_FAILURE_CATEGORY={report['failure_category']}")
+    return 1
 
 
 if __name__ == "__main__":

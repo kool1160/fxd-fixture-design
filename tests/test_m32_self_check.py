@@ -5,8 +5,9 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
-from scripts.m32_self_check import SELF_CHECK_SCHEMA, main, run_m32_self_check
+from scripts.m32_self_check import SELF_CHECK_SCHEMA, main, run_m32_self_check, write_report
 
 
 def _keys(value: object) -> set[str]:
@@ -33,14 +34,19 @@ class M32SelfCheckTests(unittest.TestCase):
         self.assertTrue(report["authored_geometry"]["provisional"])
         self.assertFalse(report["authored_geometry"]["aabb_fallback_used"])
         self.assertGreater(report["authored_geometry"]["tessellated_triangle_count"], 0)
+        self.assertEqual(report["authored_geometry"]["product_instance_count"], 4)
         self.assertTrue(report["release_gates"]["engineering_approval_blocked"])
         self.assertTrue(report["release_gates"]["release_export_blocked"])
+        self.assertTrue(report["project_persistence"]["passed"])
 
     def test_cli_report_is_redacted_and_contains_no_source_payload(self):
         with tempfile.TemporaryDirectory() as directory:
             destination = Path(directory) / "m32-self-check.json"
-            self.assertEqual(main(["--report", str(destination)]), 0)
+            self.assertEqual(main(["--report", str(destination), "--artifact-directory", directory]), 0)
             report = json.loads(destination.read_text(encoding="utf-8"))
+            screenshot = Path(directory) / report["evidence_artifacts"]["summary_screenshot"]
+            self.assertTrue(screenshot.is_file())
+            self.assertEqual(screenshot.read_bytes()[:8], b"\x89PNG\r\n\x1a\n")
 
         forbidden = {
             "source_bytes", "source_step_base64", "source_sha256", "step_bytes",
@@ -50,3 +56,18 @@ class M32SelfCheckTests(unittest.TestCase):
         self.assertEqual(report["authored_geometry"]["labels"], [
             "PROVISIONAL", "NOT APPROVED", "INVALID BUILD PLAN",
         ])
+
+    def test_failure_report_uses_only_an_allowlisted_category(self):
+        with tempfile.TemporaryDirectory() as directory:
+            destination = Path(directory) / "m32-self-check.json"
+            with patch(
+                "scripts.m32_self_check.run_m32_self_check",
+                side_effect=AssertionError("synthetic source details must not be persisted"),
+            ):
+                report = write_report(destination)
+            persisted = json.loads(destination.read_text(encoding="utf-8"))
+
+        self.assertEqual(report["status"], "failed")
+        self.assertEqual(report["failure_category"], "deterministic_contract_assertion_failed")
+        self.assertEqual(persisted, report)
+        self.assertNotIn("synthetic source details", json.dumps(persisted))

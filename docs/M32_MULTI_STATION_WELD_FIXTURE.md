@@ -69,8 +69,11 @@ automates STEP import, exact planar bottom/front orientation acceptance,
 deterministic analysis, concept generation, the explicit 5-to-4 station-fit
 acceptance at a 1219.2 mm maximum length, build validation, real OCP authoring,
 provisional labels, and approval/export release gates. It also runs focused M32
-and Qt controller coverage, `compileall`, and the full Python suite. Its
-redacted JSON report is retained under `%TEMP%`; it contains no STEP bytes,
+and Qt controller coverage, PowerShell runner regression coverage,
+`compileall`, the full Python suite, and the governed offline/real-kernel CI
+contracts. The scenario saves and reloads its synthetic project before
+attesting source immutability, and writes a headless evidence-snapshot PNG and
+redacted JSON report under `%TEMP%`. Neither artifact contains STEP bytes,
 source identities, provider content, credentials, or customer data.
 
 Every child process is forced offline, so the command cannot select an AI
