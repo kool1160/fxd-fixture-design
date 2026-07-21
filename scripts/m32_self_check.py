@@ -274,6 +274,7 @@ def _run_m32_scenario(directory: Path) -> tuple[dict[str, object], Path, Path]:
             unloading_direction_source=orientation.manufacturing_vector_to_source(Vec3(0.0, 1.0, 0.0)),
             operator_loading_direction_source=orientation.manufacturing_vector_to_source(Vec3(0.0, 1.0, 0.0)),
             clamp_operating_direction_source=orientation.manufacturing_vector_to_source(Vec3(0.0, 1.0, 0.0)),
+            manufacturing_up_direction_source=orientation.manufacturing_z_source,
             manufacturing_orientation_identity=orientation.identity,
     )
     fit = propose_multi_station_fit(product, requested)

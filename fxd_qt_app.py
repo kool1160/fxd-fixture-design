@@ -4504,6 +4504,7 @@ class FxdWorkbenchWindow(QMainWindow):
             unloading_direction_source=unloading_source,
             operator_loading_direction_source=operator_source,
             clamp_operating_direction_source=clamp_source,
+            manufacturing_up_direction_source=orientation.manufacturing_z_source,
             manufacturing_orientation_identity=orientation.identity,
         )
 

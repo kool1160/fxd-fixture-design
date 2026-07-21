@@ -12,6 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from enum import Enum
 import hashlib
+import itertools
 import json
 import math
 import re
@@ -459,6 +460,7 @@ class MultiStationRequirements:
     unloading_direction_source: Vec3 | None = None
     operator_loading_direction_source: Vec3 | None = None
     clamp_operating_direction_source: Vec3 | None = None
+    manufacturing_up_direction_source: Vec3 | None = None
     manufacturing_orientation_identity: str | None = None
 
     def __post_init__(self) -> None:
@@ -509,6 +511,7 @@ class MultiStationRequirements:
             "unloading_direction_source": self.unloading_direction_source.__dict__ if self.unloading_direction_source else None,
             "operator_loading_direction_source": self.operator_loading_direction_source.__dict__ if self.operator_loading_direction_source else None,
             "clamp_operating_direction_source": self.clamp_operating_direction_source.__dict__ if self.clamp_operating_direction_source else None,
+            "manufacturing_up_direction_source": self.manufacturing_up_direction_source.__dict__ if self.manufacturing_up_direction_source else None,
             "manufacturing_orientation_identity": self.manufacturing_orientation_identity,
         }
 
@@ -528,6 +531,7 @@ class MultiStationRequirements:
             Vec3(**data["unloading_direction_source"]) if data.get("unloading_direction_source") else None,
             Vec3(**data["operator_loading_direction_source"]) if data.get("operator_loading_direction_source") else None,
             Vec3(**data["clamp_operating_direction_source"]) if data.get("clamp_operating_direction_source") else None,
+            Vec3(**data["manufacturing_up_direction_source"]) if data.get("manufacturing_up_direction_source") else None,
             data.get("manufacturing_orientation_identity"),
         )
 
@@ -1471,34 +1475,40 @@ def _torch_body_envelope(intent: ConfirmedWeldIntent, translation: Vec3) -> Aabb
     )
 
 
-def _clamp_review_bounds(product: Aabb, operator_outward: Vec3) -> tuple[Aabb, Aabb, Aabb]:
-    """Return connected bracket, closed clamp, and open operating envelope."""
-    operator_outward = _unit_direction(operator_outward, "clamp operating direction")
-    # Review geometry is AABB-based.  Use the dominant source-coordinate
-    # horizontal component after orientation conversion; never reinterpret a
-    # manufacturing token as a source axis.
-    if abs(operator_outward.z) > max(abs(operator_outward.x), abs(operator_outward.y)):
-        raise FixtureBuildError("clamp operating side cannot be normal to the source fixture plane")
-    if abs(operator_outward.x) >= abs(operator_outward.y):
-        operator_outward = Vec3(1.0 if operator_outward.x >= 0.0 else -1.0, 0.0, 0.0)
-    else:
-        operator_outward = Vec3(0.0, 1.0 if operator_outward.y >= 0.0 else -1.0, 0.0)
+def _oriented_box_envelope(center: Vec3, axes: tuple[Vec3, Vec3, Vec3],
+                           half_sizes: tuple[float, float, float]) -> Aabb:
+    points = tuple(
+        Vec3(
+            center.x + sum(axis.x * half * sign for axis, half, sign in zip(axes, half_sizes, signs)),
+            center.y + sum(axis.y * half * sign for axis, half, sign in zip(axes, half_sizes, signs)),
+            center.z + sum(axis.z * half * sign for axis, half, sign in zip(axes, half_sizes, signs)),
+        )
+        for signs in itertools.product((-1.0, 1.0), repeat=3)
+    )
+    return Aabb(
+        Vec3(*(min(getattr(point, name) for point in points) for name in ("x", "y", "z"))),
+        Vec3(*(max(getattr(point, name) for point in points) for name in ("x", "y", "z"))),
+    )
+
+
+def _cardinal_clamp_review_bounds(product: Aabb, outward: Vec3) -> tuple[Aabb, Aabb, Aabb]:
+    """Preserve the proven source-XY layout when the accepted basis is exactly cardinal."""
     z0, z1 = 0.0, product.maximum.z
-    if operator_outward.y > 0:
+    if outward.y > 0:
         bracket = Aabb(Vec3(product.maximum.x + 4.0, product.maximum.y + 12.0, z0),
                        Vec3(product.maximum.x + 28.0, product.maximum.y + 38.0, z1 + 30.0))
         closed = Aabb(Vec3(product.maximum.x - 10.0, product.maximum.y - 8.0, z1 - 10.0),
                       Vec3(product.maximum.x + 22.0, product.maximum.y + 26.0, z1 + 22.0))
         opened = Aabb(Vec3(product.maximum.x + 12.0, product.maximum.y + 14.0, z1 + 12.0),
                       Vec3(product.maximum.x + 60.0, product.maximum.y + 46.0, z1 + 72.0))
-    elif operator_outward.y < 0:
+    elif outward.y < 0:
         bracket = Aabb(Vec3(product.maximum.x + 4.0, product.minimum.y - 38.0, z0),
                        Vec3(product.maximum.x + 28.0, product.minimum.y - 12.0, z1 + 30.0))
         closed = Aabb(Vec3(product.maximum.x - 10.0, product.minimum.y - 26.0, z1 - 10.0),
                       Vec3(product.maximum.x + 22.0, product.minimum.y + 8.0, z1 + 22.0))
         opened = Aabb(Vec3(product.maximum.x + 12.0, product.minimum.y - 46.0, z1 + 12.0),
                       Vec3(product.maximum.x + 60.0, product.minimum.y - 14.0, z1 + 72.0))
-    elif operator_outward.x > 0:
+    elif outward.x > 0:
         bracket = Aabb(Vec3(product.maximum.x + 12.0, product.maximum.y + 4.0, z0),
                        Vec3(product.maximum.x + 38.0, product.maximum.y + 28.0, z1 + 30.0))
         closed = Aabb(Vec3(product.maximum.x - 8.0, product.maximum.y - 10.0, z1 - 10.0),
@@ -1512,6 +1522,49 @@ def _clamp_review_bounds(product: Aabb, operator_outward: Vec3) -> tuple[Aabb, A
                       Vec3(product.minimum.x + 8.0, product.maximum.y + 22.0, z1 + 22.0))
         opened = Aabb(Vec3(product.minimum.x - 46.0, product.maximum.y + 12.0, z1 + 12.0),
                       Vec3(product.minimum.x - 14.0, product.maximum.y + 60.0, z1 + 72.0))
+    return bracket, closed, opened
+
+
+def _clamp_review_bounds(product: Aabb, operator_outward: Vec3,
+                         manufacturing_up: Vec3) -> tuple[Aabb, Aabb, Aabb]:
+    """Return conservative source AABBs without snapping the accepted basis."""
+    outward = _unit_direction(operator_outward, "clamp operating direction")
+    up = _unit_direction(manufacturing_up, "manufacturing up direction")
+    if abs(outward.x * up.x + outward.y * up.y + outward.z * up.z) > 1e-6:
+        raise FixtureBuildError("clamp operating direction must be perpendicular to manufacturing up")
+    if (abs(up.x) <= 1e-9 and abs(up.y) <= 1e-9 and up.z > 1.0 - 1e-9
+            and abs(outward.z) <= 1e-9
+            and (abs(abs(outward.x) - 1.0) <= 1e-9
+                 or abs(abs(outward.y) - 1.0) <= 1e-9)):
+        return _cardinal_clamp_review_bounds(product, outward)
+    lateral = _unit_direction(_cross(up, outward), "clamp lateral direction")
+    center = Vec3(
+        (product.minimum.x + product.maximum.x) * 0.5,
+        (product.minimum.y + product.maximum.y) * 0.5,
+        (product.minimum.z + product.maximum.z) * 0.5,
+    )
+    half = Vec3(
+        (product.maximum.x - product.minimum.x) * 0.5,
+        (product.maximum.y - product.minimum.y) * 0.5,
+        (product.maximum.z - product.minimum.z) * 0.5,
+    )
+    radius = lambda axis: abs(axis.x) * half.x + abs(axis.y) * half.y + abs(axis.z) * half.z
+    outward_radius, up_radius = radius(outward), radius(up)
+    shifted = lambda distance, lift: Vec3(
+        center.x + outward.x * distance + up.x * lift,
+        center.y + outward.y * distance + up.y * lift,
+        center.z + outward.z * distance + up.z * lift,
+    )
+    axes = (outward, lateral, up)
+    bracket = _oriented_box_envelope(
+        shifted(outward_radius + 25.0, 9.0), axes, (13.0, 12.0, up_radius + 21.0),
+    )
+    closed = _oriented_box_envelope(
+        shifted(outward_radius + 9.0, up_radius), axes, (17.0, 16.0, 16.0),
+    )
+    opened = _oriented_box_envelope(
+        shifted(outward_radius + 30.0, up_radius + 42.0), axes, (24.0, 16.0, 30.0),
+    )
     return bracket, closed, opened
 
 
@@ -1704,6 +1757,7 @@ def generate_multi_station_fixture_build_plan(
         multi_station.unloading_direction_source,
         multi_station.operator_loading_direction_source,
         multi_station.clamp_operating_direction_source,
+        multi_station.manufacturing_up_direction_source,
     )
     if any(value is None for value in source_directions):
         raise FixtureBuildError(
@@ -1713,6 +1767,7 @@ def generate_multi_station_fixture_build_plan(
     unload_direction = _unit_direction(source_directions[1], "unloading direction")
     operator_outward = _unit_direction(source_directions[2], "operator loading side")
     clamp_outward = _unit_direction(source_directions[3], "clamp operating side")
+    manufacturing_up = _unit_direction(source_directions[4], "manufacturing up direction")
     loading_outward = Vec3(-insertion_direction.x, -insertion_direction.y, -insertion_direction.z)
     clamp_review: dict[str, tuple[Aabb, Aabb, Aabb]] = {}
     for station in layout.stations:
@@ -1786,7 +1841,7 @@ def generate_multi_station_fixture_build_plan(
             rule_ids=("FXD-LOC-001", "FXD-DST-001", "FXD-M32-STA"), fixed=True, locating=True,
             replaceable=True, maintenance_access=True, evidence=(f"station={station.identity}", "Longitudinal location is explicit and replaceable."),
         ))
-        bracket, clamp, open_envelope = _clamp_review_bounds(box, clamp_outward)
+        bracket, clamp, open_envelope = _clamp_review_bounds(box, clamp_outward, manufacturing_up)
         components.append(_component(
             f"{prefix}-clamp-bracket", f"FXD-M32-{station.station_index:02d}40",
             f"station {station.station_index} toggle-clamp mounting bracket", BuildComponentRole.CLAMP_BRACKET,
@@ -2021,6 +2076,7 @@ def _multi_station_findings(plan: FixtureBuildPlan) -> tuple[FixtureBuildFinding
     if len(braces) < 2:
         findings.append(_finding("FXD-M32-CON", "error", "upright datum structure requires end braces", disposition="review_blocker"))
     component_ids = {item.identity for item in plan.components}
+    expected_weld_identities = tuple(item.identity for item in plan.requirements.confirmed_welds)
     for station in layout.stations:
         prefix = station.identity + "-"
         station_components = tuple(item for item in plan.components if item.identity.startswith(prefix))
@@ -2046,6 +2102,37 @@ def _multi_station_findings(plan: FixtureBuildPlan) -> tuple[FixtureBuildFinding
                                          components=(station.identity,),
                                          evidence=station.access_evidence,
                                          disposition="review_blocker"))
+        result_identities = tuple(item.joint_identity for item in station.weld_access_results)
+        result_identity_set = set(result_identities)
+        expected_identity_set = set(expected_weld_identities)
+        exact_weld_result_set = (
+            len(result_identities) == len(expected_weld_identities)
+            and len(result_identity_set) == len(result_identities)
+            and result_identity_set == expected_identity_set
+        )
+        if expected_weld_identities and not exact_weld_result_set:
+            findings.append(_finding(
+                "FXD-M32-ACC", "error",
+                "station weld/torch access results do not cover every confirmed joint exactly once",
+                components=(station.identity,), evidence=station.access_evidence,
+                disposition="review_blocker",
+            ))
+        elif not expected_weld_identities and result_identities:
+            findings.append(_finding(
+                "FXD-M32-ACC", "error",
+                "station contains weld/torch access results without confirmed joint evidence",
+                components=(station.identity,), evidence=station.access_evidence,
+                disposition="review_blocker",
+            ))
+        if exact_weld_result_set and expected_weld_identities:
+            aggregate = all(item.clear for item in station.weld_access_results)
+            if station.weld_access_clear is not aggregate:
+                findings.append(_finding(
+                    "FXD-M32-ACC", "error",
+                    "station weld/torch aggregate disagrees with its per-joint results",
+                    components=(station.identity,), evidence=station.access_evidence,
+                    disposition="review_blocker",
+                ))
         if station.weld_access_results:
             for result in station.weld_access_results:
                 if not result.clear:

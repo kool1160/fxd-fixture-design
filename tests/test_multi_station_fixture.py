@@ -79,7 +79,8 @@ class MultiStationFixtureTests(unittest.TestCase):
                              loading_source=Vec3(0.0, -1.0, 0.0),
                              unloading_source=Vec3(-1.0, 0.0, 0.0),
                              operator_source=Vec3(0.0, 1.0, 0.0),
-                             clamp_source=Vec3(0.0, 1.0, 0.0)):
+                             clamp_source=Vec3(0.0, 1.0, 0.0),
+                             up_source=Vec3(0.0, 0.0, 1.0)):
         product = product or self.product
         orientation = source_orientation(product.source_sha256, accepted=True)
         return MultiStationRequirements(
@@ -90,6 +91,7 @@ class MultiStationFixtureTests(unittest.TestCase):
             unloading_direction_source=unloading_source,
             operator_loading_direction_source=operator_source,
             clamp_operating_direction_source=clamp_source,
+            manufacturing_up_direction_source=up_source,
             manufacturing_orientation_identity=orientation.identity,
         )
 
@@ -355,6 +357,7 @@ class MultiStationFixtureTests(unittest.TestCase):
             unloading_direction_source=orientation.manufacturing_vector_to_source(manufacturing_unload),
             operator_loading_direction_source=orientation.manufacturing_vector_to_source(manufacturing_operator),
             clamp_operating_direction_source=orientation.manufacturing_vector_to_source(manufacturing_operator),
+            manufacturing_up_direction_source=orientation.manufacturing_z_source,
             manufacturing_orientation_identity=orientation.identity,
         )
         plan = generate_multi_station_fixture_build_plan(
@@ -382,6 +385,7 @@ class MultiStationFixtureTests(unittest.TestCase):
             unloading_direction_source=flipped.manufacturing_vector_to_source(Vec3(0.0, 1.0, 0.0)),
             operator_loading_direction_source=flipped_operator,
             clamp_operating_direction_source=flipped_operator,
+            manufacturing_up_direction_source=flipped.manufacturing_z_source,
             manufacturing_orientation_identity=flipped.identity,
         )
         flipped_weld = replace(
@@ -396,6 +400,56 @@ class MultiStationFixtureTests(unittest.TestCase):
         )
         self.assertEqual(flipped_plan.multi_station_layout.stations[0].operator_direction_source,
                          flipped_operator)
+
+    def test_source_z_and_oblique_clamp_directions_preserve_the_accepted_basis(self):
+        for plane, rotation in ((ReferencePlane.FRONT, 0.0), (ReferencePlane.TOP, 37.0)):
+            with self.subTest(plane=plane.value, rotation=rotation):
+                orientation = reference_plane_orientation(
+                    self.product.source_sha256, plane,
+                    rotation_degrees=rotation, accepted=True,
+                )
+                operator = orientation.manufacturing_vector_to_source(Vec3(0.0, 1.0, 0.0))
+                up = orientation.manufacturing_z_source
+                weld = replace(
+                    self.build_requirements().confirmed_welds[0],
+                    approach_direction_manufacturing=Vec3(0.0, 1.0, 0.0),
+                    approach_direction_source=operator,
+                    manufacturing_orientation_identity=orientation.identity,
+                )
+                station_requirements = replace(
+                    self.station_requirements(count=4),
+                    loading_direction_source=orientation.manufacturing_vector_to_source(Vec3(0.0, -1.0, 0.0)),
+                    unloading_direction_source=operator,
+                    operator_loading_direction_source=operator,
+                    clamp_operating_direction_source=operator,
+                    manufacturing_up_direction_source=up,
+                    manufacturing_orientation_identity=orientation.identity,
+                )
+                plan = generate_multi_station_fixture_build_plan(
+                    self.product, self.concept, self.build_requirements(welds=(weld,)),
+                    station_requirements,
+                )
+                station = plan.multi_station_layout.stations[0]
+                self.assertEqual(station.operator_direction_source, operator)
+                self.assertEqual(plan.multi_station_layout.requirements.clamp_operating_direction_source,
+                                 operator)
+                opened = next(item for item in plan.components
+                              if item.identity == f"{station.identity}-clamp-open-envelope")
+                product_center = Vec3(
+                    (station.product_bounds.minimum.x + station.product_bounds.maximum.x) * 0.5,
+                    (station.product_bounds.minimum.y + station.product_bounds.maximum.y) * 0.5,
+                    (station.product_bounds.minimum.z + station.product_bounds.maximum.z) * 0.5,
+                )
+                opened_center = Vec3(
+                    (opened.bounds.minimum.x + opened.bounds.maximum.x) * 0.5,
+                    (opened.bounds.minimum.y + opened.bounds.maximum.y) * 0.5,
+                    (opened.bounds.minimum.z + opened.bounds.maximum.z) * 0.5,
+                )
+                displacement = Vec3(opened_center.x - product_center.x,
+                                    opened_center.y - product_center.y,
+                                    opened_center.z - product_center.z)
+                self.assertGreater(displacement.x * operator.x + displacement.y * operator.y
+                                   + displacement.z * operator.z, 0.0)
 
     def test_confirmed_torch_approach_and_envelope_change_deterministic_access(self):
         clear_weld = self.build_requirements().confirmed_welds[0]
@@ -446,6 +500,37 @@ class MultiStationFixtureTests(unittest.TestCase):
         self.assertTrue(validation.review_blocked)
         self.assertTrue(any(blocked_weld.identity in item.message for item in validation.findings))
         self.assertFalse(any(clear_weld.identity in item.message for item in validation.findings))
+
+    def test_validation_rejects_missing_duplicate_or_inconsistent_joint_results(self):
+        first = self.build_requirements().confirmed_welds[0]
+        second = replace(first, identity="second-clear-joint", sequence=2)
+        plan = generate_multi_station_fixture_build_plan(
+            self.product, self.concept, self.build_requirements(welds=(first, second)),
+            self.station_requirements(count=4),
+        )
+        layout = plan.multi_station_layout
+        station = layout.stations[0]
+        self.assertEqual(len(station.weld_access_results), 2)
+
+        variants = (
+            replace(station, weld_access_results=station.weld_access_results[:1], weld_access_clear=True),
+            replace(station, weld_access_results=(station.weld_access_results[0],) * 2,
+                    weld_access_clear=True),
+            replace(station, weld_access_clear=not all(item.clear for item in station.weld_access_results)),
+        )
+        expected_messages = (
+            "do not cover every confirmed joint exactly once",
+            "do not cover every confirmed joint exactly once",
+            "aggregate disagrees with its per-joint results",
+        )
+        for variant, expected in zip(variants, expected_messages):
+            with self.subTest(expected=expected):
+                tampered_layout = replace(layout, stations=(variant,) + layout.stations[1:])
+                validation = validate_fixture_build_plan(
+                    self.product, replace(plan, multi_station_layout=tampered_layout),
+                )
+                self.assertTrue(validation.review_blocked)
+                self.assertTrue(any(expected in item.message for item in validation.findings))
 
     def test_candidate_weld_face_is_unconfirmed_until_engineer_records_required_intent(self):
         document = load_step_for_workbench(self.source)
