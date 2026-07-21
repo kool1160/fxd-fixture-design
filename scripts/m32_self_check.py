@@ -1,0 +1,353 @@
+"""Autonomous, offline M32 software-acceptance scenario.
+
+This is deliberately a *software* self-check.  It creates a legally shareable
+synthetic STEP assembly in a temporary directory, drives the deterministic M32
+workflow, and writes a redacted report.  It never imports customer CAD, calls a
+provider, or makes a production/safety claim.
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import tempfile
+from dataclasses import replace
+from hashlib import sha256
+from pathlib import Path
+from typing import Any, Iterable
+
+from fxd_geometry import (
+    AdjustmentState,
+    AnnotationRole,
+    ConstructionMethod,
+    FixtureBuildError,
+    FixtureFamily,
+    FixtureLifecycle,
+    FixturePurpose,
+    GeometryReference,
+    InteractiveWorkflow,
+    MultiStationRequirements,
+    OcpKernel,
+    ProcessSetup,
+    Vec3,
+    analyze_engineering_workflow,
+    author_fixture_build,
+    build_fixture_build_package,
+    face_annotation,
+    load_step_for_workbench,
+    product_from_workbench_document,
+    propose_multi_station_fit,
+    validate_fixture_build_plan,
+)
+from fxd_geometry.fabrication_workflow import (
+    FixtureBuildRequirements,
+    generate_multi_station_fixture_alternatives,
+)
+from fxd_geometry.manufacturing_orientation import orientation_from_faces
+from fxd_geometry.project import ProjectFormatError
+
+
+SELF_CHECK_SCHEMA = "fxd-m32-self-check-v1"
+_PROVISIONAL_LABELS = ("PROVISIONAL", "NOT APPROVED", "INVALID BUILD PLAN")
+
+
+def _reference(component: object, face: object) -> GeometryReference:
+    """Construct the same stable body identity as product normalization."""
+    component_identity = str(getattr(component, "reference"))
+    return GeometryReference(
+        component_identity,
+        "body:" + sha256(component_identity.encode("utf-8")).hexdigest()[:20],
+        str(getattr(face, "reference")),
+    )
+
+
+def _dot(left: Iterable[float], right: Iterable[float]) -> float:
+    return sum(a * b for a, b in zip(left, right))
+
+
+def _selected_orientation_references(document: object) -> tuple[GeometryReference, GeometryReference, tuple[GeometryReference, ...], bool]:
+    """Choose a stable planar bottom/front pair from the generated public model."""
+    candidates: list[tuple[object, object, GeometryReference]] = []
+    for component in document.assembly.components:
+        for face in component.faces:
+            if face.is_planar:
+                candidates.append((component, face, _reference(component, face)))
+    horizontal = [
+        item for item in candidates
+        if abs(float(item[1].normal[2])) >= 0.999
+    ]
+    if not horizontal:
+        raise AssertionError("self-check STEP has no confirmed planar horizontal face")
+    # The lower horizontal face is the generated fixture-down candidate.  Flip
+    # only when its OCP normal points downward so manufacturing +Z is upward.
+    _bottom_component, bottom_face, bottom_reference = min(
+        horizontal, key=lambda item: float(item[1].center_mm[2])
+    )
+    bottom_normal = tuple(float(value) for value in bottom_face.normal)
+    front = next(
+        (
+            item for item in candidates
+            if item[2] != bottom_reference
+            and abs(_dot(bottom_normal, tuple(float(value) for value in item[1].normal))) <= 1e-7
+        ),
+        None,
+    )
+    if front is None:
+        raise AssertionError("self-check STEP has no non-parallel planar front face")
+    references = tuple(item[2] for item in candidates)
+    return bottom_reference, front[2], references, bottom_normal[2] < 0.0
+
+
+def _public_source(kernel: OcpKernel, directory: Path) -> tuple[Path, bytes]:
+    """Create a two-piece, legally shareable fabricated-bracket STEP assembly."""
+    horizontal = kernel.make_box((0.0, 0.0, 0.0), (120.0, 38.0, 5.0))
+    upright = kernel.make_box((0.0, 0.0, 5.0), (5.0, 38.0, 62.0))
+    source_bytes = kernel.export_step(kernel.compound((horizontal, upright)))
+    path = directory / "m32_public_self_check_bracket.step"
+    path.write_bytes(source_bytes)
+    return path, source_bytes
+
+
+def _fixture_build_requirements(source_sha256: str) -> FixtureBuildRequirements:
+    return FixtureBuildRequirements(
+        source_sha256=source_sha256,
+        fixture_purpose=FixturePurpose.FULL_WELD,
+        construction_method=ConstructionMethod.LASER_CUT_FABRICATED,
+        lifecycle=FixtureLifecycle.PERMANENT,
+        job_revision="M32-SELF-CHECK",
+        fixture_revision="A",
+        production_quantity=100,
+        repeat_frequency="repeat production",
+        weld_process="manual MIG",
+        shop_capabilities=("laser cutting", "fixture welding", "machining"),
+        tack_access_available=None,
+        full_weld_access_available=True,
+        unload_clearance_evaluated=True,
+        adjustment_state=AdjustmentState.LOCKED,
+        assumptions=(
+            "Synthetic public software-acceptance geometry; dimensions are not shop release inputs.",
+            "Weld interfaces remain unconfirmed until an engineer records actual weld intent.",
+        ),
+        # The intentionally missing weld intent proves provisional review
+        # authoring and the approval/export release gates.
+        confirmed_weld_intent=False,
+    )
+
+
+def _expect_blocked(action: Any, expected: type[Exception]) -> bool:
+    try:
+        action()
+    except expected:
+        return True
+    raise AssertionError("a fail-closed release gate unexpectedly allowed the action")
+
+
+def run_m32_self_check() -> dict[str, object]:
+    """Execute the fully deterministic M32 scenario and return a redacted report."""
+    kernel = OcpKernel()
+    with tempfile.TemporaryDirectory(prefix="fxd-m32-self-check-") as temporary:
+        source_path, source_before = _public_source(kernel, Path(temporary))
+        source_digest = sha256(source_before).hexdigest()
+        document = load_step_for_workbench(source_path)
+        product = product_from_workbench_document(document)
+        if document.source_sha256 != source_digest or product.source_sha256 != source_digest:
+            raise AssertionError("STEP import did not retain its immutable source identity")
+
+        bottom, front, planar_references, flip_bottom = _selected_orientation_references(document)
+        orientation = orientation_from_faces(
+            document, bottom, front, flip_bottom=flip_bottom, accepted=True,
+        )
+        if not orientation.accepted or orientation.is_stale_for(product.source_sha256):
+            raise AssertionError("guided bottom/front orientation was not accepted for the imported source")
+
+        roles = (
+            AnnotationRole.PRIMARY_DATUM,
+            AnnotationRole.SECONDARY_DATUM,
+            AnnotationRole.TERTIARY_DATUM,
+        )
+        if len(planar_references) < len(roles):
+            raise AssertionError("self-check STEP has insufficient planar datum evidence")
+        workflow = InteractiveWorkflow(
+            product.source_sha256,
+            ProcessSetup(
+                project_name="M32 public software self-check",
+                fixture_type="Full weld fixture",
+                manufacturing_process="Manual MIG",
+                operation_mode="Manual",
+                production_quantity=100,
+                operator_access="Synthetic operator-side review envelope",
+                shop_capabilities=("laser cutting", "fixture welding", "machining"),
+                material_assumptions="Synthetic low-carbon steel review assembly",
+                manufacturing_orientation=orientation,
+                manufacturing_build_direction=Vec3(0.0, 0.0, 1.0),
+                manufacturing_loading_direction=Vec3(1.0, 0.0, 0.0),
+                manufacturing_unloading_direction=Vec3(-1.0, 0.0, 0.0),
+                fixture_family=FixtureFamily.LINEAR_MULTI_STATION_WELD.value,
+                requested_station_count=5,
+                maximum_fixture_length_mm=1219.2,
+                operator_loading_side="Operator front (+Y)",
+                clamp_operating_side="Operator front (+Y)",
+                table_mounting_preference="Table mounting holes",
+                compare_one_up_and_multi_up=True,
+            ),
+            tuple(
+                face_annotation(document, reference, role)
+                for reference, role in zip(planar_references, roles)
+            ),
+        )
+        project = analyze_engineering_workflow(document, workflow)
+        if project.workflow is None or not project.workflow.analysis_completed:
+            raise AssertionError("assembly analysis did not complete through the shared workflow command")
+        workflow = replace(project.workflow, concepts_generated=True, active_stage="Concepts")
+        project = project.with_workflow(workflow)
+
+        requested = MultiStationRequirements(
+            FixtureFamily.LINEAR_MULTI_STATION_WELD,
+            5,
+            1219.2,
+            None,
+            "Operator front (+Y)",
+            "-X",
+            "Operator front (+Y)",
+            "manual",
+            "Table mounting holes",
+            100,
+            True,
+        )
+        fit = propose_multi_station_fit(product, requested)
+        if (fit.requested_station_count, fit.feasible_station_count) != (5, 4):
+            raise AssertionError("the governed 5-station request did not propose the expected 4-station fit")
+        if not fit.requires_explicit_acceptance:
+            raise AssertionError("station-count reduction was not kept behind explicit acceptance")
+        accepted = replace(
+            requested,
+            requested_station_count=fit.feasible_station_count,
+            requested_intent_station_count=fit.requested_station_count,
+        )
+        alternatives = generate_multi_station_fixture_alternatives(
+            product, project.active, _fixture_build_requirements(product.source_sha256), accepted,
+        )
+        plan = alternatives[-1]
+        layout = plan.multi_station_layout
+        if layout is None or len(layout.stations) != 4:
+            raise AssertionError("accepted feasible station count was not used for the fixture build plan")
+        if layout.requirements.requested_intent_station_count != 5:
+            raise AssertionError("original 5-station engineering intent was silently overwritten")
+        if layout.required_fixture_length_mm > 1219.2:
+            raise AssertionError("accepted fixture layout exceeds its maximum fixture length")
+        if layout.requested_intent_required_length_mm is None or layout.requested_intent_required_length_mm <= 1219.2:
+            raise AssertionError("requested station intent lacks explicit infeasible-length evidence")
+
+        project = project.with_fixture_build(plan)
+        validation = validate_fixture_build_plan(product, plan)
+        weld_finding = next((item for item in validation.findings if item.rule_id == "FXD-WLD-001"), None)
+        if weld_finding is None or weld_finding.disposition != "review_blocker":
+            raise AssertionError("unconfirmed weld intent did not remain a visible review blocker")
+        if validation.authoring_blocked:
+            raise AssertionError("review-only M32 finding incorrectly blocked safe OCP authoring")
+
+        authored = author_fixture_build(plan, product, kernel)
+        if not authored.provisional or authored.review_labels != _PROVISIONAL_LABELS:
+            raise AssertionError("provisional review geometry was not unmistakably labelled")
+        triangle_count = sum(
+            len(mesh.triangles)
+            for component in authored.components
+            for mesh in kernel.tessellate(component.shape)
+        )
+        if not authored.components or triangle_count < 1 or not all(item.topology.solids >= 1 for item in authored.components):
+            raise AssertionError("fixture authoring did not produce real OCP solids and tessellation evidence")
+
+        persisted_plan = replace(plan, authoring_state="provisional")
+        project = project.with_fixture_build(persisted_plan)
+        export_blocked = _expect_blocked(
+            lambda: build_fixture_build_package(authored, persisted_plan), FixtureBuildError,
+        )
+        approval_blocked = _expect_blocked(
+            lambda: project.decide("approve_for_review"), ProjectFormatError,
+        )
+        source_unchanged = (
+            source_path.read_bytes() == source_before
+            and document.source_bytes == source_before
+            and sha256(source_path.read_bytes()).hexdigest() == source_digest
+        )
+        if not source_unchanged:
+            raise AssertionError("the autonomous workflow changed source STEP bytes")
+
+    return {
+        "schema": SELF_CHECK_SCHEMA,
+        "status": "passed",
+        "scenario": "legally shareable synthetic two-piece fabricated bracket",
+        "network_provider_used": False,
+        "step_import": {"passed": True, "source_cad_unchanged": True},
+        "guided_orientation": {
+            "bottom_face_selected": True,
+            "front_face_selected": True,
+            "bottom_flip_applied": flip_bottom,
+            "accepted": True,
+            "source_cad_unchanged": source_unchanged,
+        },
+        "assembly_analysis": {"passed": True, "concept_count": len(project.concepts)},
+        "fixture_build": {
+            "family": FixtureFamily.LINEAR_MULTI_STATION_WELD.value,
+            "requested_station_count": 5,
+            "accepted_feasible_station_count": len(layout.stations),
+            "explicit_reduction_acceptance_required": True,
+            "maximum_fixture_length_mm": 1219.2,
+            "calculated_pitch_mm": layout.station_pitch_mm,
+            "accepted_required_length_mm": layout.required_fixture_length_mm,
+            "requested_required_length_mm": layout.requested_intent_required_length_mm,
+            "original_request_retained": True,
+        },
+        "fixture_build_validation": {
+            "status": validation.status,
+            "review_blocker_rule_ids": sorted(
+                item.rule_id for item in validation.findings if item.disposition == "review_blocker"
+            ),
+            "authoring_blocked": validation.authoring_blocked,
+        },
+        "authored_geometry": {
+            "real_ocp_component_count": len(authored.components),
+            "tessellated_triangle_count": triangle_count,
+            "aabb_fallback_used": False,
+            "provisional": authored.provisional,
+            "labels": list(authored.review_labels),
+        },
+        "release_gates": {
+            "engineering_approval_blocked": approval_blocked,
+            "release_export_blocked": export_blocked,
+        },
+        "human_engineering_review_required": [
+            "fixture practicality",
+            "loading and unloading",
+            "weld access",
+            "locator and clamp suitability",
+            "operator access",
+            "manufacturability",
+            "structural adequacy",
+            "safety",
+            "final production approval",
+        ],
+    }
+
+
+def write_report(destination: Path) -> dict[str, object]:
+    """Run the scenario and atomically persist only redacted acceptance evidence."""
+    report = run_m32_self_check()
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary = destination.with_suffix(destination.suffix + ".tmp")
+    temporary.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    temporary.replace(destination)
+    return report
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Run the offline M32 software self-check.")
+    parser.add_argument("--report", type=Path, required=True, help="Destination for the redacted JSON report.")
+    args = parser.parse_args(argv)
+    report = write_report(args.report)
+    print("FXD_M32_SELF_CHECK=passed")
+    print(f"FXD_M32_SELF_CHECK_SCHEMA={report['schema']}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

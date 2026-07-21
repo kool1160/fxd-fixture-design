@@ -53,3 +53,29 @@ tessellation fails. Product review instances use the immutable source mesh plus
 their stored station transforms. All geometry, validation, and exports remain
 engineering-review-only; no structural capacity, clamp force, weld procedure,
 safety, or production approval is inferred.
+
+## Autonomous Windows software self-check
+
+Run the complete repeatable M32 software scenario from the checked-out M32
+branch with:
+
+```powershell
+powershell.exe -ExecutionPolicy Bypass -File ".\scripts\run_m32_self_check.ps1"
+```
+
+The runner requires a clean worktree and the repository `.venv`. It creates a
+legally shareable synthetic STEP assembly only in a temporary directory, then
+automates STEP import, exact planar bottom/front orientation acceptance,
+deterministic analysis, concept generation, the explicit 5-to-4 station-fit
+acceptance at a 1219.2 mm maximum length, build validation, real OCP authoring,
+provisional labels, and approval/export release gates. It also runs focused M32
+and Qt controller coverage, `compileall`, and the full Python suite. Its
+redacted JSON report is retained under `%TEMP%`; it contains no STEP bytes,
+source identities, provider content, credentials, or customer data.
+
+Every child process is forced offline, so the command cannot select an AI
+provider or make a paid request. It does not launch the GUI. A passing run is
+evidence that the governed software path works; it does not replace qualified
+human judgment of fixture practicality, load/unload, weld access, locator and
+clamp suitability, operator access, manufacturability, structure, safety, or
+final production approval.
