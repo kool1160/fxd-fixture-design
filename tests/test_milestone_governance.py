@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import json
 import subprocess
 import tempfile
 import unittest
@@ -216,6 +217,13 @@ class MilestoneGovernanceTests(unittest.TestCase):
         )
         self.assertNotEqual(0, selected.returncode)
         self.assertIn("Milestone 20 is not Active", selected.stderr)
+
+    def test_hosted_acceptance_fetches_history_and_watches_registry(self) -> None:
+        workflow = json.loads((ROOT / ".github" / "workflows" / "kernel-acceptance.yml").read_text(encoding="utf-8"))
+        steps = workflow["jobs"]["ocp-acceptance"]["steps"]
+        checkout = next(step for step in steps if step["name"] == "Check out repository")
+        self.assertEqual(0, checkout["with"]["fetch-depth"])
+        self.assertIn("docs/MILESTONE_STATE.json", workflow["on"]["pull_request"]["paths"])
 
 
 if __name__ == "__main__":
