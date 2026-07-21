@@ -1,3 +1,4 @@
+<!-- FXD-MILESTONE-STATE: docs/MILESTONE_STATE.json -->
 # FXD — Intelligent Fixturing Design
 
 FXD is an AI-assisted industrial fixture-design platform for manufacturing and fabrication.
@@ -31,14 +32,19 @@ The long-term platform may support welding, robotic/cobot workholding, assembly,
 
 ## Development model
 
-FXD uses a milestone-driven AI Foreman workflow. The Foreman selects one backlog outcome, executes all safe implementation work, validates the repository, and opens a pull request for review. Specialist roles are defined in `docs/AGENT_ROSTER.md`.
+FXD uses a governed milestone-driven AI Foreman workflow. The Foreman selects the sole Active product milestone from `docs/MILESTONE_STATE.json`, loads its authoritative GitHub issue, executes safe in-scope work, validates the repository, and opens a pull request for review. `docs/MILESTONE_CONTRACT.md` governs sequence and completion. Specialist roles are defined in `docs/ENGINEERING_TEAM.md`.
 
 Read these first:
 
 1. `AGENTS.md`
 2. `docs/PRODUCT_DIRECTION.md`
 3. `docs/ENGINEERING_CONSTITUTION.md`
-4. `BACKLOG.md`
+4. `docs/ARCHITECTURE.md`
+5. `docs/ENGINEERING_TEAM.md`
+6. `docs/MILESTONE_CONTRACT.md`
+7. `docs/MILESTONE_STATE.json`
+
+`BACKLOG.md`, the roadmap, strategy handoff, project records, and binders are derived context. They do not own current milestone status.
 
 Foreman setup is documented in `docs/FOREMAN_SETUP.md`.
 

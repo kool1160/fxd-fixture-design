@@ -1,4 +1,10 @@
+<!-- FXD-MILESTONE-STATE: docs/MILESTONE_STATE.json -->
+<!-- FXD-HISTORICAL-MILESTONE-SNAPSHOT -->
 # FXD Professional Project Binder
+
+> Non-authoritative historical snapshot. This binder preserves the record as
+> published; current milestone sequence and status come only from
+> `docs/MILESTONE_STATE.json`.
 
 ## Mission
 

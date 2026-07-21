@@ -9,12 +9,17 @@ Before changing anything, read and obey:
 3. `docs/ENGINEERING_CONSTITUTION.md`
 4. `docs/ARCHITECTURE.md`
 5. `docs/ENGINEERING_TEAM.md`
-6. `BACKLOG.md`
-7. `.fxd/selected-milestone.md`
+6. `docs/MILESTONE_CONTRACT.md`
+7. `docs/MILESTONE_STATE.json`
+8. `.fxd/selected-milestone.md`, including the complete authoritative GitHub issue body
+9. `BACKLOG.md`, `docs/ROADMAP_QUEUE.md`, and `docs/STRATEGY_HANDOFF.md` as derived context only
 
 ## Required behavior
 
 - Treat the selected milestone as one complete engineering outcome.
+- Confirm the selected registry record is the sole Active milestone and its predecessor is Complete or formally Superseded.
+- Treat the linked GitHub issue as the scope and acceptance authority; do not infer work from stale Markdown.
+- Do not select, invent, skip to, or imply a future milestone.
 - Inspect the actual repository before changing it.
 - Identify every engineering discipline materially affected by the milestone.
 - Apply the required questions, ownership boundaries, and conflict rules from `docs/ENGINEERING_TEAM.md`.
@@ -30,7 +35,7 @@ Before changing anything, read and obey:
 - When OCP is unavailable, continue building and testing against the neutral kernel contract, test doubles, deterministic fixtures, and fail-closed behavior. Clearly mark real-kernel acceptance as pending GitHub Actions evidence rather than claiming completion of that acceptance criterion.
 - GitHub Actions is the authoritative environment for installing `cadquery-ocp==7.9.3.1.1` and proving real-kernel acceptance.
 - Fix failures caused by your changes and review the final diff.
-- Update the backlog and project record only when evidence supports the update.
+- Update derived roadmaps or project records only when evidence supports the update; current status changes belong only in the registry and require the milestone contract process.
 - Never add customer/employer geometry, secrets, personal identifiers, proprietary rule packs, or patent-sensitive private material.
 
 ## Protected boundaries
@@ -50,4 +55,4 @@ Prepare all safe code, tests, documents, and exact next steps up to a protected 
 
 ## Completion
 
-Leave the repository in a clean, reviewable state. Your final response must conform to `.github/codex/schemas/planning-handoff.schema.json`.
+Leave the repository in a clean, reviewable state. An implementation PR does not complete the milestone; preserve the separate closeout-PR boundary. Your final response must conform to `.github/codex/schemas/planning-handoff.schema.json`.

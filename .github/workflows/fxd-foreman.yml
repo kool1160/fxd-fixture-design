@@ -24,6 +24,7 @@ jobs:
     timeout-minutes: 90
     permissions:
       contents: read
+      issues: read
     outputs:
       milestone_number: ${{ steps.milestone.outputs.number }}
       milestone_title: ${{ steps.milestone.outputs.title }}
@@ -59,6 +60,20 @@ jobs:
             --number "$REQUESTED_MILESTONE" \
             --context .fxd/selected-milestone.md
           printf '.fxd/\n' >> .git/info/exclude
+
+      - name: Load authoritative milestone issue
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          {
+            printf '\n## Authoritative GitHub issue body\n\n'
+            gh issue view "${{ steps.milestone.outputs.issue_number }}" \
+              --repo "${{ github.repository }}" \
+              --json body \
+              --jq .body
+          } >> .fxd/selected-milestone.md
 
       - name: Read Foreman model default
         id: model

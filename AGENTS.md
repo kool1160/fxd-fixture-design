@@ -7,11 +7,14 @@ All AI coding agents working on FXD must read and follow, in order:
 3. `docs/ENGINEERING_CONSTITUTION.md`
 4. `docs/ARCHITECTURE.md`
 5. `docs/ENGINEERING_TEAM.md`
-6. `BACKLOG.md`
-7. `docs/ROADMAP_QUEUE.md`
-8. `docs/STRATEGY_HANDOFF.md`
+6. `docs/MILESTONE_CONTRACT.md`
+7. `docs/MILESTONE_STATE.json`
+8. the Active milestone's authoritative GitHub issue
+9. `BACKLOG.md`
+10. `docs/ROADMAP_QUEUE.md`
+11. `docs/STRATEGY_HANDOFF.md`
 
-The Engineering Constitution is the highest-priority engineering standard. Product Direction governs what FXD is becoming. The Engineering Team charter defines discipline ownership and collaboration. `BACKLOG.md` controls implementation order through Milestone 20. After Milestone 20, the governed implementation order continues in `docs/ROADMAP_QUEUE.md`. `docs/STRATEGY_HANDOFF.md` records the current cross-chat repository and workflow state but does not override either milestone queue.
+The Engineering Constitution is the highest-priority engineering standard. Product Direction governs what FXD is becoming. Accepted architecture and decision records govern technical boundaries, and the Engineering Team charter defines discipline ownership and collaboration. `docs/MILESTONE_CONTRACT.md` governs milestone sequence and completion. `docs/MILESTONE_STATE.json` is the sole current status projection. The Active milestone issue governs its approved scope. Backlogs, roadmaps, strategy handoffs, project records, workbench guides, and binders are derived context and cannot override those authorities.
 
 ## Product identity
 
@@ -61,18 +64,21 @@ Agents may prepare code, tests, documents, and exact execution plans up to these
 For each milestone:
 
 1. Read the governing documents.
-2. Inspect the repository and report material differences.
-3. Identify the engineering disciplines materially affected.
-4. Apply those specialist perspectives before finalizing implementation decisions.
-5. Complete all safe internal phases.
-6. Add tests or reproducible evidence appropriate to the risk.
-7. Run `bash scripts/ci.sh` and relevant project checks.
-8. Fix failures caused by the work.
-9. Review the final diff.
-10. Update project records only when evidence supports the claim.
-11. Stop only at a real approval boundary or material blocker.
-12. Finish with the structured Planning Handoff required by the Foreman schema.
+2. Validate the registry and confirm exactly one Active product milestone, or a formally paused lane.
+3. Read the complete authoritative milestone issue and any bounded child issues.
+4. Inspect the repository and report material differences.
+5. Identify the engineering disciplines materially affected.
+6. Apply those specialist perspectives before finalizing implementation decisions.
+7. Complete all safe internal phases inside the issue and implementation-PR boundaries.
+8. Add tests or reproducible evidence for every required evidence profile.
+9. Run `bash scripts/ci.sh` and relevant project checks.
+10. Fix failures caused by the work.
+11. Review the final diff.
+12. Update derived records only when evidence supports the update; never change status outside the registry.
+13. Preserve the separate closeout-PR boundary for post-governance milestones.
+14. Stop only at a real approval boundary or material blocker.
+15. Finish with the structured Planning Handoff required by the Foreman schema.
 
 ## Completion standard
 
-A milestone is not complete because a plan exists. Completion requires implementation or research evidence matching the milestone acceptance criteria, with changed files, checks, discipline impacts, risks, disagreements, and unresolved items recorded.
+A milestone is not complete because a plan exists or an implementation PR merges. Completion requires the contract gates, all selected evidence profiles, changed files, checks, discipline impacts, risks, disagreements, and unresolved items to be recorded and reconciled in a separate closeout PR.

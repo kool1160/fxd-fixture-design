@@ -1,4 +1,11 @@
+<!-- FXD-MILESTONE-STATE: docs/MILESTONE_STATE.json -->
+<!-- FXD-HISTORICAL-MILESTONE-SNAPSHOT -->
 # FXD Milestone Records 19–23
+
+> Non-authoritative historical snapshot. Period-accurate current-status prose
+> is preserved below. The registry now records Milestones 19 through 23 as
+> legacy Complete; Milestone 20 is controlled by PR #40 and merge commit
+> `5f90765b96140f0cb3103f3ac5e04a79f82ab604`.
 
 This addendum extends the professional project binder from Milestone 18 through the current governed milestone.
 
