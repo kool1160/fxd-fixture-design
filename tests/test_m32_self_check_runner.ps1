@@ -65,4 +65,11 @@ Describe "M32 autonomous self-check runner" {
 
         (Get-M32SelfCheckFailureCategory -Path $report) | Should Be "unexpected_internal_failure"
     }
+
+    It "uses a supplied Git for Windows Bash fallback when Bash is absent from PATH" {
+        $fallback = Join-Path $TestDrive "bash.exe"
+        New-Item -ItemType File -Path $fallback | Out-Null
+
+        (Resolve-M32BashExecutable -OnPath "" -GitForWindowsPath $fallback) | Should Be $fallback
+    }
 }

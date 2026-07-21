@@ -95,6 +95,21 @@ function Invoke-M32Python {
     }
 }
 
+function Resolve-M32BashExecutable {
+    param(
+        [string]$OnPath,
+        [string]$GitForWindowsPath
+    )
+
+    if (-not [string]::IsNullOrWhiteSpace($OnPath)) {
+        return $OnPath
+    }
+    if (Test-Path -LiteralPath $GitForWindowsPath -PathType Leaf) {
+        return $GitForWindowsPath
+    }
+    throw "Git Bash is required for governed M32 CI but was not found on PATH or at the standard Git for Windows location."
+}
+
 function Read-M32SelfCheckReport {
     param([string]$Path)
 
@@ -296,9 +311,11 @@ function Invoke-M32SelfCheck {
             throw "Full Python suite failed."
         }
 
-        $bash = Get-Command bash.exe -ErrorAction SilentlyContinue
-        if ($null -eq $bash) { $bash = Get-Command bash -ErrorAction Stop }
-        $governedResult = Invoke-M32Python -Python $bash.Source -Arguments @(
+        $bashCommand = Get-Command bash.exe -ErrorAction SilentlyContinue
+        if ($null -eq $bashCommand) { $bashCommand = Get-Command bash -ErrorAction SilentlyContinue }
+        $bashOnPath = if ($null -eq $bashCommand) { "" } else { [string]$bashCommand.Source }
+        $bash = Resolve-M32BashExecutable -OnPath $bashOnPath -GitForWindowsPath (Join-Path $env:ProgramFiles "Git\bin\bash.exe")
+        $governedResult = Invoke-M32Python -Python $bash -Arguments @(
             "-lc", "source .venv/Scripts/activate && bash scripts/ci-contract.sh && bash scripts/ci.sh"
         )
         if ($governedResult.ExitCode -ne 0) {
