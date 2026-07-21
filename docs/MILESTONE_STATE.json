@@ -631,6 +631,7 @@
       "evidence_profiles": ["A", "B", "C", "D", "E"],
       "completion_evidence": null,
       "closeout_pr": null,
+      "closeout_merge_commit": null,
       "decisions": ["Issue #56 authorizes Milestone 32 as the sole Active product milestone."],
       "replacement_milestone": null,
       "legacy": false,

@@ -40,4 +40,4 @@ Record exact commands, totals, failures, errors, skips, hosted results, and rema
 
 For implementation PRs: the milestone remains Active after this PR merges; a separate closeout PR is required.
 
-For closeout PRs: link all implementation merges, evidence profiles, explicit human approvals, unresolved risks, and the governing issue before changing the registry.
+For closeout PRs: link all implementation merges, evidence profiles, explicit human approvals, unresolved risks, and the governing issue before changing the registry. Record a closeout PR number distinct from every implementation PR, its merge commit, and the explicit closeout decision.

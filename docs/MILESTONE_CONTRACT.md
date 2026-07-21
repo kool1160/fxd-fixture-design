@@ -78,10 +78,10 @@ A milestone may become `Complete` only when:
 5. material risks, assumptions, specialist disagreements, and limitations are recorded;
 6. required human engineering and visual acceptance is explicit;
 7. no approval, release, export, or safety claim exceeds the evidence;
-8. a separate closeout pull request reconciles the registry and derived documents; and
+8. a separate closeout pull request reconciles the registry and derived documents, and the registry records its distinct PR number and merge commit; and
 9. the closeout pull request is explicitly approved and merged.
 
-The implementation PR and closeout PR must remain separate for milestones governed by this contract. The closeout PR changes governance state; it does not conceal implementation changes.
+The implementation PR and closeout PR must remain separate for milestones governed by this contract. The closeout decision must link the distinct closeout PR number and its locally present merge commit. The closeout PR changes governance state; it does not conceal implementation changes.
 
 ## Sequence changes and interruptions
 

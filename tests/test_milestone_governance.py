@@ -123,6 +123,47 @@ class MilestoneGovernanceTests(unittest.TestCase):
         )
         self.assert_error(data, "post-governance Complete milestone 32 requires a separate closeout PR")
 
+    def test_closeout_must_be_distinct_merged_and_decided(self) -> None:
+        data = self.data()
+        milestone = self.milestone(data, 32)
+        milestone.update(
+            {
+                "status": "Complete",
+                "merge_commits": ["ac1e7a1799ef9be674f6ab5739e48d178fa2f1dc"],
+                "completion_evidence": "Synthetic test evidence.",
+                "closeout_pr": 54,
+                "closeout_merge_commit": None,
+                "decisions": ["Completion approved without the required record."],
+            }
+        )
+        data["product_lane"].update(
+            {"paused": True, "active_milestone": None, "pause_reason": "Test pause", "decision": "Test decision"}
+        )
+        errors = validate_registry_data(data)
+        self.assertTrue(any("distinct from implementation PRs" in error for error in errors), errors)
+        self.assertTrue(any("requires a closeout merge commit" in error for error in errors), errors)
+        self.assertTrue(any("requires an explicit closeout decision" in error for error in errors), errors)
+
+    def test_valid_post_governance_closeout_contract_is_accepted(self) -> None:
+        data = self.data()
+        milestone = self.milestone(data, 32)
+        merge = "ac1e7a1799ef9be674f6ab5739e48d178fa2f1dc"
+        milestone.update(
+            {
+                "status": "Complete",
+                "merge_commits": [merge],
+                "completion_evidence": "Synthetic test evidence.",
+                "closeout_pr": 60,
+                "closeout_merge_commit": merge,
+                "decisions": [f"Separate closeout PR #60 approved and merged as {merge}."],
+            }
+        )
+        data["product_lane"].update(
+            {"paused": True, "active_milestone": None, "pause_reason": "Test pause", "decision": "Test decision"}
+        )
+        closeout_errors = [error for error in validate_registry_data(data) if "closeout" in error]
+        self.assertEqual([], closeout_errors)
+
     def test_superseded_milestone_requires_decision_and_replacement(self) -> None:
         data = self.data()
         milestone = self.milestone(data, 20)

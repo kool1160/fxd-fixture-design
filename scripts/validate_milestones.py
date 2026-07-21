@@ -183,8 +183,29 @@ def validate_registry_data(data: dict[str, Any]) -> list[str]:
                     errors.append(f"legacy Complete milestone {number!r} requires explicit legacy_reconciliation")
                 if not _nonempty_strings(milestone.get("historical_gaps")):
                     errors.append(f"legacy Complete milestone {number!r} requires historical_gaps")
-            elif _positive_int(governance_start) and number >= governance_start and not _positive_int(milestone.get("closeout_pr")):
-                errors.append(f"post-governance Complete milestone {number!r} requires a separate closeout PR")
+            elif _positive_int(governance_start) and number >= governance_start:
+                closeout_pr = milestone.get("closeout_pr")
+                if not _positive_int(closeout_pr):
+                    errors.append(f"post-governance Complete milestone {number!r} requires a separate closeout PR")
+                elif isinstance(prs, list) and closeout_pr in prs:
+                    errors.append(f"post-governance Complete milestone {number!r} closeout PR must be distinct from implementation PRs")
+                closeout_commit = milestone.get("closeout_merge_commit")
+                if not isinstance(closeout_commit, str) or not SHA_PATTERN.fullmatch(closeout_commit):
+                    errors.append(f"post-governance Complete milestone {number!r} requires a closeout merge commit")
+                elif not isinstance(merges, list) or closeout_commit not in merges:
+                    errors.append(f"post-governance Complete milestone {number!r} closeout merge commit must be recorded in merge_commits")
+                closeout_decision_fragments = (
+                    "closeout",
+                    f"#{closeout_pr}" if _positive_int(closeout_pr) else "#<missing>",
+                    closeout_commit if isinstance(closeout_commit, str) else "<missing-commit>",
+                )
+                if not isinstance(decisions, list) or not any(
+                    all(fragment.casefold() in decision.casefold() for fragment in closeout_decision_fragments)
+                    for decision in decisions
+                ):
+                    errors.append(
+                        f"post-governance Complete milestone {number!r} requires an explicit closeout decision linking its PR and merge commit"
+                    )
         if status in {"Superseded", "Cancelled"}:
             if not _nonempty_strings(decisions):
                 errors.append(f"{status} milestone {number!r} requires a decision record")
