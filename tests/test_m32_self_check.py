@@ -40,6 +40,35 @@ class M32SelfCheckTests(unittest.TestCase):
         self.assertTrue(report["release_gates"]["release_export_blocked"])
         self.assertTrue(report["project_persistence"]["passed"])
 
+    def test_m32_self_check_exercises_validation_after_accepted_proposal_binding(self):
+        report = run_m32_self_check()
+
+        proposal = report["accepted_proposal"]
+        self.assertEqual(proposal["decision"], "accepted_for_engineering_review")
+        self.assertEqual(proposal["blocker_count"], 0)
+        self.assertTrue(proposal["current"])
+        self.assertTrue(proposal["plan_identity_bound"])
+        self.assertTrue(proposal["plan_evidence_digest_bound"])
+        self.assertTrue(proposal["missing_acceptance_gate_independently_blocked"])
+
+        gates = report["release_gates"]
+        self.assertTrue(gates["proposal_gate_satisfied"])
+        self.assertEqual(
+            gates["engineering_approval_block_reason"],
+            "invalid_deterministic_validation_result",
+        )
+        self.assertEqual(
+            gates["release_export_block_reason"],
+            "invalid_fixture_build_validation",
+        )
+        self.assertEqual(
+            gates["stale_release_export_block_reason"],
+            "authored_fixture_geometry_stale",
+        )
+        self.assertIn("FXD-WLD-001", gates["validation_gate_rule_ids"])
+        self.assertIn("FXD-M32-ACC", gates["stale_validation_gate_rule_ids"])
+        self.assertFalse(report["network_provider_used"])
+
     def test_cli_report_is_redacted_and_contains_no_source_payload(self):
         with tempfile.TemporaryDirectory() as directory:
             destination = Path(directory) / "m32-self-check.json"

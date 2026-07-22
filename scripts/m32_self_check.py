@@ -19,6 +19,7 @@ from fxd_geometry import (
     AdjustmentState,
     AnnotationRole,
     ConstructionMethod,
+    EngineeringAnnotations,
     FixtureBuildError,
     FixtureFamily,
     FixtureLifecycle,
@@ -31,6 +32,7 @@ from fxd_geometry import (
     Vec3,
     analyze_engineering_workflow,
     author_fixture_build,
+    bind_fixture_build_plan_to_proposal,
     build_fixture_build_package,
     face_annotation,
     load_step_for_workbench,
@@ -38,6 +40,7 @@ from fxd_geometry import (
     propose_multi_station_fit,
     validate_fixture_build_plan,
 )
+from fxd_geometry.ai_fixture_engineer import deterministic_baseline_proposal
 from fxd_geometry.fabrication_workflow import (
     BuildComponentRole, FixtureBuildRequirements, GeometryAuthority,
     generate_multi_station_fixture_alternatives,
@@ -72,7 +75,7 @@ def _dot(left: Iterable[float], right: Iterable[float]) -> float:
 
 
 def _selected_orientation_references(document: object) -> tuple[GeometryReference, GeometryReference, tuple[GeometryReference, ...], bool]:
-    """Choose a stable planar bottom/front pair from the generated public model."""
+    """Choose stable orthogonal bottom/front/datum references from the public model."""
     candidates: list[tuple[object, object, GeometryReference]] = []
     for component in document.assembly.components:
         for face in component.faces:
@@ -100,8 +103,20 @@ def _selected_orientation_references(document: object) -> tuple[GeometryReferenc
     )
     if front is None:
         raise AssertionError("self-check STEP has no non-parallel planar front face")
-    references = tuple(item[2] for item in candidates)
-    return bottom_reference, front[2], references, bottom_normal[2] < 0.0
+    front_normal = tuple(float(value) for value in front[1].normal)
+    side = next(
+        (
+            item for item in candidates
+            if item[2] not in {bottom_reference, front[2]}
+            and abs(_dot(bottom_normal, tuple(float(value) for value in item[1].normal))) <= 1e-7
+            and abs(_dot(front_normal, tuple(float(value) for value in item[1].normal))) <= 1e-7
+        ),
+        None,
+    )
+    if side is None:
+        raise AssertionError("self-check STEP has no third orthogonal planar datum face")
+    datum_references = (bottom_reference, front[2], side[2])
+    return bottom_reference, front[2], datum_references, bottom_normal[2] < 0.0
 
 
 def _public_source(kernel: OcpKernel, directory: Path) -> tuple[Path, bytes]:
@@ -140,12 +155,18 @@ def _fixture_build_requirements(source_sha256: str) -> FixtureBuildRequirements:
     )
 
 
-def _expect_blocked(action: Any, expected: type[Exception]) -> bool:
+def _expect_blocked_reason(action: Any, expected: type[Exception],
+                           message_fragment: str, reason: str) -> str:
+    """Prove a specific fail-closed gate without persisting exception text."""
     try:
         action()
-    except expected:
-        return True
-    raise AssertionError("a fail-closed release gate unexpectedly allowed the action")
+    except expected as error:
+        if message_fragment not in str(error):
+            raise AssertionError(
+                f"the expected {reason} gate was pre-empted by another failure"
+            ) from error
+        return reason
+    raise AssertionError(f"the expected {reason} gate unexpectedly allowed the action")
 
 
 def _safe_failure_category(error: Exception) -> str:
@@ -252,11 +273,48 @@ def _run_m32_scenario(directory: Path) -> tuple[dict[str, object], Path, Path]:
                 for reference, role in zip(planar_references, roles)
             ),
     )
-    project = analyze_engineering_workflow(document, workflow)
-    if project.workflow is None or not project.workflow.analysis_completed:
+    analyzed_project = analyze_engineering_workflow(document, workflow)
+    if analyzed_project.workflow is None or not analyzed_project.workflow.analysis_completed:
         raise AssertionError("assembly analysis did not complete through the shared workflow command")
-    workflow = replace(project.workflow, concepts_generated=True, active_stage="Concepts")
-    project = project.with_workflow(workflow)
+    workflow = replace(analyzed_project.workflow, concepts_generated=True, active_stage="Concepts")
+    proposal_annotations = EngineeringAnnotations.for_product(
+        product,
+        build_orientation=orientation.manufacturing_z_source,
+        loading_direction=orientation.manufacturing_vector_to_source(Vec3(0.0, -1.0, 0.0)),
+        process_type="Synthetic MIG weld",
+        production_quantity=100,
+    )
+    proposal_annotations = replace(
+        proposal_annotations,
+        permitted_locating_surfaces=(bottom,),
+    )
+    project = FxdProject.from_product(product, proposal_annotations, workflow=workflow)
+
+    pending_proposal_project = project.with_fixture_proposal(
+        deterministic_baseline_proposal(project)
+    )
+    pending_proposal = pending_proposal_project.fixture_proposal
+    if pending_proposal is None:
+        raise AssertionError("the deterministic self-check proposal was not persisted")
+    if pending_proposal.blocker_count:
+        blockers = ", ".join(
+            f"{item.rule_id}:{item.what_is_wrong}"
+            for item in pending_proposal.guided_issues
+            if item.severity == "error"
+        )
+        raise AssertionError(
+            f"the deterministic self-check proposal has unresolved blockers: {blockers}"
+        )
+    project = pending_proposal_project.decide_fixture_proposal(
+        "accepted_for_engineering_review",
+        "Deterministic offline M32 self-check proposal acceptance.",
+    )
+    accepted_proposal = project.fixture_proposal
+    if accepted_proposal is None:
+        raise AssertionError("the deterministic self-check proposal was not persisted")
+    if (accepted_proposal.proposal_decision != "accepted_for_engineering_review"
+            or accepted_proposal.blocker_count != 0):
+        raise AssertionError("the deterministic self-check proposal is not accepted and blocker-free")
 
     requested = MultiStationRequirements(
             FixtureFamily.LINEAR_MULTI_STATION_WELD,
@@ -292,7 +350,7 @@ def _run_m32_scenario(directory: Path) -> tuple[dict[str, object], Path, Path]:
     alternatives = generate_multi_station_fixture_alternatives(
         product, project.active, _fixture_build_requirements(product.source_sha256), accepted,
     )
-    plan = alternatives[-1]
+    plan = bind_fixture_build_plan_to_proposal(alternatives[-1], accepted_proposal)
     layout = plan.multi_station_layout
     if layout is None or len(layout.stations) != 4:
         raise AssertionError("accepted feasible station count was not used for the fixture build plan")
@@ -333,6 +391,15 @@ def _run_m32_scenario(directory: Path) -> tuple[dict[str, object], Path, Path]:
         raise AssertionError("end structure interferes with an end station")
 
     project = project.with_fixture_build(plan)
+    proposal_block_reason = project.fixture_build_proposal_block_reason()
+    if proposal_block_reason is not None:
+        raise AssertionError(
+            "the self-check build is not current and bound to the accepted proposal: "
+            + proposal_block_reason
+        )
+    if (plan.fixture_proposal_identity != accepted_proposal.proposal_identity
+            or plan.fixture_proposal_evidence_digest != accepted_proposal.evidence_digest):
+        raise AssertionError("the self-check build lost its exact proposal identity or evidence binding")
     validation = validate_fixture_build_plan(product, plan)
     weld_finding = next((item for item in validation.findings if item.rule_id == "FXD-WLD-001"), None)
     if weld_finding is None or weld_finding.disposition != "review_blocker":
@@ -351,14 +418,52 @@ def _run_m32_scenario(directory: Path) -> tuple[dict[str, object], Path, Path]:
     if not authored.components or triangle_count < 1 or not all(item.topology.solids >= 1 for item in authored.components):
         raise AssertionError("fixture authoring did not produce real OCP solids and tessellation evidence")
 
+    missing_acceptance_gate = _expect_blocked_reason(
+        lambda: pending_proposal_project.with_fixture_build(plan).decide("approve_for_review"),
+        ProjectFormatError,
+        "must be accepted for engineering review",
+        "accepted_fixture_proposal_required",
+    )
+    missing_package_proposal_gate = _expect_blocked_reason(
+        lambda: build_fixture_build_package(authored, plan, product),
+        FixtureBuildError,
+        "bound to an accepted fixture proposal",
+        "accepted_fixture_proposal_required",
+    )
+    export_block_reason = _expect_blocked_reason(
+        lambda: build_fixture_build_package(
+            authored, plan, product, accepted_proposal=accepted_proposal,
+        ),
+        FixtureBuildError,
+        "only a valid fixture build validation result",
+        "invalid_fixture_build_validation",
+    )
+    approval_block_reason = _expect_blocked_reason(
+        lambda: project.decide("approve_for_review"), ProjectFormatError,
+        "invalid deterministic validation result",
+        "invalid_deterministic_validation_result",
+    )
+    stale_station = replace(layout.stations[0], access_evidence_digest="")
+    stale_plan = replace(plan, multi_station_layout=replace(
+        layout, stations=(stale_station,) + layout.stations[1:],
+    ))
+    stale_validation = validate_fixture_build_plan(product, stale_plan)
+    stale_rule_ids = sorted({
+        item.rule_id for item in stale_validation.findings
+        if "missing or stale" in item.message
+    })
+    if "FXD-M32-ACC" not in stale_rule_ids:
+        raise AssertionError("stale station validation evidence did not fail closed")
+    stale_export_block_reason = _expect_blocked_reason(
+        lambda: build_fixture_build_package(
+            authored, stale_plan, product, accepted_proposal=accepted_proposal,
+        ),
+        FixtureBuildError,
+        "stale for the supplied construction plan",
+        "authored_fixture_geometry_stale",
+    )
     persisted_plan = replace(plan, authoring_state="provisional")
     project = project.with_fixture_build(persisted_plan)
-    export_blocked = _expect_blocked(
-        lambda: build_fixture_build_package(authored, persisted_plan, product), FixtureBuildError,
-    )
-    approval_blocked = _expect_blocked(
-        lambda: project.decide("approve_for_review"), ProjectFormatError,
-    )
     source_unchanged = (
         source_path.read_bytes() == source_before
         and document.source_bytes == source_before
@@ -393,6 +498,23 @@ def _run_m32_scenario(directory: Path) -> tuple[dict[str, object], Path, Path]:
             "source_cad_unchanged": source_unchanged,
         },
         "assembly_analysis": {"passed": True, "concept_count": len(project.concepts)},
+        "accepted_proposal": {
+            "proposal_identity": accepted_proposal.proposal_identity,
+            "evidence_digest": accepted_proposal.evidence_digest,
+            "decision": accepted_proposal.proposal_decision,
+            "blocker_count": accepted_proposal.blocker_count,
+            "current": project.fixture_build_proposal_block_reason() is None,
+            "plan_identity_bound": (
+                plan.fixture_proposal_identity == accepted_proposal.proposal_identity
+            ),
+            "plan_evidence_digest_bound": (
+                plan.fixture_proposal_evidence_digest == accepted_proposal.evidence_digest
+            ),
+            "missing_acceptance_gate_independently_blocked": (
+                missing_acceptance_gate == "accepted_fixture_proposal_required"
+                and missing_package_proposal_gate == "accepted_fixture_proposal_required"
+            ),
+        },
         "fixture_build": {
             "family": FixtureFamily.LINEAR_MULTI_STATION_WELD.value,
             "requested_station_count": 5,
@@ -443,8 +565,17 @@ def _run_m32_scenario(directory: Path) -> tuple[dict[str, object], Path, Path]:
             "weld_access_status": "not_evaluated_unconfirmed_weld_intent",
         },
         "release_gates": {
-            "engineering_approval_blocked": approval_blocked,
-            "release_export_blocked": export_blocked,
+            "proposal_gate_satisfied": True,
+            "engineering_approval_blocked": True,
+            "engineering_approval_block_reason": approval_block_reason,
+            "release_export_blocked": True,
+            "release_export_block_reason": export_block_reason,
+            "stale_release_export_block_reason": stale_export_block_reason,
+            "validation_gate_rule_ids": sorted({
+                item.rule_id for item in validation.findings
+                if item.disposition == "review_blocker"
+            }),
+            "stale_validation_gate_rule_ids": stale_rule_ids,
         },
         "project_persistence": {
             "passed": persistence_passed,

@@ -1325,6 +1325,48 @@ def _stock(bounds: Aabb) -> tuple[float, float, float]:
     return tuple(round(high - low, 6) for low, high in zip(bounds.minimum.__dict__.values(), bounds.maximum.__dict__.values()))
 
 
+_M32_PLATE_ROLES = frozenset({
+    BuildComponentRole.BASEPLATE,
+    BuildComponentRole.STATION_PLATE,
+    BuildComponentRole.DATUM_RAIL,
+    BuildComponentRole.LOCATOR_PLATE,
+    BuildComponentRole.HARD_STOP,
+    BuildComponentRole.CLAMP_BRACKET,
+    BuildComponentRole.END_BRACE,
+    BuildComponentRole.SHIM_PACK,
+})
+
+
+def _plate_geometry_contract(bounds: Aabb, thickness_mm: float | None) -> tuple[int, str, str] | None:
+    """Return the sole thickness axis and profile plane for proven plate stock."""
+    if thickness_mm is None:
+        return None
+    spans = tuple(
+        getattr(bounds.maximum, axis) - getattr(bounds.minimum, axis)
+        for axis in ("x", "y", "z")
+    )
+    matching_axes = tuple(
+        index for index, span in enumerate(spans)
+        if abs(span - thickness_mm) <= 1e-7
+    )
+    if len(matching_axes) != 1:
+        return None
+    thickness_axis = matching_axes[0]
+    axis_name = "XYZ"[thickness_axis]
+    profile_plane = "".join(
+        axis for index, axis in enumerate("XYZ") if index != thickness_axis
+    )
+    return thickness_axis, axis_name, profile_plane
+
+
+def _is_m32_plate_component(component: FixtureBuildComponent) -> bool:
+    return (
+        component.identity.startswith("m32-")
+        and component.geometry_authority == GeometryAuthority.AUTHORED_MANUFACTURING
+        and component.role in _M32_PLATE_ROLES
+    )
+
+
 def _component(identity: str, part: str, description: str, role: BuildComponentRole,
                bounds: Aabb, reference: GeometryReference, *, parent: str | None,
                process: str, thickness: float | None, rule_ids: tuple[str, ...],
@@ -1336,6 +1378,16 @@ def _component(identity: str, part: str, description: str, role: BuildComponentR
                assumptions: tuple[str, ...] = (), evidence: tuple[str, ...] = (),
                replaceable: bool = False, maintenance_access: bool | None = None,
                slots: tuple[SlotProcessSpec, ...] = ()) -> FixtureBuildComponent:
+    if (identity.startswith("m32-") and authority == GeometryAuthority.AUTHORED_MANUFACTURING
+            and role in _M32_PLATE_ROLES):
+        plate_contract = _plate_geometry_contract(bounds, thickness)
+        if plate_contract is not None:
+            _, thickness_axis, profile_plane = plate_contract
+            evidence = evidence + (
+                f"plate_thickness_axis={thickness_axis}",
+                f"plate_profile_plane={profile_plane}",
+                f"plate_thickness_mm={thickness:.6f}",
+            )
     return FixtureBuildComponent(
         identity, part, description, role, authority, "mild steel" if authority != GeometryAuthority.PURCHASED_COMPONENT else "purchased tooling",
         thickness, _stock(bounds), 1, process, bounds, (reference,), rule_ids, parent,
@@ -1679,13 +1731,13 @@ def _cardinal_clamp_review_bounds(product: Aabb, outward: Vec3) -> tuple[Aabb, A
     z0, z1 = 0.0, product.maximum.z
     if outward.y > 0:
         bracket = Aabb(Vec3(product.maximum.x + 4.0, product.maximum.y + 12.0, z0),
-                       Vec3(product.maximum.x + 28.0, product.maximum.y + 38.0, z1 + 30.0))
+                       Vec3(product.maximum.x + 28.0, product.maximum.y + 24.0, z1 + 30.0))
         closed = Aabb(Vec3(product.maximum.x - 10.0, product.maximum.y - 8.0, z1 - 10.0),
                       Vec3(product.maximum.x + 22.0, product.maximum.y + 26.0, z1 + 22.0))
         opened = Aabb(Vec3(product.maximum.x + 12.0, product.maximum.y + 14.0, z1 + 12.0),
                       Vec3(product.maximum.x + 60.0, product.maximum.y + 46.0, z1 + 72.0))
     elif outward.y < 0:
-        bracket = Aabb(Vec3(product.maximum.x + 4.0, product.minimum.y - 38.0, z0),
+        bracket = Aabb(Vec3(product.maximum.x + 4.0, product.minimum.y - 24.0, z0),
                        Vec3(product.maximum.x + 28.0, product.minimum.y - 12.0, z1 + 30.0))
         closed = Aabb(Vec3(product.maximum.x - 10.0, product.minimum.y - 26.0, z1 - 10.0),
                       Vec3(product.maximum.x + 22.0, product.minimum.y + 8.0, z1 + 22.0))
@@ -1693,13 +1745,13 @@ def _cardinal_clamp_review_bounds(product: Aabb, outward: Vec3) -> tuple[Aabb, A
                       Vec3(product.maximum.x + 60.0, product.minimum.y - 14.0, z1 + 72.0))
     elif outward.x > 0:
         bracket = Aabb(Vec3(product.maximum.x + 12.0, product.maximum.y + 4.0, z0),
-                       Vec3(product.maximum.x + 38.0, product.maximum.y + 28.0, z1 + 30.0))
+                       Vec3(product.maximum.x + 24.0, product.maximum.y + 28.0, z1 + 30.0))
         closed = Aabb(Vec3(product.maximum.x - 8.0, product.maximum.y - 10.0, z1 - 10.0),
                       Vec3(product.maximum.x + 26.0, product.maximum.y + 22.0, z1 + 22.0))
         opened = Aabb(Vec3(product.maximum.x + 14.0, product.maximum.y + 12.0, z1 + 12.0),
                       Vec3(product.maximum.x + 46.0, product.maximum.y + 60.0, z1 + 72.0))
     else:
-        bracket = Aabb(Vec3(product.minimum.x - 38.0, product.maximum.y + 4.0, z0),
+        bracket = Aabb(Vec3(product.minimum.x - 24.0, product.maximum.y + 4.0, z0),
                        Vec3(product.minimum.x - 12.0, product.maximum.y + 28.0, z1 + 30.0))
         closed = Aabb(Vec3(product.minimum.x - 26.0, product.maximum.y - 10.0, z1 - 10.0),
                       Vec3(product.minimum.x + 8.0, product.maximum.y + 22.0, z1 + 22.0))
@@ -2051,7 +2103,7 @@ def generate_multi_station_fixture_build_plan(
                 locating=True, replaceable=True, maintenance_access=True,
                 evidence=(f"station={station.identity}", "Three-point primary support arrangement."),
             ))
-        locator = _oriented_bounds(primary, p0 + 8.0, p0 + 30.0, s0 - 14.0, s0,
+        locator = _oriented_bounds(primary, p0 + 8.0, p0 + 30.0, s0 - 12.0, s0,
                                    0.0, min(z1 + 18.0, product_height + 42.0))
         locator_slot = SlotProcessSpec(
             f"{prefix}-locator-adjustment-slot",
@@ -2067,7 +2119,7 @@ def generate_multi_station_fixture_build_plan(
             locating=True, contact_condition="functional_face", replaceable=True, maintenance_access=True,
             slots=(locator_slot,), evidence=(f"station={station.identity}", "Relieved contact and adjustment slot remain editable."),
         ))
-        stop = _oriented_bounds(primary, p1, p1 + 14.0, s0 + 8.0, s0 + 30.0,
+        stop = _oriented_bounds(primary, p1, p1 + 12.0, s0 + 8.0, s0 + 30.0,
                                 0.0, min(z1 + 12.0, product_height + 34.0))
         components.append(_component(
             f"{prefix}-hard-stop", f"FXD-M32-{station.station_index:02d}30",
@@ -2365,6 +2417,39 @@ def _multi_station_findings(plan: FixtureBuildPlan) -> tuple[FixtureBuildFinding
         return ()
     findings: list[FixtureBuildFinding] = []
     req = layout.requirements
+    for component in plan.components:
+        if not _is_m32_plate_component(component):
+            continue
+        plate_contract = _plate_geometry_contract(component.bounds, component.thickness_mm)
+        if plate_contract is None:
+            findings.append(_finding(
+                "FXD-MFG-001", "error",
+                "M32 plate thickness must match exactly one authored geometry axis",
+                components=(component.identity,),
+                evidence=(
+                    f"recorded_thickness_mm={component.thickness_mm}",
+                    f"recorded_stock_mm={component.stock_mm}",
+                ),
+                disposition="authoring_blocker",
+            ))
+            continue
+        _, thickness_axis, profile_plane = plate_contract
+        expected_evidence = {
+            f"plate_thickness_axis={thickness_axis}",
+            f"plate_profile_plane={profile_plane}",
+            f"plate_thickness_mm={component.thickness_mm:.6f}",
+        }
+        if component.stock_mm != _stock(component.bounds) or not expected_evidence.issubset(component.evidence):
+            findings.append(_finding(
+                "FXD-MFG-001", "error",
+                "M32 plate thickness, stock, and profile-plane evidence do not reconcile",
+                components=(component.identity,),
+                evidence=tuple(sorted(expected_evidence)) + (
+                    f"recorded_stock_mm={component.stock_mm}",
+                    f"authored_bounds_stock_mm={_stock(component.bounds)}",
+                ),
+                disposition="authoring_blocker",
+            ))
     if req.fixture_family != FixtureFamily.LINEAR_MULTI_STATION_WELD:
         findings.append(_finding("FXD-M32-STA", "error", "unsupported multi-station fixture family", disposition="review_blocker"))
     if layout.required_fixture_length_mm > req.maximum_fixture_length_mm + 1e-7:
@@ -2824,17 +2909,13 @@ def _dxf_for(component: FixtureBuildComponent) -> bytes | None:
     coordinates = lambda point: (point.x, point.y, point.z)
     plane_axes = (0, 1)
     if component.thickness_mm is not None:
-        spans = tuple(high_value - low_value for low_value, high_value in zip(coordinates(low), coordinates(high)))
-        thickness_axes = tuple(
-            index for index, span in enumerate(spans)
-            if abs(span - component.thickness_mm) <= 1e-7
-        )
+        plate_contract = _plate_geometry_contract(component.bounds, component.thickness_mm)
         # A DXF is release evidence, so an ambiguous/non-reconciling plate
         # envelope is suppressed instead of guessed. Vertical holes are also
         # suppressed until the OCP authoring path supports their true axis.
-        if len(thickness_axes) != 1 or (thickness_axes[0] != 2 and component.holes):
+        if plate_contract is None or (plate_contract[0] != 2 and component.holes):
             return None
-        plane_axes = tuple(index for index in range(3) if index != thickness_axes[0])
+        plane_axes = tuple(index for index in range(3) if index != plate_contract[0])
     plane_name = "XYZ"[plane_axes[0]] + "XYZ"[plane_axes[1]]
     low_values, high_values = coordinates(low), coordinates(high)
     profile_low = (low_values[plane_axes[0]], low_values[plane_axes[1]])
@@ -2942,6 +3023,15 @@ def build_fixture_build_package(assembly: AuthoredFixtureAssembly, plan: Fixture
     bom = [{
         "item_number": index, "part_number": component.part_number, "description": component.description,
         "quantity": component.quantity, "material": component.material,
+        "thickness_mm": component.thickness_mm,
+        "plate_thickness_axis": (
+            _plate_geometry_contract(component.bounds, component.thickness_mm)[1]
+            if _is_m32_plate_component(component) else None
+        ),
+        "plate_profile_plane": (
+            _plate_geometry_contract(component.bounds, component.thickness_mm)[2]
+            if _is_m32_plate_component(component) else None
+        ),
         "thickness_or_stock_mm": component.stock_mm, "manufacturing_process": component.manufacturing_process,
         "geometry_authority": component.geometry_authority.value,
         "nest_classification": component.nest_classification.value, "reusable": component.reusable,
@@ -2950,6 +3040,25 @@ def build_fixture_build_package(assembly: AuthoredFixtureAssembly, plan: Fixture
     manifest = {
         "format": "fxd-m30-review-manufacturing-package-v1", "plan": plan.to_dict(),
         "source_sha256": assembly.source_sha256, "assembly_evidence_digest": assembly.evidence_digest,
+        "manufacturing_components": [{
+            "identity": item.component.identity,
+            "part_number": item.component.part_number,
+            "stock_mm": list(item.component.stock_mm),
+            "thickness_mm": item.component.thickness_mm,
+            "plate_thickness_axis": (
+                _plate_geometry_contract(item.component.bounds, item.component.thickness_mm)[1]
+                if _is_m32_plate_component(item.component) else None
+            ),
+            "plate_profile_plane": (
+                _plate_geometry_contract(item.component.bounds, item.component.thickness_mm)[2]
+                if _is_m32_plate_component(item.component) else None
+            ),
+            "step_path": f"step/{re.sub(r'[^A-Za-z0-9_.-]+', '_', item.component.part_number)}.step",
+            "dxf_path": (
+                f"dxf/{re.sub(r'[^A-Za-z0-9_.-]+', '_', item.component.part_number)}.dxf"
+                if item.dxf_bytes is not None else None
+            ),
+        } for item in assembly.components],
         "validation": {"status": current_validation.status, "evidence_digest": current_validation.evidence_digest,
                        "findings": [item.to_dict() for item in current_validation.findings]},
         "approval_boundary": "Engineering review only. Not production release, certification, structural adequacy, or safety approval.",

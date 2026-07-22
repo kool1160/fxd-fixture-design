@@ -205,12 +205,147 @@ class MultiStationFixtureTests(unittest.TestCase):
         for item in assembly.components:
             if item.component.role in {
                     BuildComponentRole.LOCATOR_PLATE,
-                    BuildComponentRole.HARD_STOP,
-                    BuildComponentRole.CLAMP_BRACKET}:
+                    BuildComponentRole.HARD_STOP}:
+                thickness_axis = next(
+                    value.split("=", 1)[1] for value in item.component.evidence
+                    if value.startswith("plate_thickness_axis=")
+                )
+                profile_plane = "".join(axis for axis in "XYZ" if axis != thickness_axis)
+                self.assertIn(
+                    f"FXD_PROFILE_PLANE={profile_plane}",
+                    item.dxf_bytes.decode("ascii"),
+                )
+            elif item.component.role == BuildComponentRole.CLAMP_BRACKET:
                 self.assertIsNone(
                     item.dxf_bytes,
-                    f"{item.component.identity} must not export an ambiguous plate-plane DXF",
+                    f"{item.component.identity} must suppress DXF until its non-Z hole axis is authored",
                 )
+
+    def test_m32_authored_plate_components_reconcile_with_recorded_thickness(self):
+        proposal = self.accepted_proposal()
+        plan = bind_fixture_build_plan_to_proposal(self.plan(count=4), proposal)
+        assembly = author_fixture_build(plan, self.product, self.kernel)
+        target_roles = {
+            BuildComponentRole.LOCATOR_PLATE,
+            BuildComponentRole.HARD_STOP,
+            BuildComponentRole.CLAMP_BRACKET,
+        }
+
+        def spans(bounds):
+            return tuple(
+                getattr(bounds.maximum, axis) - getattr(bounds.minimum, axis)
+                for axis in ("x", "y", "z")
+            )
+
+        def authored_spans(shape):
+            vertices = [
+                vertex
+                for mesh in self.kernel.tessellate(shape)
+                for vertex in mesh.vertices_mm
+            ]
+            return tuple(
+                max(vertex[index] for vertex in vertices)
+                - min(vertex[index] for vertex in vertices)
+                for index in (0, 1, 2)
+            )
+
+        authored_targets = tuple(
+            item for item in assembly.components if item.component.role in target_roles
+        )
+        self.assertEqual(len(authored_targets), 12)
+        for item in authored_targets:
+            component = item.component
+            matching_axes = tuple(
+                index for index, span in enumerate(spans(component.bounds))
+                if abs(span - component.thickness_mm) <= 1e-7
+            )
+            self.assertEqual(len(matching_axes), 1)
+            thickness_axis = "XYZ"[matching_axes[0]]
+            profile_plane = "".join(
+                axis for index, axis in enumerate("XYZ") if index != matching_axes[0]
+            )
+            self.assertIn(f"plate_thickness_axis={thickness_axis}", component.evidence)
+            self.assertIn(f"plate_profile_plane={profile_plane}", component.evidence)
+            self.assertAlmostEqual(
+                authored_spans(item.shape)[matching_axes[0]], component.thickness_mm, places=5,
+            )
+            reloaded = self.kernel.import_step(item.step_bytes)
+            self.assertAlmostEqual(
+                authored_spans(reloaded)[matching_axes[0]], component.thickness_mm, places=5,
+            )
+            if item.dxf_bytes is not None:
+                self.assertIn(
+                    f"FXD_PROFILE_PLANE={profile_plane}",
+                    item.dxf_bytes.decode("ascii"),
+                )
+
+        package = build_fixture_build_package(
+            assembly, plan, self.product, accepted_proposal=proposal,
+        )
+        bom = {item["part_number"]: item for item in json.loads(package["bom.json"])}
+        manifest = json.loads(package["manifest.json"])
+        manufacturing = {
+            item["identity"]: item for item in manifest["manufacturing_components"]
+        }
+        for item in authored_targets:
+            component = item.component
+            record = manufacturing[component.identity]
+            self.assertEqual(record["stock_mm"], list(component.stock_mm))
+            self.assertEqual(record["thickness_mm"], component.thickness_mm)
+            self.assertEqual(
+                bom[component.part_number]["thickness_mm"], component.thickness_mm,
+            )
+            self.assertEqual(
+                bom[component.part_number]["plate_profile_plane"],
+                record["plate_profile_plane"],
+            )
+        self.assertFalse(any(
+            "toggle-clamp" in item["identity"] or "clamp-open-envelope" in item["identity"]
+            for item in manifest["manufacturing_components"]
+        ))
+
+    def test_m32_plate_geometry_tampering_fails_authoring_closed(self):
+        plan = self.plan(count=4)
+        locator = next(
+            item for item in plan.components
+            if item.role == BuildComponentRole.LOCATOR_PLATE
+        )
+        no_thickness_axis = replace(locator, bounds=Aabb(
+            locator.bounds.minimum,
+            Vec3(locator.bounds.maximum.x, locator.bounds.maximum.y + 1.0,
+                 locator.bounds.maximum.z),
+        ))
+        invalid = replace(plan, components=tuple(
+            no_thickness_axis if item.identity == locator.identity else item
+            for item in plan.components
+        ))
+        findings = tuple(
+            item for item in validate_fixture_build_plan(self.product, invalid).findings
+            if "plate thickness" in item.message
+        )
+        self.assertEqual(len(findings), 1)
+        self.assertEqual(findings[0].disposition, "authoring_blocker")
+        with self.assertRaisesRegex(FixtureBuildError, "plate thickness"):
+            author_fixture_build(invalid, self.product, self.kernel)
+
+        bracket = next(
+            item for item in plan.components
+            if item.role == BuildComponentRole.CLAMP_BRACKET
+        )
+        ambiguous = replace(bracket, bounds=Aabb(
+            bracket.bounds.minimum,
+            Vec3(bracket.bounds.minimum.x + bracket.thickness_mm,
+                 bracket.bounds.maximum.y, bracket.bounds.maximum.z),
+        ))
+        ambiguous_plan = replace(plan, components=tuple(
+            ambiguous if item.identity == bracket.identity else item
+            for item in plan.components
+        ))
+        self.assertTrue(any(
+            "plate thickness" in item.message
+            and item.disposition == "authoring_blocker"
+            for item in validate_fixture_build_plan(self.product, ambiguous_plan).findings
+        ))
 
     def test_station_count_edit_and_bom_reconcile_deterministically(self):
         five_raw = self.plan(count=5)

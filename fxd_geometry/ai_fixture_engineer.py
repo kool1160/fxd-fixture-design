@@ -1100,7 +1100,12 @@ def build_ai_request(project: FxdProject) -> AiProposalRequest:
 
 def proposal_engineering_context_identity(project: FxdProject) -> str:
     """Return the governed upstream context identity used to author a proposal."""
-    return build_ai_request(project).engineering_context_identity
+    # A fixture proposal is upstream authority for a fixture-build plan.  Its
+    # freshness therefore cannot depend on the downstream build that will be
+    # bound to it; doing so makes every subsequently attached invalid or
+    # provisional plan pre-empt its own validation gates as a stale proposal.
+    upstream = replace(project, fixture_build=None)
+    return build_ai_request(upstream).engineering_context_identity
 
 
 def _evidence(identity: str, kind: str, summary: str) -> tuple[ProposalEvidence, ...]:
