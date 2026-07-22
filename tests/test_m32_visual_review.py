@@ -40,6 +40,7 @@ class M32VisualReviewBundleTests(unittest.TestCase):
             self.assertTrue(report["authored_geometry"]["supplier_neutral_clamps_excluded_from_authored_ocp"])
             self.assertTrue(report["access_review"]["loading_and_unloading_evaluated"])
             self.assertTrue(report["access_review"]["first_and_last_station_end_clearance"])
+            self.assertTrue(report["access_review"]["trapped_part_detected"])
             self.assertEqual(report["access_review"]["weld_access_status"],
                              "not_evaluated_unconfirmed_weld_intent")
             self.assertTrue(report["authored_geometry"]["provisional"])

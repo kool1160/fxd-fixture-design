@@ -35,6 +35,7 @@ class M32SelfCheckTests(unittest.TestCase):
         self.assertFalse(report["authored_geometry"]["aabb_fallback_used"])
         self.assertGreater(report["authored_geometry"]["tessellated_triangle_count"], 0)
         self.assertEqual(report["authored_geometry"]["product_instance_count"], 4)
+        self.assertTrue(report["access_review"]["trapped_part_detected"])
         self.assertTrue(report["release_gates"]["engineering_approval_blocked"])
         self.assertTrue(report["release_gates"]["release_export_blocked"])
         self.assertTrue(report["project_persistence"]["passed"])

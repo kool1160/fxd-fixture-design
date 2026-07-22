@@ -436,7 +436,9 @@ def _run_m32_scenario(directory: Path) -> tuple[dict[str, object], Path, Path]:
         },
         "access_review": {
             "loading_and_unloading_evaluated": True,
-            "trapped_part_detected": False,
+            "trapped_part_detected": any(
+                station.trapped_part is True for station in layout.stations
+            ),
             "first_and_last_station_end_clearance": True,
             "weld_access_status": "not_evaluated_unconfirmed_weld_intent",
         },
