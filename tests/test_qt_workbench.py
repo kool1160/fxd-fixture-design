@@ -25,6 +25,7 @@ from fxd_geometry import (
     AnnotationRole,
     EngineeringAnnotations,
     ExportError,
+    GeometryReference,
     KernelOperationError,
     InteractiveWorkflow,
     OcpKernel,
@@ -33,6 +34,7 @@ from fxd_geometry import (
     RenderDiagnostics,
     Vec3,
     generate_fixture_proposal,
+    face_annotation,
     import_step,
     load_step_for_workbench,
     minimal_intent_questions,
@@ -264,6 +266,44 @@ class QtWorkbenchTests(unittest.TestCase):
         self.window.author_real_fixture_geometry()
         return self.window.project.fixture_build, self.window.authored_fixture_build
 
+    def _accept_current_fixture_proposal(self):
+        self.window._capture_process_setup()
+        setup = self.window.workflow.setup
+        if (setup.manufacturing_loading_direction is None
+                or setup.manufacturing_unloading_direction is None):
+            self.window.workflow = replace(
+                self.window.workflow,
+                setup=replace(
+                    setup,
+                    manufacturing_loading_direction=(
+                        setup.manufacturing_loading_direction or Vec3(0.0, -1.0, 0.0)
+                    ),
+                    manufacturing_unloading_direction=(
+                        setup.manufacturing_unloading_direction or Vec3(0.0, 1.0, 0.0)
+                    ),
+                ),
+            )
+        if not self.window.workflow.geometry_annotations:
+            component = self.window.project.product.components[0]
+            body = component.bodies[0]
+            datum = face_annotation(
+                self.window.document,
+                GeometryReference(component.identity, body.identity, body.faces[0].identity),
+                AnnotationRole.PRIMARY_DATUM,
+            )
+            self.window.workflow = replace(
+                self.window.workflow, geometry_annotations=(datum,)
+            )
+        self.window._replace_project(self.window.project.with_workflow(self.window.workflow))
+        proposal = deterministic_baseline_proposal(self.window.project)
+        self.window._replace_project(
+            self.window.project.with_fixture_proposal(proposal).decide_fixture_proposal(
+                "accepted_for_engineering_review"
+            )
+        )
+        self.window.workflow = self.window.project.workflow
+        return self.window.project.fixture_proposal
+
     def test_shell_creation_has_one_embedded_viewport_and_no_side_effects(self):
         self.assertIs(self.window.centralWidget().findChild(FakeViewport), self.window.viewport)
         self.assertFalse(self.window.viewport.separate_window_created)
@@ -334,8 +374,14 @@ class QtWorkbenchTests(unittest.TestCase):
         self.window.process_max_fixture_length.setValue(3000.0)
         self.window.process_compare_multi_up.setChecked(True)
         self.window.generate_fixture_build_plan()
+        self.assertIsNone(self.window.project.fixture_build)
+        self.assertIn("accept the Fixture Proposal", self.window.statusBar().currentMessage())
+        proposal = self._accept_current_fixture_proposal()
+        self.window.generate_fixture_build_plan()
         plan = self.window.project.fixture_build
         self.assertIsNotNone(plan)
+        self.assertEqual(plan.fixture_proposal_identity, proposal.proposal_identity)
+        self.assertEqual(plan.fixture_proposal_evidence_digest, proposal.evidence_digest)
         self.assertEqual(len(plan.multi_station_layout.stations), 5)
         self.assertIn("Alternative comparison", self.window.fabrication_status.text())
         self.window.author_real_fixture_geometry()
@@ -519,12 +565,10 @@ class QtWorkbenchTests(unittest.TestCase):
         self.window.process_fixture_family.setCurrentText("Linear multi-station weld fixture")
         self.window.process_station_count.setValue(5)
         self.window.process_max_fixture_length.setValue(3000.0)
+        self._accept_current_fixture_proposal()
         self.window.generate_fixture_build_plan()
         self.assertIsNotNone(self.window.project.fixture_build)
         build_digest = self.window.project.fixture_build_validation.evidence_digest
-        proposal = deterministic_baseline_proposal(self.window.project)
-        self.window._replace_project(self.window.project.with_fixture_proposal(proposal))
-        self.window.workflow = self.window.project.workflow
         self.window._refresh_all()
         self.assertEqual(self.window.project.fixture_build_validation.evidence_digest, build_digest)
         self.window.validation_source_selector.setCurrentText("Fixture Build Plan")

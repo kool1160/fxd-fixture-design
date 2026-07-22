@@ -367,6 +367,12 @@ class FixtureProposal:
         return sum(item.severity == "warning" for item in self.guided_issues)
 
     @property
+    def evidence_digest(self) -> str:
+        """Bind downstream work to the complete persisted proposal evidence."""
+        encoded = json.dumps(self.to_dict(), sort_keys=True, separators=(",", ":"))
+        return sha256(encoded.encode("utf-8")).hexdigest()
+
+    @property
     def validation_status(self) -> str:
         return "invalid" if self.blocker_count else (
             "provisional" if self.warning_count else "valid"
@@ -1163,6 +1169,27 @@ def deterministic_baseline_proposal(
                             EditableParameter("role", placement.role.value)),
                 confidence=placement.confidence,
             ))
+    datum = next(iter(project.annotations.permitted_locating_surfaces), None)
+    if datum is None:
+        datum = next((
+            item.reference for item in workflow.geometry_annotations
+            if item.role in {
+                AnnotationRole.PRIMARY_DATUM,
+                AnnotationRole.SECONDARY_DATUM,
+                AnnotationRole.TERTIARY_DATUM,
+            }
+        ), None)
+    if (not any(item.recommendation_type == RecommendationType.DATUM
+                for item in recommendations)
+            and datum is not None):
+        recommendations.append(_recommendation(
+            "confirmed-datum-surface", RecommendationType.DATUM,
+            "Use the engineer-permitted locating surface as datum evidence",
+            "The deterministic baseline copies an existing permitted source face; it does not invent a datum surface.",
+            datum.face_identity or datum.body_identity or datum.component_identity,
+            "ocp_face", "Engineer-permitted immutable source reference",
+            reference=datum, confidence=1.0,
+        ))
     feature_kinds = {item.kind: item for item in project.active.fixture.features}
     for feature_kind, recommendation_type, title in (
         ("baseplate", RecommendationType.BASE_STRUCTURE, "Fabricated plate base"),

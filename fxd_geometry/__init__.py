@@ -95,7 +95,7 @@ from .fabrication_workflow import (
     MultiStationFitProposal, MultiStationLayout, MultiStationRequirements, SlotProcessSpec, StationTransform,
     WeldJointAccessResult,
     M30Rule, NestClassification, PokaYokeSpec, TabSlotJoint, author_fixture_build, propose_multi_station_fit,
-    build_fixture_build_package, compare_fixture_build_plans, generate_fixture_build_plan,
+    bind_fixture_build_plan_to_proposal, build_fixture_build_package, compare_fixture_build_plans, generate_fixture_build_plan,
     generate_multi_station_fixture_alternatives, generate_multi_station_fixture_build_plan,
     generate_multi_station_layout,
     propose_multi_station_count, validate_fixture_build_plan, write_fixture_build_package,
@@ -177,7 +177,7 @@ __all__ += ["M30_SCHEMA", "M32_SCHEMA", "RULE_CATALOG", "RULES_BY_ID", "Adjustme
             "MultiStationFitProposal", "MultiStationLayout", "MultiStationRequirements", "SlotProcessSpec", "StationTransform",
             "WeldJointAccessResult",
             "M30Rule", "NestClassification", "PokaYokeSpec", "TabSlotJoint", "author_fixture_build", "propose_multi_station_fit",
-            "build_fixture_build_package", "compare_fixture_build_plans", "generate_fixture_build_plan",
+            "bind_fixture_build_plan_to_proposal", "build_fixture_build_package", "compare_fixture_build_plans", "generate_fixture_build_plan",
             "generate_multi_station_fixture_alternatives", "generate_multi_station_fixture_build_plan",
             "generate_multi_station_layout",
             "propose_multi_station_count", "validate_fixture_build_plan", "write_fixture_build_package"]

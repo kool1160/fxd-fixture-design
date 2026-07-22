@@ -348,6 +348,35 @@ class FxdProject:
         candidate = replace(self, fixture_build=fixture_build, approved_revision=None)
         return candidate._record_revision(self.revision_id)
 
+    def fixture_build_proposal_block_reason(self) -> str | None:
+        """Return the M32 proposal-to-build binding failure, if any."""
+        build = self.fixture_build
+        if build is None or build.multi_station_layout is None:
+            return None
+        proposal = self.fixture_proposal
+        if proposal is None:
+            return "multi-station fixture synthesis requires an accepted fixture proposal"
+        orientation = self.workflow.setup.manufacturing_orientation if self.workflow else None
+        from .ai_fixture_engineer import proposal_engineering_context_identity
+        stale = proposal.stale_reason(
+            self.product.source_sha256,
+            orientation.identity if orientation else None,
+            proposal_engineering_context_identity(self)
+            if self.workflow and self.workflow.has_accepted_manufacturing_orientation()
+            else None,
+        )
+        if stale:
+            return f"multi-station fixture proposal is stale: {stale}"
+        if proposal.blocker_count:
+            return "multi-station fixture proposal has deterministic blockers"
+        if proposal.proposal_decision != "accepted_for_engineering_review":
+            return "multi-station fixture proposal must be accepted for engineering review"
+        if build.fixture_proposal_identity != proposal.proposal_identity:
+            return "multi-station fixture build is not bound to the current accepted proposal identity"
+        if build.fixture_proposal_evidence_digest != proposal.evidence_digest:
+            return "multi-station fixture build is not bound to the current accepted proposal evidence"
+        return None
+
     @property
     def revision_id(self) -> str:
         payload = {
@@ -572,6 +601,9 @@ class FxdProject:
             raise ProjectFormatError("review action must be approve_for_review or reject")
         validation = self.active_validation
         if action == "approve_for_review":
+            build_proposal_reason = self.fixture_build_proposal_block_reason()
+            if build_proposal_reason:
+                raise ProjectFormatError(build_proposal_reason)
             if self.fixture_proposal is not None:
                 orientation = self.workflow.setup.manufacturing_orientation if self.workflow else None
                 from .ai_fixture_engineer import proposal_engineering_context_identity

@@ -985,6 +985,8 @@ class FixtureBuildPlan:
     poka_yokes: tuple[PokaYokeSpec, ...] = ()
     multi_station_layout: MultiStationLayout | None = None
     authoring_state: str = "not_authored"
+    fixture_proposal_identity: str | None = None
+    fixture_proposal_evidence_digest: str | None = None
 
     def __post_init__(self) -> None:
         if not self.identity.strip() or not self.concept_identity.strip():
@@ -1001,6 +1003,11 @@ class FixtureBuildPlan:
             raise FixtureBuildError("poka-yoke identities must be unique")
         if self.authoring_state not in {"not_authored", "normal", "provisional"}:
             raise FixtureBuildError("fixture build authoring state is unsupported")
+        if bool(self.fixture_proposal_identity) != bool(self.fixture_proposal_evidence_digest):
+            raise FixtureBuildError("fixture proposal identity and evidence binding must be recorded together")
+        if (self.fixture_proposal_evidence_digest is not None
+                and not re.fullmatch(r"[0-9a-f]{64}", self.fixture_proposal_evidence_digest)):
+            raise FixtureBuildError("fixture proposal evidence digest is malformed")
 
     @property
     def evidence_digest(self) -> str:
@@ -1021,6 +1028,8 @@ class FixtureBuildPlan:
             "poka_yokes": [item.to_dict() for item in sorted(self.poka_yokes, key=lambda item: item.identity)],
             "multi_station_layout": self.multi_station_layout.to_dict() if self.multi_station_layout else None,
             "authoring_state": self.authoring_state,
+            "fixture_proposal_identity": self.fixture_proposal_identity,
+            "fixture_proposal_evidence_digest": self.fixture_proposal_evidence_digest,
         }
 
     @classmethod
@@ -1041,6 +1050,8 @@ class FixtureBuildPlan:
             MultiStationLayout.from_dict(data["multi_station_layout"])
             if data.get("multi_station_layout") else None,
             str(data.get("authoring_state", "not_authored")),
+            data.get("fixture_proposal_identity"),
+            data.get("fixture_proposal_evidence_digest"),
         )
 
 
@@ -1563,7 +1574,7 @@ def _cross(left: Vec3, right: Vec3) -> Vec3:
 
 def _torch_body_envelope(intent: ConfirmedWeldIntent, translation: Vec3,
                          source_to_manufacturing: tuple[float, ...]) -> Aabb:
-    """Conservative manufacturing-coordinate AABB for one oriented torch body."""
+    """Manufacturing AABB for the torch swept across the full confirmed seam."""
     direction = _unit_direction(intent.approach_direction_manufacturing, "torch approach direction")
     seed = Vec3(0.0, 0.0, 1.0) if abs(direction.z) < 0.9 else Vec3(0.0, 1.0, 0.0)
     width_axis = _unit_direction(_cross(direction, seed), "torch width axis")
@@ -1571,14 +1582,21 @@ def _torch_body_envelope(intent: ConfirmedWeldIntent, translation: Vec3,
     joint = _matrix_apply(source_to_manufacturing, intent.joint_position_source_mm)
     origin = Vec3(joint.x + translation.x, joint.y + translation.y, joint.z + translation.z)
     points: list[Vec3] = []
-    for length in (0.0, intent.torch_envelope_mm.z):
-        for width in (-intent.torch_envelope_mm.x * 0.5, intent.torch_envelope_mm.x * 0.5):
-            for height in (-intent.torch_envelope_mm.y * 0.5, intent.torch_envelope_mm.y * 0.5):
-                points.append(Vec3(
-                    origin.x + direction.x * length + width_axis.x * width + height_axis.x * height,
-                    origin.y + direction.y * length + width_axis.y * width + height_axis.y * height,
-                    origin.z + direction.z * length + width_axis.z * width + height_axis.z * height,
-                ))
+    # The governed weld reference supplies the seam centre and length.  Sweep the
+    # torch along the reference-local tangent (perpendicular to approach and the
+    # stable manufacturing seed) instead of sampling only the centre point.
+    for seam in (-intent.weld_length_mm * 0.5, intent.weld_length_mm * 0.5):
+        for length in (0.0, intent.torch_envelope_mm.z):
+            for width in (-intent.torch_envelope_mm.x * 0.5, intent.torch_envelope_mm.x * 0.5):
+                for height in (-intent.torch_envelope_mm.y * 0.5, intent.torch_envelope_mm.y * 0.5):
+                    points.append(Vec3(
+                        origin.x + width_axis.x * seam + direction.x * length
+                        + width_axis.x * width + height_axis.x * height,
+                        origin.y + width_axis.y * seam + direction.y * length
+                        + width_axis.y * width + height_axis.y * height,
+                        origin.z + width_axis.z * seam + direction.z * length
+                        + width_axis.z * width + height_axis.z * height,
+                    ))
     return Aabb(
         Vec3(*(min(getattr(point, axis) for point in points) for axis in ("x", "y", "z"))),
         Vec3(*(max(getattr(point, axis) for point in points) for axis in ("x", "y", "z"))),
@@ -1811,8 +1829,10 @@ def generate_multi_station_fixture_build_plan(
     base_length = layout.required_fixture_length_mm
     # The long member is a low backbone, not a product-sized rear wall.  Local
     # station plates carry the product-shaped locating and clamp structure.
-    base = _oriented_bounds(primary, 0.0, base_length, 0.0, 36.0, -plate, 0.0)
-    rail = _oriented_bounds(primary, 0.0, base_length, 28.0, 40.0, 0.0,
+    # The backbone ends at the station-plate boundary.  The two separately
+    # authored solids share a weldable face but never occupy the same volume.
+    base = _oriented_bounds(primary, 0.0, base_length, 0.0, 24.0, -plate, 0.0)
+    rail = _oriented_bounds(primary, 0.0, base_length, 12.0, 24.0, 0.0,
                             min(24.0, product_height * 0.45 + 6.0))
     reference = _component_reference(product)
     mount_holes = tuple(
@@ -1820,14 +1840,14 @@ def generate_multi_station_fixture_build_plan(
             f"m32-table-mount-{index}", _oriented_point(primary, along, across, base.minimum.z), 12.0,
             HoleProcess.LASER_CLEARANCE, evidence=("Table-mount review hole; fastener and table standard require engineer confirmation.",),
         )
-        for index, (along, across) in enumerate(((18.0, 10.0), (base_length - 18.0, 10.0),
-                                                  (18.0, 26.0), (base_length - 18.0, 26.0)), 1)
+        for index, (along, across) in enumerate(((18.0, 6.0), (base_length - 18.0, 6.0),
+                                                  (18.0, 18.0), (base_length - 18.0, 18.0)), 1)
     )
     rail_slots = tuple(
         SlotProcessSpec(
             f"m32-rail-slot-{index}",
-            Vec3(x - 6.0, 28.0, base.minimum.z - 1.0) if primary == "x" else Vec3(28.0, x - 6.0, base.minimum.z - 1.0),
-            Vec3(x + 6.0, 40.0, 1.0) if primary == "x" else Vec3(40.0, x + 6.0, 1.0),
+            Vec3(x - 6.0, 12.0, base.minimum.z - 1.0) if primary == "x" else Vec3(12.0, x - 6.0, base.minimum.z - 1.0),
+            Vec3(x + 6.0, 24.0, 1.0) if primary == "x" else Vec3(24.0, x + 6.0, 1.0),
             "datum rail tab-and-slot location during fixture fabrication",
         ) for index, x in enumerate((48.0, base_length - 48.0), 1)
     )
@@ -1837,6 +1857,7 @@ def generate_multi_station_fixture_build_plan(
                    thickness=plate, rule_ids=("FXD-MFG-001", "FXD-M32-STA", "FXD-M32-CON", "FXD-EXP-001"),
                    holes=mount_holes, slots=rail_slots,
                    evidence=("Overall length is derived from deterministic station pitch and explicit maximum-length intent.",
+                             "Backbone secondary extent terminates at the local station-plate weld boundary; separately authored solids do not interpenetrate.",
                              "Mounting holes are review geometry; table-fastener selection remains engineer controlled.")),
         _component("m32-datum-rail", "FXD-M32-002", "low common datum and structural backbone rail",
                    BuildComponentRole.DATUM_RAIL, rail, reference, parent="m32-backbone", process="laser cut and weld",
@@ -2103,6 +2124,7 @@ def generate_multi_station_fixture_build_plan(
                         f"joint={weld.identity}",
                         f"weld_side={weld.weld_side}",
                         f"weld_length_mm={weld.weld_length_mm:.3f}",
+                        "torch_sweep_over_full_weld_length=true",
                         f"weld_process={weld.process}",
                         f"weld_sequence={weld.sequence}",
                         f"orientation={weld.manufacturing_orientation_identity}",
@@ -2199,6 +2221,26 @@ def generate_multi_station_fixture_alternatives(
             replace(multi_station, requested_station_count=count),
         )
         for count in counts
+    )
+
+
+def bind_fixture_build_plan_to_proposal(plan: FixtureBuildPlan, proposal: object) -> FixtureBuildPlan:
+    """Bind an M32 build to one current, accepted deterministic proposal."""
+    if plan.multi_station_layout is None:
+        raise FixtureBuildError("fixture proposal binding is only defined for multi-station builds")
+    if getattr(proposal, "source_sha256", None) != plan.requirements.source_sha256:
+        raise FixtureBuildError("fixture proposal does not match immutable build source geometry")
+    orientation = plan.multi_station_layout.requirements.manufacturing_orientation_identity
+    if getattr(proposal, "manufacturing_orientation_identity", None) != orientation:
+        raise FixtureBuildError("fixture proposal does not match the build manufacturing orientation")
+    if getattr(proposal, "blocker_count", 1):
+        raise FixtureBuildError("fixture proposal with deterministic blockers cannot bind a build")
+    if getattr(proposal, "proposal_decision", None) != "accepted_for_engineering_review":
+        raise FixtureBuildError("fixture proposal must be accepted before binding a multi-station build")
+    return replace(
+        plan,
+        fixture_proposal_identity=str(getattr(proposal, "proposal_identity")),
+        fixture_proposal_evidence_digest=str(getattr(proposal, "evidence_digest")),
     )
 
 
@@ -2367,6 +2409,18 @@ def _multi_station_findings(plan: FixtureBuildPlan) -> tuple[FixtureBuildFinding
         findings.append(_finding("FXD-M32-CON", "error", "each station requires one local station plate",
                                  components=tuple(item.identity for item in station_plates),
                                  disposition="review_blocker"))
+    backbone = next((item for item in plan.components
+                     if item.identity == "m32-backbone"), None)
+    if backbone is not None:
+        for station_plate in station_plates:
+            if _positive_bounds_overlap(backbone.bounds, station_plate.bounds):
+                findings.append(_finding(
+                    "FXD-M32-CON", "error",
+                    "local station plate interpenetrates the separately authored backbone solid",
+                    components=(backbone.identity, station_plate.identity),
+                    evidence=("A face contact or an explicit tab/cutout is required; volumetric overlap is not a buildable joint.",),
+                    disposition="authoring_blocker",
+                ))
     end_stations = (layout.stations[0], layout.stations[-1]) if layout.stations else ()
     for station in end_stations:
         for brace in braces:
@@ -2710,12 +2764,25 @@ def author_fixture_build(plan: FixtureBuildPlan, product: ProductModel, kernel: 
 
 
 def build_fixture_build_package(assembly: AuthoredFixtureAssembly, plan: FixtureBuildPlan, product: ProductModel,
-                                *, project_validation: object | None = None) -> dict[str, bytes | str]:
+                                 *, project_validation: object | None = None,
+                                 accepted_proposal: object | None = None) -> dict[str, bytes | str]:
     """Create deterministic review-only manufacturing outputs behind all available gates."""
     if assembly.plan_identity != plan.identity or assembly.source_sha256 != plan.requirements.source_sha256:
         raise FixtureBuildError("authored fixture geometry does not match the construction plan")
     if assembly.plan_evidence_digest != plan.evidence_digest:
         raise FixtureBuildError("authored fixture geometry is stale for the supplied construction plan")
+    if plan.multi_station_layout is not None:
+        if accepted_proposal is None:
+            raise FixtureBuildError(
+                "multi-station fixture release requires a build bound to an accepted fixture proposal"
+            )
+        expected_binding = bind_fixture_build_plan_to_proposal(plan, accepted_proposal)
+        if (plan.fixture_proposal_identity != expected_binding.fixture_proposal_identity
+                or plan.fixture_proposal_evidence_digest
+                != expected_binding.fixture_proposal_evidence_digest):
+            raise FixtureBuildError(
+                "multi-station fixture build does not match the accepted proposal evidence"
+            )
     current_validation = validate_fixture_build_plan(product, plan)
     if (current_validation.evidence_digest != assembly.validation.evidence_digest
             or current_validation.status != "valid"
@@ -2782,9 +2849,11 @@ def build_fixture_build_package(assembly: AuthoredFixtureAssembly, plan: Fixture
 
 def write_fixture_build_package(assembly: AuthoredFixtureAssembly, plan: FixtureBuildPlan, product: ProductModel,
                                 destination: str | Path,
-                                *, project_validation: object | None = None) -> tuple[Path, ...]:
+                                *, project_validation: object | None = None,
+                                accepted_proposal: object | None = None) -> tuple[Path, ...]:
     files = build_fixture_build_package(
         assembly, plan, product, project_validation=project_validation,
+        accepted_proposal=accepted_proposal,
     )
     root = Path(destination)
     root.mkdir(parents=True, exist_ok=True)

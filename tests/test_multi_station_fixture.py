@@ -16,12 +16,13 @@ from fxd_geometry import (
     generate_multi_station_layout,
     load_step_for_workbench,
     product_from_workbench_document, InteractiveWorkflow, ProcessSetup, validate_fixture_build_plan,
-    ReferencePlane, reference_plane_orientation, source_orientation, face_annotation,
+    ReferencePlane, bind_fixture_build_plan_to_proposal, reference_plane_orientation, source_orientation, face_annotation,
 )
 from fxd_geometry.annotations import EngineeringAnnotations
 from fxd_geometry.project import FxdProject
 from fxd_geometry.ai_fixture_engineer import deterministic_baseline_proposal
 from fxd_geometry.interactive_workflow import _engineering_annotations
+from fxd_geometry.operations import project_export_block_reason
 
 
 class MultiStationFixtureTests(unittest.TestCase):
@@ -44,6 +45,15 @@ class MultiStationFixtureTests(unittest.TestCase):
         cls.annotations = EngineeringAnnotations.for_product(
             cls.product, build_orientation=Vec3(0, 0, 1), loading_direction=Vec3(1, 0, 0),
             process_type="synthetic MIG weld", production_quantity=100,
+        )
+        datum_body = cls.product.components[0].bodies[0]
+        cls.annotations = replace(
+            cls.annotations,
+            permitted_locating_surfaces=(GeometryReference(
+                cls.product.components[0].identity,
+                datum_body.identity,
+                datum_body.faces[0].identity,
+            ),),
         )
         cls.concept = generate_fixture_concepts(cls.product, cls.annotations).recommended
 
@@ -103,6 +113,34 @@ class MultiStationFixtureTests(unittest.TestCase):
             self.station_requirements(count=count, maximum_length=maximum_length),
         )
 
+    def accepted_proposal(self):
+        orientation = source_orientation(self.product.source_sha256, accepted=True)
+        datum = face_annotation(
+            load_step_for_workbench(self.source),
+            self.annotations.permitted_locating_surfaces[0],
+            AnnotationRole.PRIMARY_DATUM,
+        )
+        workflow = InteractiveWorkflow(
+            self.product.source_sha256,
+            ProcessSetup(
+                "M32 accepted proposal test",
+                fixture_family=FixtureFamily.LINEAR_MULTI_STATION_WELD.value,
+                fixture_type="Full weld fixture",
+                manufacturing_process="synthetic MIG weld",
+                production_quantity=100,
+                manufacturing_orientation=orientation,
+                manufacturing_loading_direction=Vec3(0.0, -1.0, 0.0),
+                manufacturing_unloading_direction=Vec3(0.0, 1.0, 0.0),
+            ),
+            (datum,), concepts_generated=True,
+        )
+        project = FxdProject.from_product(self.product, self.annotations, workflow=workflow)
+        project = project.with_fixture_proposal(deterministic_baseline_proposal(project))
+        return project.decide_fixture_proposal("accepted_for_engineering_review").fixture_proposal
+
+    def bound_plan(self, **kwargs):
+        return bind_fixture_build_plan_to_proposal(self.plan(**kwargs), self.accepted_proposal())
+
     def test_five_station_real_ocp_fixture_is_source_immutable_and_connected(self):
         before = self.source.read_bytes()
         plan = self.plan()
@@ -161,16 +199,20 @@ class MultiStationFixtureTests(unittest.TestCase):
                 )
 
     def test_station_count_edit_and_bom_reconcile_deterministically(self):
-        five = self.plan(count=5)
-        self.assertEqual(five.to_dict(), self.plan(count=5).to_dict())
-        three = self.plan(count=3)
+        five_raw = self.plan(count=5)
+        self.assertEqual(five_raw.to_dict(), self.plan(count=5).to_dict())
+        proposal = self.accepted_proposal()
+        five = bind_fixture_build_plan_to_proposal(five_raw, proposal)
+        three = bind_fixture_build_plan_to_proposal(self.plan(count=3), proposal)
         self.assertNotEqual(five.identity, three.identity)
         self.assertEqual(len(three.multi_station_layout.stations), 3)
         five_package = build_fixture_build_package(
             author_fixture_build(five, self.product, self.kernel), five, self.product,
+            accepted_proposal=proposal,
         )
         three_package = build_fixture_build_package(
             author_fixture_build(three, self.product, self.kernel), three, self.product,
+            accepted_proposal=proposal,
         )
         five_bom = json.loads(five_package["bom.json"])
         three_bom = json.loads(three_package["bom.json"])
@@ -552,6 +594,92 @@ class MultiStationFixtureTests(unittest.TestCase):
             clear.multi_station_layout.stations[0].weld_access_results[0].torch_envelope,
             oversized.multi_station_layout.stations[0].weld_access_results[0].torch_envelope,
         )
+
+    def test_confirmed_weld_length_sweeps_the_complete_torch_path(self):
+        weld = self.build_requirements().confirmed_welds[0]
+        short = replace(weld, weld_length_mm=2.0)
+        short_plan = generate_multi_station_fixture_build_plan(
+            self.product, self.concept, self.build_requirements(welds=(short,)),
+            self.station_requirements(count=4),
+        )
+        long_plan = self.plan(count=4)
+        short_envelope = short_plan.multi_station_layout.stations[0].weld_access_results[0].torch_envelope
+        long_envelope = long_plan.multi_station_layout.stations[0].weld_access_results[0].torch_envelope
+        self.assertAlmostEqual(short_envelope.maximum.x - short_envelope.minimum.x,
+                               short.weld_length_mm + short.torch_envelope_mm.x)
+        self.assertAlmostEqual(long_envelope.maximum.x - long_envelope.minimum.x,
+                               weld.weld_length_mm + weld.torch_envelope_mm.x)
+        self.assertGreater(long_envelope.maximum.x - long_envelope.minimum.x,
+                           short_envelope.maximum.x - short_envelope.minimum.x)
+        self.assertIn(
+            "torch_sweep_over_full_weld_length=true",
+            long_plan.multi_station_layout.stations[0].weld_access_results[0].evidence,
+        )
+
+    def test_station_plates_share_a_boundary_with_backbone_without_interpenetration(self):
+        plan = self.plan(count=4)
+        backbone = next(item for item in plan.components if item.identity == "m32-backbone")
+        plates = tuple(item for item in plan.components
+                       if item.role == BuildComponentRole.STATION_PLATE)
+        for plate in plates:
+            overlap = tuple(max(0.0, min(getattr(backbone.bounds.maximum, axis),
+                                         getattr(plate.bounds.maximum, axis))
+                                - max(getattr(backbone.bounds.minimum, axis),
+                                      getattr(plate.bounds.minimum, axis)))
+                            for axis in ("x", "y", "z"))
+            self.assertEqual(overlap[0] * overlap[1] * overlap[2], 0.0)
+        self.assertFalse(any("interpenetrates" in item.message
+                             for item in validate_fixture_build_plan(self.product, plan).findings))
+
+        expanded = replace(backbone, bounds=Aabb(
+            backbone.bounds.minimum,
+            Vec3(backbone.bounds.maximum.x, backbone.bounds.maximum.y + 1.0,
+                 backbone.bounds.maximum.z),
+        ))
+        invalid = replace(plan, components=tuple(
+            expanded if item.identity == backbone.identity else item for item in plan.components
+        ))
+        finding = next(item for item in validate_fixture_build_plan(self.product, invalid).findings
+                       if "interpenetrates" in item.message)
+        self.assertEqual(finding.disposition, "authoring_blocker")
+
+    def test_multi_station_release_requires_current_accepted_proposal_binding(self):
+        orientation = source_orientation(self.product.source_sha256, accepted=True)
+        workflow = InteractiveWorkflow(
+            self.product.source_sha256,
+            ProcessSetup(
+                "M32 proposal gate", fixture_family=FixtureFamily.LINEAR_MULTI_STATION_WELD.value,
+                fixture_type="Full weld fixture", manufacturing_process="synthetic MIG weld",
+                production_quantity=100, manufacturing_orientation=orientation,
+                manufacturing_loading_direction=Vec3(0.0, -1.0, 0.0),
+                manufacturing_unloading_direction=Vec3(0.0, 1.0, 0.0),
+            ), (
+                face_annotation(
+                    load_step_for_workbench(self.source),
+                    self.annotations.permitted_locating_surfaces[0],
+                    AnnotationRole.PRIMARY_DATUM,
+                ),
+            ), concepts_generated=True,
+        )
+        project = FxdProject.from_product(self.product, self.annotations, workflow=workflow)
+        unbound = project.with_fixture_build(self.plan(count=4))
+        self.assertIn("requires an accepted fixture proposal",
+                      unbound.fixture_build_proposal_block_reason())
+        self.assertIn("accepted fixture proposal", project_export_block_reason(unbound))
+        with self.assertRaisesRegex(FixtureBuildError, "bound to an accepted fixture proposal"):
+            build_fixture_build_package(
+                author_fixture_build(unbound.fixture_build, self.product, self.kernel),
+                unbound.fixture_build, self.product,
+            )
+
+        project = project.with_fixture_proposal(deterministic_baseline_proposal(project))
+        project = project.decide_fixture_proposal("accepted_for_engineering_review")
+        bound = bind_fixture_build_plan_to_proposal(self.plan(count=4), project.fixture_proposal)
+        project = project.with_fixture_build(bound)
+        self.assertIsNone(project.fixture_build_proposal_block_reason())
+        self.assertEqual(bound.fixture_proposal_identity, project.fixture_proposal.proposal_identity)
+        self.assertEqual(bound.fixture_proposal_evidence_digest,
+                         project.fixture_proposal.evidence_digest)
 
     def test_every_confirmed_weld_is_evaluated_and_one_blocked_joint_blocks_build(self):
         clear_weld = self.build_requirements().confirmed_welds[0]

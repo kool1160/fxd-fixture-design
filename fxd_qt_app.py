@@ -97,6 +97,7 @@ from fxd_geometry import (
     RenderDiagnostics,
     Vec3,
     author_fixture_build,
+    bind_fixture_build_plan_to_proposal,
     WorkbenchDocument,
     analyze_engineering_workflow,
     apply_recommended_intent,
@@ -4548,6 +4549,25 @@ class FxdWorkbenchWindow(QMainWindow):
             build_requirements = self._fixture_build_requirements()
             setup = self._capture_process_setup()
             if setup.fixture_family == FixtureFamily.LINEAR_MULTI_STATION_WELD.value:
+                proposal = self.project.fixture_proposal
+                if proposal is None:
+                    self.statusBar().showMessage(
+                        "Generate and accept the Fixture Proposal before multi-station synthesis."
+                    )
+                    return
+                orientation = self.workflow.setup.manufacturing_orientation
+                current_context = replace(self.project, workflow=self.workflow)
+                stale = proposal.stale_reason(
+                    self.project.product.source_sha256,
+                    orientation.identity if orientation else None,
+                    proposal_engineering_context_identity(current_context),
+                )
+                if (stale or proposal.blocker_count
+                        or proposal.proposal_decision != "accepted_for_engineering_review"):
+                    self.statusBar().showMessage(
+                        "Resolve and accept the current Fixture Proposal before multi-station synthesis."
+                    )
+                    return
                 multi_station = self._multi_station_requirements(setup)
                 fit = propose_multi_station_fit(self.project.product, multi_station)
                 request_key = self._multi_station_fit_key(fit.requested_station_count)
@@ -4567,6 +4587,7 @@ class FxdWorkbenchWindow(QMainWindow):
                     self.project.product, self.project.active, build_requirements, multi_station,
                 )
                 plan = alternatives[-1]
+                plan = bind_fixture_build_plan_to_proposal(plan, proposal)
                 self._multi_station_comparison_summary = (
                     f"Alternative comparison: generated {len(alternatives)} governed plan(s) "
                     f"(one-up and {multi_station.requested_station_count}-station when requested); "
