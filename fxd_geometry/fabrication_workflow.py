@@ -2536,19 +2536,45 @@ def _dxf_for(component: FixtureBuildComponent) -> bytes | None:
                           BuildComponentRole.TUBE_FRAME, BuildComponentRole.CROSSMEMBER}:
         return None
     low, high = component.bounds.minimum, component.bounds.maximum
+    coordinates = lambda point: (point.x, point.y, point.z)
+    plane_axes = (0, 1)
+    if component.thickness_mm is not None:
+        spans = tuple(high_value - low_value for low_value, high_value in zip(coordinates(low), coordinates(high)))
+        thickness_axes = tuple(
+            index for index, span in enumerate(spans)
+            if abs(span - component.thickness_mm) <= 1e-7
+        )
+        # A DXF is release evidence, so an ambiguous/non-reconciling plate
+        # envelope is suppressed instead of guessed. Vertical holes are also
+        # suppressed until the OCP authoring path supports their true axis.
+        if len(thickness_axes) != 1 or (thickness_axes[0] != 2 and component.holes):
+            return None
+        plane_axes = tuple(index for index in range(3) if index != thickness_axes[0])
+    plane_name = "XYZ"[plane_axes[0]] + "XYZ"[plane_axes[1]]
+    low_values, high_values = coordinates(low), coordinates(high)
+    profile_low = (low_values[plane_axes[0]], low_values[plane_axes[1]])
+    profile_high = (high_values[plane_axes[0]], high_values[plane_axes[1]])
     value = lambda item: format(item, ".9g")
-    lines = ["0", "SECTION", "2", "HEADER", "9", "$INSUNITS", "70", "4", "0", "ENDSEC", "0", "SECTION", "2", "ENTITIES",
-             "0", "LWPOLYLINE", "8", "PROFILE", "90", "5", "70", "1"]
-    for x, y in ((low.x, low.y), (high.x, low.y), (high.x, high.y), (low.x, high.y), (low.x, low.y)):
+    lines = ["0", "SECTION", "2", "HEADER", "9", "$INSUNITS", "70", "4", "0", "ENDSEC",
+             "999", f"FXD_PROFILE_PLANE={plane_name}", "0", "SECTION", "2", "ENTITIES",
+             "0", "LWPOLYLINE", "8", f"PROFILE_{plane_name}", "90", "5", "70", "1"]
+    for x, y in ((profile_low[0], profile_low[1]), (profile_high[0], profile_low[1]),
+                 (profile_high[0], profile_high[1]), (profile_low[0], profile_high[1]),
+                 (profile_low[0], profile_low[1])):
         lines.extend(("10", value(x), "20", value(y)))
     for hole in component.holes:
-        lines.extend(("0", "CIRCLE", "8", hole.process.value, "10", value(hole.center_mm.x),
-                      "20", value(hole.center_mm.y), "40", value(hole.diameter_mm / 2.0)))
+        center = coordinates(hole.center_mm)
+        lines.extend(("0", "CIRCLE", "8", hole.process.value,
+                      "10", value(center[plane_axes[0]]),
+                      "20", value(center[plane_axes[1]]), "40", value(hole.diameter_mm / 2.0)))
     for slot in component.slots:
+        slot_low, slot_high = coordinates(slot.minimum_mm), coordinates(slot.maximum_mm)
         lines.extend(("0", "LWPOLYLINE", "8", "ADJUSTMENT_SLOT", "90", "5", "70", "1"))
-        for x, y in ((slot.minimum_mm.x, slot.minimum_mm.y), (slot.maximum_mm.x, slot.minimum_mm.y),
-                     (slot.maximum_mm.x, slot.maximum_mm.y), (slot.minimum_mm.x, slot.maximum_mm.y),
-                     (slot.minimum_mm.x, slot.minimum_mm.y)):
+        for x, y in ((slot_low[plane_axes[0]], slot_low[plane_axes[1]]),
+                     (slot_high[plane_axes[0]], slot_low[plane_axes[1]]),
+                     (slot_high[plane_axes[0]], slot_high[plane_axes[1]]),
+                     (slot_low[plane_axes[0]], slot_high[plane_axes[1]]),
+                     (slot_low[plane_axes[0]], slot_low[plane_axes[1]])):
             lines.extend(("10", value(x), "20", value(y)))
     lines.extend(("0", "ENDSEC", "0", "EOF"))
     return ("\n".join(lines) + "\n").encode("ascii")

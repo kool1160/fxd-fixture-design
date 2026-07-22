@@ -4786,16 +4786,28 @@ class FxdWorkbenchWindow(QMainWindow):
                         ("unload", station.unloading_direction, station.unloading_direction_source,
                          [0.72, 0.54, 0.97]),
                     ):
-                        if direction is None:
+                        source_to_manufacturing = layout.requirements.source_to_manufacturing
+                        if direction is None or len(source_to_manufacturing) != 16:
                             continue
+                        rendered_direction = [
+                            source_to_manufacturing[0] * direction.x
+                            + source_to_manufacturing[1] * direction.y
+                            + source_to_manufacturing[2] * direction.z,
+                            source_to_manufacturing[4] * direction.x
+                            + source_to_manufacturing[5] * direction.y
+                            + source_to_manufacturing[6] * direction.z,
+                            source_to_manufacturing[8] * direction.x
+                            + source_to_manufacturing[9] * direction.y
+                            + source_to_manufacturing[10] * direction.z,
+                        ]
                         items.append({
                             "identity": f"m32-{label}:{station.identity}",
                             "kind": "orientation_arrow", "origin": center,
-                            "direction": list(direction.__dict__.values()),
+                            "direction": rendered_direction,
                             "length": max(28.0, layout.requirements.hand_clearance_mm * 0.72),
                             "status": "provisional", "color": color, "opacity": 0.98,
                             "representation": "surface", "semantic": f"{label}_direction",
-                            "evidence": f"{label} direction {token}; accepted-orientation source-coordinate station evidence",
+                            "evidence": f"{label} direction {token}; source evidence transformed into the manufacturing review frame",
                         })
         return items + orientation_items
 

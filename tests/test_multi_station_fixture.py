@@ -138,6 +138,28 @@ class MultiStationFixtureTests(unittest.TestCase):
         self.assertEqual(before, self.source.read_bytes())
         self.assertEqual(self.source_sha256, sha256(self.source.read_bytes()).hexdigest())
 
+    def test_dxf_profiles_use_the_plate_plane_or_fail_closed(self):
+        plan = self.plan()
+        assembly = author_fixture_build(plan, self.product, self.kernel)
+        authored_by_role = {item.component.role: item for item in assembly.components}
+
+        base_dxf = authored_by_role[BuildComponentRole.BASEPLATE].dxf_bytes.decode("ascii")
+        rail = authored_by_role[BuildComponentRole.DATUM_RAIL]
+        rail_dxf = rail.dxf_bytes.decode("ascii")
+        self.assertIn("FXD_PROFILE_PLANE=XY", base_dxf)
+        self.assertIn("FXD_PROFILE_PLANE=XZ", rail_dxf)
+        self.assertIn(f"20\n{format(rail.component.bounds.maximum.z, '.9g')}\n", rail_dxf)
+
+        for item in assembly.components:
+            if item.component.role in {
+                    BuildComponentRole.LOCATOR_PLATE,
+                    BuildComponentRole.HARD_STOP,
+                    BuildComponentRole.CLAMP_BRACKET}:
+                self.assertIsNone(
+                    item.dxf_bytes,
+                    f"{item.component.identity} must not export an ambiguous plate-plane DXF",
+                )
+
     def test_station_count_edit_and_bom_reconcile_deterministically(self):
         five = self.plan(count=5)
         self.assertEqual(five.to_dict(), self.plan(count=5).to_dict())

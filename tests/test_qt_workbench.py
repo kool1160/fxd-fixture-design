@@ -362,6 +362,18 @@ class QtWorkbenchTests(unittest.TestCase):
                                           0.0, 0.0, 1.0, station.translation_mm.z))
         for actual, expected in zip(product_item["vertices"][0], expected_vertex):
             self.assertAlmostEqual(actual, expected, places=7)
+        load_arrow = next(item for item in items
+                          if item.get("semantic") == "load_direction"
+                          and item["identity"].endswith(station.identity))
+        source_direction = station.loading_direction_source
+        expected_direction = (
+            matrix[0] * source_direction.x + matrix[1] * source_direction.y + matrix[2] * source_direction.z,
+            matrix[4] * source_direction.x + matrix[5] * source_direction.y + matrix[6] * source_direction.z,
+            matrix[8] * source_direction.x + matrix[9] * source_direction.y + matrix[10] * source_direction.z,
+        )
+        self.assertNotEqual(tuple(load_arrow["direction"]), tuple(source_direction.__dict__.values()))
+        for actual, expected in zip(load_arrow["direction"], expected_direction):
+            self.assertAlmostEqual(actual, expected, places=7)
 
     def test_editing_accepted_station_count_creates_new_intent(self):
         self.window._replace_project(self._project())
