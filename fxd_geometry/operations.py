@@ -204,7 +204,8 @@ def export_project_package(project: FxdProject, destination: str | Path,
         from .fabrication_workflow import FixtureBuildError, write_fixture_build_package
         try:
             paths.extend(write_fixture_build_package(
-                fixture_build_assembly, project.fixture_build, Path(destination) / "m30-manufacturing",
+                fixture_build_assembly, project.fixture_build, project.product,
+                Path(destination) / "m30-manufacturing",
                 project_validation=project.active_validation,
             ))
         except FixtureBuildError as exc:

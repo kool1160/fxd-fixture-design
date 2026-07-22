@@ -1145,6 +1145,7 @@ class AuthoredFixtureAssembly:
     components: tuple[AuthoredFixtureComponent, ...]
     model: object
     validation: FixtureBuildValidation
+    plan_evidence_digest: str
     provisional: bool = False
     review_labels: tuple[str, ...] = ()
 
@@ -1156,6 +1157,7 @@ class AuthoredFixtureAssembly:
     def evidence_digest(self) -> str:
         payload = json.dumps({
             "plan": self.plan_identity, "source": self.source_sha256,
+            "plan_evidence_digest": self.plan_evidence_digest,
             "validation": self.validation.evidence_digest,
             "provisional": self.provisional, "review_labels": self.review_labels,
             "components": [(item.component.identity, hashlib.sha256(item.step_bytes).hexdigest()) for item in self.components],
@@ -1517,6 +1519,29 @@ def _motion_path_clear(bounds: Aabb, motion: Vec3, distance: float,
     start = _translated(bounds, Vec3(motion.x * offset, motion.y * offset, motion.z * offset))
     path = _swept_bounds(start, motion, max(0.0, distance - offset))
     return not any(_positive_bounds_overlap(path, obstacle) for obstacle in obstacles)
+
+
+def _projection_interval(bounds: Aabb, direction: Vec3) -> tuple[float, float]:
+    values = tuple(
+        direction.x * x + direction.y * y + direction.z * z
+        for x, y, z in itertools.product(
+            (bounds.minimum.x, bounds.maximum.x),
+            (bounds.minimum.y, bounds.maximum.y),
+            (bounds.minimum.z, bounds.maximum.z),
+        )
+    )
+    return min(values), max(values)
+
+
+def _complete_exit_distance(bounds: Aabb, motion: Vec3,
+                            obstacles: tuple[Aabb, ...], clearance: float) -> float:
+    """Move the complete product beyond every occupied fixture projection."""
+    product_low, _ = _projection_interval(bounds, motion)
+    obstacle_high = max(
+        (_projection_interval(obstacle, motion)[1] for obstacle in obstacles),
+        default=product_low,
+    )
+    return max(clearance, obstacle_high - product_low + clearance)
 
 
 def _confirmed_weld_evidence_complete(requirements: FixtureBuildRequirements) -> bool:
@@ -2009,17 +2034,32 @@ def generate_multi_station_fixture_build_plan(
     evaluated_stations: list[StationTransform] = []
     for station in layout.stations:
         bracket, closed, opened = clamp_review[station.identity]
-        loading_envelope = _swept_bounds(station.product_bounds, loading_outward,
-                                         multi_station.hand_clearance_mm)
-        unloading_envelope = _swept_bounds(station.product_bounds, unload_direction,
-                                           multi_station.hand_clearance_mm)
+        other_products = tuple(
+            other.product_bounds for other in layout.stations
+            if other.identity != station.identity
+        )
+        station_obstacles = access_obstacles + other_products
+        loading_distance = _complete_exit_distance(
+            station.product_bounds, loading_outward, station_obstacles,
+            multi_station.hand_clearance_mm,
+        )
+        unloading_distance = _complete_exit_distance(
+            station.product_bounds, unload_direction, station_obstacles,
+            multi_station.hand_clearance_mm,
+        )
+        loading_envelope = _swept_bounds(
+            station.product_bounds, loading_outward, loading_distance,
+        )
+        unloading_envelope = _swept_bounds(
+            station.product_bounds, unload_direction, unloading_distance,
+        )
         loading_clear = _motion_path_clear(
-            station.product_bounds, loading_outward, multi_station.hand_clearance_mm,
-            access_obstacles,
+            station.product_bounds, loading_outward, loading_distance,
+            station_obstacles,
         )
         unloading_clear = _motion_path_clear(
-            station.product_bounds, unload_direction, multi_station.hand_clearance_mm,
-            access_obstacles,
+            station.product_bounds, unload_direction, unloading_distance,
+            station_obstacles,
         )
         open_clear = not opened.intersects(station.product_bounds)
         hand_clear = loading_clear and open_clear
@@ -2098,6 +2138,8 @@ def generate_multi_station_fixture_build_plan(
                 f"clamp_direction_manufacturing=({clamp_outward.x:.6g},{clamp_outward.y:.6g},{clamp_outward.z:.6g})",
                 f"manufacturing_orientation={multi_station.manufacturing_orientation_identity or 'unrecorded'}",
                 f"hand_clearance_mm={multi_station.hand_clearance_mm:.3f}",
+                f"complete_loading_exit_distance_mm={loading_distance:.3f}",
+                f"complete_unloading_exit_distance_mm={unloading_distance:.3f}",
                 "loading_sweep_vs_rail_station_plate_locator_stop_open_clamp_brace=" + ("clear" if loading_clear else "blocked"),
                 "unloading_sweep_vs_rail_station_plate_locator_stop_open_clamp_brace=" + ("clear" if unloading_clear else "blocked"),
                 "open_clamp_sweep_vs_product=" + ("clear" if open_clear else "blocked"),
@@ -2663,15 +2705,21 @@ def author_fixture_build(plan: FixtureBuildPlan, product: ProductModel, kernel: 
     labels = (("PROVISIONAL", "NOT APPROVED", "INVALID BUILD PLAN") if provisional else ())
     return AuthoredFixtureAssembly(plan.identity, plan.requirements.source_sha256, "mm", tuple(authored),
                                    kernel.compound(tuple(item.shape for item in authored)), validation,
+                                   plan.evidence_digest,
                                    provisional, labels)
 
 
-def build_fixture_build_package(assembly: AuthoredFixtureAssembly, plan: FixtureBuildPlan,
+def build_fixture_build_package(assembly: AuthoredFixtureAssembly, plan: FixtureBuildPlan, product: ProductModel,
                                 *, project_validation: object | None = None) -> dict[str, bytes | str]:
     """Create deterministic review-only manufacturing outputs behind all available gates."""
     if assembly.plan_identity != plan.identity or assembly.source_sha256 != plan.requirements.source_sha256:
         raise FixtureBuildError("authored fixture geometry does not match the construction plan")
-    if assembly.validation.status != "valid" or assembly.provisional:
+    if assembly.plan_evidence_digest != plan.evidence_digest:
+        raise FixtureBuildError("authored fixture geometry is stale for the supplied construction plan")
+    current_validation = validate_fixture_build_plan(product, plan)
+    if (current_validation.evidence_digest != assembly.validation.evidence_digest
+            or current_validation.status != "valid"
+            or assembly.validation.status != "valid" or assembly.provisional):
         raise FixtureBuildError("only a valid fixture build validation result can be exported")
     if assembly.blocked or plan.requirements.adjustment_state in {
             AdjustmentState.PROVISIONAL, AdjustmentState.PROVE_OUT, AdjustmentState.REVALIDATION_REQUIRED}:
@@ -2700,8 +2748,8 @@ def build_fixture_build_package(assembly: AuthoredFixtureAssembly, plan: Fixture
     manifest = {
         "format": "fxd-m30-review-manufacturing-package-v1", "plan": plan.to_dict(),
         "source_sha256": assembly.source_sha256, "assembly_evidence_digest": assembly.evidence_digest,
-        "validation": {"status": assembly.validation.status, "evidence_digest": assembly.validation.evidence_digest,
-                       "findings": [item.to_dict() for item in assembly.validation.findings]},
+        "validation": {"status": current_validation.status, "evidence_digest": current_validation.evidence_digest,
+                       "findings": [item.to_dict() for item in current_validation.findings]},
         "approval_boundary": "Engineering review only. Not production release, certification, structural adequacy, or safety approval.",
     }
     if plan.multi_station_layout is not None:
@@ -2732,9 +2780,12 @@ def build_fixture_build_package(assembly: AuthoredFixtureAssembly, plan: Fixture
     return dict(sorted(files.items()))
 
 
-def write_fixture_build_package(assembly: AuthoredFixtureAssembly, plan: FixtureBuildPlan, destination: str | Path,
+def write_fixture_build_package(assembly: AuthoredFixtureAssembly, plan: FixtureBuildPlan, product: ProductModel,
+                                destination: str | Path,
                                 *, project_validation: object | None = None) -> tuple[Path, ...]:
-    files = build_fixture_build_package(assembly, plan, project_validation=project_validation)
+    files = build_fixture_build_package(
+        assembly, plan, product, project_validation=project_validation,
+    )
     root = Path(destination)
     root.mkdir(parents=True, exist_ok=True)
     written: list[Path] = []

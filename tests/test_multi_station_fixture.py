@@ -77,7 +77,7 @@ class MultiStationFixtureTests(unittest.TestCase):
 
     def station_requirements(self, *, count=5, maximum_length=3000.0, product=None,
                              loading_source=Vec3(0.0, -1.0, 0.0),
-                             unloading_source=Vec3(-1.0, 0.0, 0.0),
+                             unloading_source=Vec3(0.0, 1.0, 0.0),
                              operator_source=Vec3(0.0, 1.0, 0.0),
                              clamp_source=Vec3(0.0, 1.0, 0.0),
                              up_source=Vec3(0.0, 0.0, 1.0)):
@@ -85,7 +85,7 @@ class MultiStationFixtureTests(unittest.TestCase):
         orientation = source_orientation(product.source_sha256, accepted=True)
         return MultiStationRequirements(
             FixtureFamily.LINEAR_MULTI_STATION_WELD, count, maximum_length, None,
-            "Operator front (+Y)", "-X", "Operator front (+Y)", "manual",
+            "Operator front (+Y)", "+Y", "Operator front (+Y)", "manual",
             "Table mounting holes", 100, True,
             loading_direction_source=loading_source,
             unloading_direction_source=unloading_source,
@@ -166,8 +166,12 @@ class MultiStationFixtureTests(unittest.TestCase):
         three = self.plan(count=3)
         self.assertNotEqual(five.identity, three.identity)
         self.assertEqual(len(three.multi_station_layout.stations), 3)
-        five_package = build_fixture_build_package(author_fixture_build(five, self.product, self.kernel), five)
-        three_package = build_fixture_build_package(author_fixture_build(three, self.product, self.kernel), three)
+        five_package = build_fixture_build_package(
+            author_fixture_build(five, self.product, self.kernel), five, self.product,
+        )
+        three_package = build_fixture_build_package(
+            author_fixture_build(three, self.product, self.kernel), three, self.product,
+        )
         five_bom = json.loads(five_package["bom.json"])
         three_bom = json.loads(three_package["bom.json"])
         count_role = lambda bom, token: sum(token in item["description"] for item in bom)
@@ -238,9 +242,35 @@ class MultiStationFixtureTests(unittest.TestCase):
         self.assertTrue(any("not evaluated" in item.message for item in findings))
         self.assertTrue(any(item.disposition == "review_blocker" for item in findings))
 
+    def test_unload_path_moves_complete_product_beyond_fixture_and_adjacent_stations(self):
+        plan = self.plan(count=4)
+        layout = plan.multi_station_layout
+        fixture_max_y = max(item.bounds.maximum.y for item in plan.components)
+        for station in layout.stations:
+            distance = station.unloading_envelope.maximum.y - station.product_bounds.maximum.y
+            self.assertGreater(
+                station.product_bounds.minimum.y + distance,
+                fixture_max_y,
+            )
+            self.assertTrue(any(item.startswith("complete_unloading_exit_distance_mm=")
+                                for item in station.access_evidence))
+
+        cross_station = generate_multi_station_fixture_build_plan(
+            self.product, self.concept, self.build_requirements(),
+            replace(
+                self.station_requirements(count=4),
+                unloading_direction="-X",
+                unloading_direction_source=Vec3(-1.0, 0.0, 0.0),
+            ),
+        )
+        self.assertTrue(any(station.unload_path_clear is False
+                            for station in cross_station.multi_station_layout.stations))
+        self.assertTrue(validate_fixture_build_plan(self.product, cross_station).review_blocked)
+
     def test_local_station_plates_and_end_clearance_are_axis_neutral(self):
-        def assert_layout(product, concept, *, unload="-X", operator_side="Operator front (+Y)"):
-            unload_source = {"-X": Vec3(-1, 0, 0), "+X": Vec3(1, 0, 0)}[unload]
+        def assert_layout(product, concept, *, unload="+Y", operator_side="Operator front (+Y)"):
+            unload_source = {"-X": Vec3(-1, 0, 0), "+X": Vec3(1, 0, 0),
+                             "+Y": Vec3(0, 1, 0)}[unload]
             operator_source = (Vec3(1, 0, 0) if "+X" in operator_side else Vec3(0, 1, 0))
             base_requirements = self.build_requirements(product)
             requirements = self.build_requirements(product, welds=(replace(
@@ -333,7 +363,7 @@ class MultiStationFixtureTests(unittest.TestCase):
         assembly = author_fixture_build(plan, self.product, self.kernel)
         self.assertTrue(assembly.provisional)
         with self.assertRaises(FixtureBuildError):
-            build_fixture_build_package(assembly, plan)
+            build_fixture_build_package(assembly, plan, self.product)
 
     def test_confirmed_weld_contract_requires_complete_torch_evidence(self):
         incomplete_requirements = replace(
@@ -351,7 +381,7 @@ class MultiStationFixtureTests(unittest.TestCase):
         provisional = author_fixture_build(plan, self.product, self.kernel)
         self.assertTrue(provisional.provisional)
         with self.assertRaises(FixtureBuildError):
-            build_fixture_build_package(provisional, plan)
+            build_fixture_build_package(provisional, plan, self.product)
         complete = self.plan(count=4)
         self.assertTrue(all(station.weld_access_clear is True
                             for station in complete.multi_station_layout.stations))
@@ -646,13 +676,15 @@ class MultiStationFixtureTests(unittest.TestCase):
             changed_shim if item.identity == shim.identity else item
             for item in plan.components
         )
-        validation = validate_fixture_build_plan(
-            self.product, replace(plan, components=changed_components),
-        )
+        changed_plan = replace(plan, components=changed_components)
+        validation = validate_fixture_build_plan(self.product, changed_plan)
         stale = tuple(item for item in validation.findings
                       if "access evidence is missing or stale" in item.message)
         self.assertEqual(len(stale), len(plan.multi_station_layout.stations))
         self.assertTrue(validation.review_blocked)
+        assembly = author_fixture_build(plan, self.product, self.kernel)
+        with self.assertRaisesRegex(FixtureBuildError, "stale for the supplied construction plan"):
+            build_fixture_build_package(assembly, changed_plan, self.product)
 
         station = plan.multi_station_layout.stations[0]
         missing_digest_layout = replace(

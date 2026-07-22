@@ -354,7 +354,7 @@ def _run_m32_scenario(directory: Path) -> tuple[dict[str, object], Path, Path]:
     persisted_plan = replace(plan, authoring_state="provisional")
     project = project.with_fixture_build(persisted_plan)
     export_blocked = _expect_blocked(
-        lambda: build_fixture_build_package(authored, persisted_plan), FixtureBuildError,
+        lambda: build_fixture_build_package(authored, persisted_plan, product), FixtureBuildError,
     )
     approval_blocked = _expect_blocked(
         lambda: project.decide("approve_for_review"), ProjectFormatError,
