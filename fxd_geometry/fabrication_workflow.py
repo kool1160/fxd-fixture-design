@@ -461,6 +461,8 @@ class MultiStationRequirements:
     operator_loading_direction_source: Vec3 | None = None
     clamp_operating_direction_source: Vec3 | None = None
     manufacturing_up_direction_source: Vec3 | None = None
+    source_to_manufacturing: tuple[float, ...] = ()
+    manufacturing_to_source: tuple[float, ...] = ()
     manufacturing_orientation_identity: str | None = None
 
     def __post_init__(self) -> None:
@@ -488,6 +490,10 @@ class MultiStationRequirements:
                 self.operator_loading_side, self.unloading_direction,
                 self.clamp_operating_side, self.table_mounting_preference)):
             raise FixtureBuildError("multi-station handling and mounting intent is required")
+        for matrix, label in ((self.source_to_manufacturing, "source-to-manufacturing"),
+                              (self.manufacturing_to_source, "manufacturing-to-source")):
+            if matrix and (len(matrix) != 16 or not all(math.isfinite(value) for value in matrix)):
+                raise FixtureBuildError(f"{label} transform must contain 16 finite values")
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -512,6 +518,8 @@ class MultiStationRequirements:
             "operator_loading_direction_source": self.operator_loading_direction_source.__dict__ if self.operator_loading_direction_source else None,
             "clamp_operating_direction_source": self.clamp_operating_direction_source.__dict__ if self.clamp_operating_direction_source else None,
             "manufacturing_up_direction_source": self.manufacturing_up_direction_source.__dict__ if self.manufacturing_up_direction_source else None,
+            "source_to_manufacturing": list(self.source_to_manufacturing),
+            "manufacturing_to_source": list(self.manufacturing_to_source),
             "manufacturing_orientation_identity": self.manufacturing_orientation_identity,
         }
 
@@ -532,6 +540,8 @@ class MultiStationRequirements:
             Vec3(**data["operator_loading_direction_source"]) if data.get("operator_loading_direction_source") else None,
             Vec3(**data["clamp_operating_direction_source"]) if data.get("clamp_operating_direction_source") else None,
             Vec3(**data["manufacturing_up_direction_source"]) if data.get("manufacturing_up_direction_source") else None,
+            tuple(float(value) for value in data.get("source_to_manufacturing", ())),
+            tuple(float(value) for value in data.get("manufacturing_to_source", ())),
             data.get("manufacturing_orientation_identity"),
         )
 
@@ -601,12 +611,17 @@ class StationTransform:
     unloading_direction_source: Vec3 | None = None
     operator_direction_source: Vec3 | None = None
     weld_access_results: tuple[WeldJointAccessResult, ...] = ()
+    source_to_station_manufacturing: tuple[float, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.identity.strip() or self.station_index < 1 or len(self.product_source_sha256) != 64:
             raise FixtureBuildError("station identity, positive index, and source SHA-256 are required")
         if not self.source_component_identities:
             raise FixtureBuildError("product review station must reference immutable source components")
+        if self.source_to_station_manufacturing and (
+                len(self.source_to_station_manufacturing) != 16
+                or not all(math.isfinite(value) for value in self.source_to_station_manufacturing)):
+            raise FixtureBuildError("station source-to-manufacturing transform must contain 16 finite values")
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -633,6 +648,7 @@ class StationTransform:
             "unloading_direction_source": self.unloading_direction_source.__dict__ if self.unloading_direction_source else None,
             "operator_direction_source": self.operator_direction_source.__dict__ if self.operator_direction_source else None,
             "weld_access_results": [item.to_dict() for item in self.weld_access_results],
+            "source_to_station_manufacturing": list(self.source_to_station_manufacturing),
         }
 
     @classmethod
@@ -658,6 +674,7 @@ class StationTransform:
             Vec3(**data["unloading_direction_source"]) if data.get("unloading_direction_source") else None,
             Vec3(**data["operator_direction_source"]) if data.get("operator_direction_source") else None,
             tuple(WeldJointAccessResult.from_dict(item) for item in data.get("weld_access_results", ())),
+            tuple(float(value) for value in data.get("source_to_station_manufacturing", ())),
         )
 
 
@@ -1190,6 +1207,69 @@ def _product_bounds(product: ProductModel) -> Aabb:
     )
 
 
+def _matrix_apply(matrix: tuple[float, ...], point: Vec3, *, vector: bool = False) -> Vec3:
+    if len(matrix) != 16:
+        raise FixtureBuildError("manufacturing transform must contain 16 values")
+    homogeneous = 0.0 if vector else 1.0
+    return Vec3(
+        matrix[0] * point.x + matrix[1] * point.y + matrix[2] * point.z + matrix[3] * homogeneous,
+        matrix[4] * point.x + matrix[5] * point.y + matrix[6] * point.z + matrix[7] * homogeneous,
+        matrix[8] * point.x + matrix[9] * point.y + matrix[10] * point.z + matrix[11] * homogeneous,
+    )
+
+
+def _matrix_product(left: tuple[float, ...], right: tuple[float, ...]) -> tuple[float, ...]:
+    if len(left) != 16 or len(right) != 16:
+        raise FixtureBuildError("manufacturing transform multiplication requires 16-value matrices")
+    return tuple(
+        sum(left[row * 4 + item] * right[item * 4 + column] for item in range(4))
+        for row in range(4) for column in range(4)
+    )
+
+
+def _matrices_close(left: tuple[float, ...], right: tuple[float, ...], *, tolerance: float = 1e-7) -> bool:
+    return len(left) == len(right) == 16 and all(
+        abs(left_value - right_value) <= tolerance
+        for left_value, right_value in zip(left, right)
+    )
+
+
+def _identity_matrix() -> tuple[float, ...]:
+    return (1.0, 0.0, 0.0, 0.0,
+            0.0, 1.0, 0.0, 0.0,
+            0.0, 0.0, 1.0, 0.0,
+            0.0, 0.0, 0.0, 1.0)
+
+
+def _translation_matrix(value: Vec3) -> tuple[float, ...]:
+    return (1.0, 0.0, 0.0, value.x,
+            0.0, 1.0, 0.0, value.y,
+            0.0, 0.0, 1.0, value.z,
+            0.0, 0.0, 0.0, 1.0)
+
+
+def _transformed_bounds(bounds: Aabb, matrix: tuple[float, ...]) -> Aabb:
+    points = tuple(
+        _matrix_apply(matrix, Vec3(x, y, z))
+        for x, y, z in itertools.product(
+            (bounds.minimum.x, bounds.maximum.x),
+            (bounds.minimum.y, bounds.maximum.y),
+            (bounds.minimum.z, bounds.maximum.z),
+        )
+    )
+    return Aabb(
+        Vec3(*(min(getattr(point, name) for point in points) for name in ("x", "y", "z"))),
+        Vec3(*(max(getattr(point, name) for point in points) for name in ("x", "y", "z"))),
+    )
+
+
+def _manufacturing_product_bounds(product: ProductModel,
+                                  requirements: MultiStationRequirements) -> Aabb:
+    if not requirements.source_to_manufacturing:
+        raise FixtureBuildError("multi-station synthesis requires the accepted source-to-manufacturing transform")
+    return _transformed_bounds(_product_bounds(product), requirements.source_to_manufacturing)
+
+
 def _stock(bounds: Aabb) -> tuple[float, float, float]:
     return tuple(round(high - low, 6) for low, high in zip(bounds.minimum.__dict__.values(), bounds.maximum.__dict__.values()))
 
@@ -1449,17 +1529,15 @@ def _cross(left: Vec3, right: Vec3) -> Vec3:
     )
 
 
-def _torch_body_envelope(intent: ConfirmedWeldIntent, translation: Vec3) -> Aabb:
-    """Conservative source-coordinate AABB for one oriented torch body."""
-    direction = _unit_direction(intent.approach_direction_source, "torch approach direction")
+def _torch_body_envelope(intent: ConfirmedWeldIntent, translation: Vec3,
+                         source_to_manufacturing: tuple[float, ...]) -> Aabb:
+    """Conservative manufacturing-coordinate AABB for one oriented torch body."""
+    direction = _unit_direction(intent.approach_direction_manufacturing, "torch approach direction")
     seed = Vec3(0.0, 0.0, 1.0) if abs(direction.z) < 0.9 else Vec3(0.0, 1.0, 0.0)
     width_axis = _unit_direction(_cross(direction, seed), "torch width axis")
     height_axis = _unit_direction(_cross(direction, width_axis), "torch height axis")
-    origin = Vec3(
-        intent.joint_position_source_mm.x + translation.x,
-        intent.joint_position_source_mm.y + translation.y,
-        intent.joint_position_source_mm.z + translation.z,
-    )
+    joint = _matrix_apply(source_to_manufacturing, intent.joint_position_source_mm)
+    origin = Vec3(joint.x + translation.x, joint.y + translation.y, joint.z + translation.z)
     points: list[Vec3] = []
     for length in (0.0, intent.torch_envelope_mm.z):
         for width in (-intent.torch_envelope_mm.x * 0.5, intent.torch_envelope_mm.x * 0.5):
@@ -1475,24 +1553,8 @@ def _torch_body_envelope(intent: ConfirmedWeldIntent, translation: Vec3) -> Aabb
     )
 
 
-def _oriented_box_envelope(center: Vec3, axes: tuple[Vec3, Vec3, Vec3],
-                           half_sizes: tuple[float, float, float]) -> Aabb:
-    points = tuple(
-        Vec3(
-            center.x + sum(axis.x * half * sign for axis, half, sign in zip(axes, half_sizes, signs)),
-            center.y + sum(axis.y * half * sign for axis, half, sign in zip(axes, half_sizes, signs)),
-            center.z + sum(axis.z * half * sign for axis, half, sign in zip(axes, half_sizes, signs)),
-        )
-        for signs in itertools.product((-1.0, 1.0), repeat=3)
-    )
-    return Aabb(
-        Vec3(*(min(getattr(point, name) for point in points) for name in ("x", "y", "z"))),
-        Vec3(*(max(getattr(point, name) for point in points) for name in ("x", "y", "z"))),
-    )
-
-
 def _cardinal_clamp_review_bounds(product: Aabb, outward: Vec3) -> tuple[Aabb, Aabb, Aabb]:
-    """Preserve the proven source-XY layout when the accepted basis is exactly cardinal."""
+    """Create proven fixture geometry in the accepted manufacturing frame."""
     z0, z1 = 0.0, product.maximum.z
     if outward.y > 0:
         bracket = Aabb(Vec3(product.maximum.x + 4.0, product.maximum.y + 12.0, z0),
@@ -1527,45 +1589,15 @@ def _cardinal_clamp_review_bounds(product: Aabb, outward: Vec3) -> tuple[Aabb, A
 
 def _clamp_review_bounds(product: Aabb, operator_outward: Vec3,
                          manufacturing_up: Vec3) -> tuple[Aabb, Aabb, Aabb]:
-    """Return conservative source AABBs without snapping the accepted basis."""
+    """Create clamp review bounds after all inputs enter manufacturing coordinates."""
     outward = _unit_direction(operator_outward, "clamp operating direction")
     up = _unit_direction(manufacturing_up, "manufacturing up direction")
-    if abs(outward.x * up.x + outward.y * up.y + outward.z * up.z) > 1e-6:
-        raise FixtureBuildError("clamp operating direction must be perpendicular to manufacturing up")
-    if (abs(up.x) <= 1e-9 and abs(up.y) <= 1e-9 and up.z > 1.0 - 1e-9
-            and abs(outward.z) <= 1e-9
-            and (abs(abs(outward.x) - 1.0) <= 1e-9
-                 or abs(abs(outward.y) - 1.0) <= 1e-9)):
-        return _cardinal_clamp_review_bounds(product, outward)
-    lateral = _unit_direction(_cross(up, outward), "clamp lateral direction")
-    center = Vec3(
-        (product.minimum.x + product.maximum.x) * 0.5,
-        (product.minimum.y + product.maximum.y) * 0.5,
-        (product.minimum.z + product.maximum.z) * 0.5,
-    )
-    half = Vec3(
-        (product.maximum.x - product.minimum.x) * 0.5,
-        (product.maximum.y - product.minimum.y) * 0.5,
-        (product.maximum.z - product.minimum.z) * 0.5,
-    )
-    radius = lambda axis: abs(axis.x) * half.x + abs(axis.y) * half.y + abs(axis.z) * half.z
-    outward_radius, up_radius = radius(outward), radius(up)
-    shifted = lambda distance, lift: Vec3(
-        center.x + outward.x * distance + up.x * lift,
-        center.y + outward.y * distance + up.y * lift,
-        center.z + outward.z * distance + up.z * lift,
-    )
-    axes = (outward, lateral, up)
-    bracket = _oriented_box_envelope(
-        shifted(outward_radius + 25.0, 9.0), axes, (13.0, 12.0, up_radius + 21.0),
-    )
-    closed = _oriented_box_envelope(
-        shifted(outward_radius + 9.0, up_radius), axes, (17.0, 16.0, 16.0),
-    )
-    opened = _oriented_box_envelope(
-        shifted(outward_radius + 30.0, up_radius + 42.0), axes, (24.0, 16.0, 30.0),
-    )
-    return bracket, closed, opened
+    if (abs(up.x) > 1e-7 or abs(up.y) > 1e-7 or up.z < 1.0 - 1e-7
+            or abs(outward.z) > 1e-7
+            or not (abs(abs(outward.x) - 1.0) <= 1e-7
+                    or abs(abs(outward.y) - 1.0) <= 1e-7)):
+        raise FixtureBuildError("accepted fixture directions did not normalize into the manufacturing frame")
+    return _cardinal_clamp_review_bounds(product, outward)
 
 
 @dataclass(frozen=True)
@@ -1605,7 +1637,7 @@ class MultiStationFitProposal:
 
 def _multi_station_fit(product: ProductModel,
                        requirements: MultiStationRequirements) -> MultiStationFitProposal:
-    bounds = _product_bounds(product)
+    bounds = _manufacturing_product_bounds(product, requirements)
     axis = "x" if _axis_span(bounds, "x") >= _axis_span(bounds, "y") else "y"
     station_span = _axis_span(bounds, axis)
     secondary = _axis_span(bounds, "y" if axis == "x" else "x")
@@ -1640,8 +1672,8 @@ def propose_multi_station_count(product: ProductModel,
 
 def generate_multi_station_layout(product: ProductModel,
                                   requirements: MultiStationRequirements) -> MultiStationLayout:
-    """Derive equal-pitch source review instances without copying source CAD."""
-    bounds = _product_bounds(product)
+    """Derive equal-pitch manufacturing-frame instances without copying source CAD."""
+    bounds = _manufacturing_product_bounds(product, requirements)
     fit = _multi_station_fit(product, requirements)
     axis, pitch, end_allowance = fit.primary_axis, fit.station_pitch_mm, fit.end_allowance_mm
     required_length, proposed = (2.0 * end_allowance + fit.station_span_mm
@@ -1666,6 +1698,9 @@ def generate_multi_station_layout(product: ProductModel,
         stations.append(StationTransform(
             f"m32-station-{index:02d}", index, translation, product.source_sha256,
             source_components, _translated(bounds, translation),
+            source_to_station_manufacturing=_matrix_product(
+                _translation_matrix(translation), requirements.source_to_manufacturing,
+            ),
         ))
     payload = json.dumps({"source": product.source_sha256, "requirements": requirements.to_dict(),
                           "axis": axis, "pitch": pitch,
@@ -1679,7 +1714,7 @@ def generate_multi_station_layout(product: ProductModel,
             f"primary_axis={axis} derived from the largest product horizontal envelope span.",
             f"pitch={pitch:.3f} mm combines product envelope, clamp sweep, hand clearance, weld clearance, and adjustment allowance.",
             *fit.explanation,
-            "Product stations are immutable review instances referencing the original source SHA-256 and component identities.",
+            "Product stations apply the accepted full source-to-manufacturing transform plus manufacturing-frame pitch while referencing immutable source identities.",
         ),
         round(fit.requested_required_length_mm, 6),
     )
@@ -1707,9 +1742,9 @@ def generate_multi_station_fixture_build_plan(
         if any(not _reference_valid(product, reference) for reference in weld.references):
             raise FixtureBuildError("confirmed weld intent contains an invalid immutable source reference")
     layout = generate_multi_station_layout(product, multi_station)
-    source_bounds = _product_bounds(product)
+    manufacturing_bounds = _manufacturing_product_bounds(product, multi_station)
     primary = layout.primary_axis
-    product_height = _axis_span(source_bounds, "z")
+    product_height = _axis_span(manufacturing_bounds, "z")
     plate = 12.0
     base_length = layout.required_fixture_length_mm
     # The long member is a low backbone, not a product-sized rear wall.  Local
@@ -1763,11 +1798,40 @@ def generate_multi_station_fixture_build_plan(
         raise FixtureBuildError(
             "multi-station process directions require accepted-orientation source-coordinate evidence"
         )
-    insertion_direction = _unit_direction(source_directions[0], "loading direction")
-    unload_direction = _unit_direction(source_directions[1], "unloading direction")
-    operator_outward = _unit_direction(source_directions[2], "operator loading side")
-    clamp_outward = _unit_direction(source_directions[3], "clamp operating side")
-    manufacturing_up = _unit_direction(source_directions[4], "manufacturing up direction")
+    if not multi_station.source_to_manufacturing or not multi_station.manufacturing_to_source:
+        raise FixtureBuildError("multi-station synthesis requires accepted manufacturing-frame transforms")
+    identity = _identity_matrix()
+    if not (
+        _matrices_close(
+            _matrix_product(multi_station.source_to_manufacturing, multi_station.manufacturing_to_source),
+            identity,
+        )
+        and _matrices_close(
+            _matrix_product(multi_station.manufacturing_to_source, multi_station.source_to_manufacturing),
+            identity,
+        )
+    ):
+        raise FixtureBuildError("accepted manufacturing-frame transforms are not mutual inverses")
+    insertion_direction = _unit_direction(
+        _matrix_apply(multi_station.source_to_manufacturing, source_directions[0], vector=True),
+        "loading direction",
+    )
+    unload_direction = _unit_direction(
+        _matrix_apply(multi_station.source_to_manufacturing, source_directions[1], vector=True),
+        "unloading direction",
+    )
+    operator_outward = _unit_direction(
+        _matrix_apply(multi_station.source_to_manufacturing, source_directions[2], vector=True),
+        "operator loading side",
+    )
+    clamp_outward = _unit_direction(
+        _matrix_apply(multi_station.source_to_manufacturing, source_directions[3], vector=True),
+        "clamp operating side",
+    )
+    manufacturing_up = _unit_direction(
+        _matrix_apply(multi_station.source_to_manufacturing, source_directions[4], vector=True),
+        "manufacturing up direction",
+    )
     loading_outward = Vec3(-insertion_direction.x, -insertion_direction.y, -insertion_direction.z)
     clamp_review: dict[str, tuple[Aabb, Aabb, Aabb]] = {}
     for station in layout.stations:
@@ -1930,14 +1994,24 @@ def generate_multi_station_fixture_build_plan(
                 if other.identity != station.identity
             )
             for weld in requirements.confirmed_welds:
-                torch_envelope = _torch_body_envelope(weld, station.translation_mm)
+                torch_envelope = _torch_body_envelope(
+                    weld, station.translation_mm, multi_station.source_to_manufacturing,
+                )
                 blockers = list(
                     identity for identity, bounds in weld_fixture_obstacles + adjacent_products
                     if _positive_bounds_overlap(torch_envelope, bounds)
                 )
-                approach = _unit_direction(weld.approach_direction_source, "torch approach direction")
-                side_alignment = (approach.x * operator_outward.x + approach.y * operator_outward.y
-                                  + approach.z * operator_outward.z)
+                approach_manufacturing = _unit_direction(
+                    weld.approach_direction_manufacturing, "manufacturing torch approach direction",
+                )
+                approach_source = _unit_direction(
+                    weld.approach_direction_source, "source torch approach direction",
+                )
+                side_alignment = (
+                    approach_manufacturing.x * operator_outward.x
+                    + approach_manufacturing.y * operator_outward.y
+                    + approach_manufacturing.z * operator_outward.z
+                )
                 normalized_side = weld.weld_side.strip().lower()
                 side_conflict = (("opposite" in normalized_side and side_alignment >= -1e-7)
                                  or ("operator" in normalized_side and "opposite" not in normalized_side
@@ -1946,7 +2020,7 @@ def generate_multi_station_fixture_build_plan(
                 clear = not blockers_tuple and not side_conflict
                 weld_results.append(WeldJointAccessResult(
                     weld.identity, clear, torch_envelope,
-                    approach,
+                    approach_source,
                     blockers_tuple,
                     (
                         f"joint={weld.identity}",
@@ -1976,15 +2050,15 @@ def generate_multi_station_fixture_build_plan(
             unloading_envelope=unloading_envelope,
             open_clamp_envelope=opened,
             closed_clamp_envelope=closed,
-            loading_direction_source=insertion_direction,
-            unloading_direction_source=unload_direction,
-            operator_direction_source=operator_outward,
+            loading_direction_source=_unit_direction(source_directions[0], "source loading direction"),
+            unloading_direction_source=_unit_direction(source_directions[1], "source unloading direction"),
+            operator_direction_source=_unit_direction(source_directions[2], "source operator direction"),
             weld_access_results=tuple(weld_results),
             access_evidence=(
                 f"operator_side={multi_station.operator_loading_side}",
-                f"insertion_direction=({insertion_direction.x:.0f},{insertion_direction.y:.0f},{insertion_direction.z:.0f})",
-                f"unloading_direction_source=({unload_direction.x:.6g},{unload_direction.y:.6g},{unload_direction.z:.6g})",
-                f"clamp_direction_source=({clamp_outward.x:.6g},{clamp_outward.y:.6g},{clamp_outward.z:.6g})",
+                f"insertion_direction_manufacturing=({insertion_direction.x:.6g},{insertion_direction.y:.6g},{insertion_direction.z:.6g})",
+                f"unloading_direction_manufacturing=({unload_direction.x:.6g},{unload_direction.y:.6g},{unload_direction.z:.6g})",
+                f"clamp_direction_manufacturing=({clamp_outward.x:.6g},{clamp_outward.y:.6g},{clamp_outward.z:.6g})",
                 f"manufacturing_orientation={multi_station.manufacturing_orientation_identity or 'unrecorded'}",
                 f"hand_clearance_mm={multi_station.hand_clearance_mm:.3f}",
                 "loading_sweep_vs_rail_station_plate_locator_stop_open_clamp_brace=" + ("clear" if loading_clear else "blocked"),
@@ -2059,12 +2133,29 @@ def _multi_station_findings(plan: FixtureBuildPlan) -> tuple[FixtureBuildFinding
         findings.append(_finding("FXD-M32-STA", "error", "station layout exceeds the requested maximum fixture length", disposition="review_blocker"))
     if len(layout.stations) != req.requested_station_count:
         findings.append(_finding("FXD-M32-STA", "error", "station layout does not contain the accepted station count", disposition="review_blocker"))
+    transforms_are_inverse = False
+    if req.source_to_manufacturing and req.manufacturing_to_source:
+        identity = _identity_matrix()
+        transforms_are_inverse = (
+            _matrices_close(
+                _matrix_product(req.source_to_manufacturing, req.manufacturing_to_source), identity,
+            )
+            and _matrices_close(
+                _matrix_product(req.manufacturing_to_source, req.source_to_manufacturing), identity,
+            )
+        )
+    if not transforms_are_inverse:
+        findings.append(_finding(
+            "FXD-M32-STA", "error",
+            "accepted manufacturing transforms are missing or are not mutual inverses",
+            disposition="authoring_blocker",
+        ))
     for left, right in zip(layout.stations, layout.stations[1:]):
         if left.product_bounds.intersects(right.product_bounds):
             findings.append(_finding("FXD-M32-STA", "error", "product review instances overlap", components=(left.identity, right.identity), disposition="review_blocker"))
         left_axis = getattr(left.translation_mm, layout.primary_axis)
         right_axis = getattr(right.translation_mm, layout.primary_axis)
-        if right_axis - left_axis + 1e-7 < layout.station_pitch_mm:
+        if abs((right_axis - left_axis) - layout.station_pitch_mm) > 1e-7:
             findings.append(_finding("FXD-M32-STA", "error", "station transforms are not stable equal-pitch placements", components=(left.identity, right.identity), disposition="review_blocker"))
     base = next((item for item in plan.components if item.role == BuildComponentRole.BASEPLATE), None)
     rail = next((item for item in plan.components if item.role == BuildComponentRole.DATUM_RAIL), None)
@@ -2158,6 +2249,15 @@ def _multi_station_findings(plan: FixtureBuildPlan) -> tuple[FixtureBuildFinding
                                      disposition="review_blocker"))
         if station.product_source_sha256 != plan.requirements.source_sha256:
             findings.append(_finding("FXD-M32-STA", "error", "product review instance does not reference immutable plan source", components=(station.identity,), disposition="authoring_blocker"))
+        expected_transform = _matrix_product(
+            _translation_matrix(station.translation_mm), req.source_to_manufacturing,
+        ) if req.source_to_manufacturing else ()
+        if not _matrices_close(station.source_to_station_manufacturing, expected_transform):
+            findings.append(_finding(
+                "FXD-M32-STA", "error",
+                "product review instance transform does not match the accepted manufacturing orientation and station placement",
+                components=(station.identity,), disposition="authoring_blocker",
+            ))
         if not station.source_component_identities:
             findings.append(_finding("FXD-M32-STA", "error", "product review instance has no immutable source-component references", components=(station.identity,), disposition="authoring_blocker"))
     if any(item.role == BuildComponentRole.TOGGLE_CLAMP and "generic_vendor_neutral=true" not in item.evidence

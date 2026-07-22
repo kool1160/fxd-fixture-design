@@ -4505,6 +4505,8 @@ class FxdWorkbenchWindow(QMainWindow):
             operator_loading_direction_source=operator_source,
             clamp_operating_direction_source=clamp_source,
             manufacturing_up_direction_source=orientation.manufacturing_z_source,
+            source_to_manufacturing=orientation.source_to_manufacturing,
+            manufacturing_to_source=orientation.manufacturing_to_source,
             manufacturing_orientation_identity=orientation.identity,
         )
 
@@ -4746,12 +4748,23 @@ class FxdWorkbenchWindow(QMainWindow):
                 for station in layout.stations:
                     vertices = []
                     triangles = []
+                    transform = station.source_to_station_manufacturing
                     for mesh_vertices, mesh_triangles in source_vertices:
                         offset = len(vertices)
-                        vertices.extend([[point[0] + station.translation_mm.x,
-                                          point[1] + station.translation_mm.y,
-                                          point[2] + station.translation_mm.z]
-                                         for point in mesh_vertices])
+                        if transform:
+                            vertices.extend([[
+                                transform[0] * point[0] + transform[1] * point[1]
+                                + transform[2] * point[2] + transform[3],
+                                transform[4] * point[0] + transform[5] * point[1]
+                                + transform[6] * point[2] + transform[7],
+                                transform[8] * point[0] + transform[9] * point[1]
+                                + transform[10] * point[2] + transform[11],
+                            ] for point in mesh_vertices])
+                        else:
+                            vertices.extend([[point[0] + station.translation_mm.x,
+                                              point[1] + station.translation_mm.y,
+                                              point[2] + station.translation_mm.z]
+                                             for point in mesh_vertices])
                         triangles.extend([[offset + index for index in triangle] for triangle in mesh_triangles])
                     items.append({
                         "identity": "product-review:" + station.identity,

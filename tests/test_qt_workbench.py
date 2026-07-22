@@ -316,8 +316,9 @@ class QtWorkbenchTests(unittest.TestCase):
             self.window.project.product.source_sha256,
             ProcessSetup(
                 "M32 workbench",
-                manufacturing_orientation=source_orientation(
-                    self.window.project.product.source_sha256, accepted=True,
+                manufacturing_orientation=reference_plane_orientation(
+                    self.window.project.product.source_sha256, ReferencePlane.TOP,
+                    rotation_degrees=90.0, accepted=True,
                 ),
             ),
             concepts_generated=True,
@@ -347,6 +348,20 @@ class QtWorkbenchTests(unittest.TestCase):
         self.assertEqual(sum(item.get("semantic") == "load_direction" for item in items), 5)
         self.assertEqual(sum(item.get("semantic") == "unload_direction" for item in items), 5)
         self.assertGreater(len({tuple(item["color"]) for item in items if "color" in item}), 5)
+        product_item = next(item for item in items if item["kind"] == "product_review_mesh")
+        station = plan.multi_station_layout.stations[0]
+        source_vertex = self.window.document.meshes[0].vertices_mm[0]
+        matrix = station.source_to_station_manufacturing
+        expected_vertex = (
+            matrix[0] * source_vertex[0] + matrix[1] * source_vertex[1] + matrix[2] * source_vertex[2] + matrix[3],
+            matrix[4] * source_vertex[0] + matrix[5] * source_vertex[1] + matrix[6] * source_vertex[2] + matrix[7],
+            matrix[8] * source_vertex[0] + matrix[9] * source_vertex[1] + matrix[10] * source_vertex[2] + matrix[11],
+        )
+        self.assertNotEqual(matrix[:12], (1.0, 0.0, 0.0, station.translation_mm.x,
+                                          0.0, 1.0, 0.0, station.translation_mm.y,
+                                          0.0, 0.0, 1.0, station.translation_mm.z))
+        for actual, expected in zip(product_item["vertices"][0], expected_vertex):
+            self.assertAlmostEqual(actual, expected, places=7)
 
     def test_editing_accepted_station_count_creates_new_intent(self):
         self.window._replace_project(self._project())

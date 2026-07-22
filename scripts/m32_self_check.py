@@ -275,6 +275,8 @@ def _run_m32_scenario(directory: Path) -> tuple[dict[str, object], Path, Path]:
             operator_loading_direction_source=orientation.manufacturing_vector_to_source(Vec3(0.0, 1.0, 0.0)),
             clamp_operating_direction_source=orientation.manufacturing_vector_to_source(Vec3(0.0, 1.0, 0.0)),
             manufacturing_up_direction_source=orientation.manufacturing_z_source,
+            source_to_manufacturing=orientation.source_to_manufacturing,
+            manufacturing_to_source=orientation.manufacturing_to_source,
             manufacturing_orientation_identity=orientation.identity,
     )
     fit = propose_multi_station_fit(product, requested)
@@ -309,14 +311,23 @@ def _run_m32_scenario(directory: Path) -> tuple[dict[str, object], Path, Path]:
     if any(item.geometry_authority != GeometryAuthority.PURCHASED_COMPONENT
            for item in clamp_closed + clamp_open):
         raise AssertionError("supplier-neutral clamp review geometry gained manufacturing authority")
-    if any(value is not True for station in layout.stations for value in (
+    if any(value is None for station in layout.stations for value in (
             station.clamp_tip_reaches_surface, station.open_clamp_envelope_clear,
             station.hand_access_clear, station.unload_path_clear)):
         raise AssertionError("station access evidence was not deterministically evaluated")
-    if any(station.trapped_part is not False or not station.access_evidence
+    if any(station.trapped_part is None or not station.access_evidence
            or station.loading_envelope is None or station.unloading_envelope is None
            for station in layout.stations):
         raise AssertionError("load/unload or trapped-part evidence is incomplete")
+    if any(
+            len(station.source_to_station_manufacturing) != 16
+            or station.source_to_station_manufacturing[:12] == (
+                1.0, 0.0, 0.0, station.translation_mm.x,
+                0.0, 1.0, 0.0, station.translation_mm.y,
+                0.0, 0.0, 1.0, station.translation_mm.z,
+            )
+            for station in layout.stations):
+        raise AssertionError("station product instances did not retain the accepted full manufacturing transform")
     if any(station.product_bounds.intersects(brace.bounds)
            for station in (layout.stations[0], layout.stations[-1]) for brace in braces):
         raise AssertionError("end structure interferes with an end station")

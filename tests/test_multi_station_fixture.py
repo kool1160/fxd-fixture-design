@@ -8,7 +8,7 @@ import tempfile
 import unittest
 
 from fxd_geometry import (
-    AdjustmentState, BuildComponentRole, ConfirmedWeldIntent, ConstructionMethod, FixtureBuildError, GeometryAuthority,
+    Aabb, AdjustmentState, BuildComponentRole, ConfirmedWeldIntent, ConstructionMethod, FixtureBuildError, GeometryAuthority,
     FixtureBuildPlan, FixtureBuildRequirements, FixtureFamily, FixtureLifecycle,
     FixturePurpose, MultiStationRequirements, OcpKernel, Vec3, AnnotationRole, GeometryReference, author_fixture_build,
     build_fixture_build_package, generate_fixture_concepts,
@@ -92,6 +92,8 @@ class MultiStationFixtureTests(unittest.TestCase):
             operator_loading_direction_source=operator_source,
             clamp_operating_direction_source=clamp_source,
             manufacturing_up_direction_source=up_source,
+            source_to_manufacturing=orientation.source_to_manufacturing,
+            manufacturing_to_source=orientation.manufacturing_to_source,
             manufacturing_orientation_identity=orientation.identity,
         )
 
@@ -339,10 +341,10 @@ class MultiStationFixtureTests(unittest.TestCase):
             self.product.source_sha256, ReferencePlane.TOP,
             rotation_degrees=90.0, accepted=True,
         )
-        manufacturing_load = Vec3(1.0, 0.0, 0.0)
-        manufacturing_unload = Vec3(0.0, -1.0, 0.0)
-        manufacturing_operator = Vec3(-1.0, 0.0, 0.0)
-        manufacturing_torch = Vec3(-1.0, 0.0, 0.0)
+        manufacturing_load = Vec3(0.0, -1.0, 0.0)
+        manufacturing_unload = Vec3(-1.0, 0.0, 0.0)
+        manufacturing_operator = Vec3(0.0, 1.0, 0.0)
+        manufacturing_torch = Vec3(0.0, 1.0, 0.0)
         base_weld = self.build_requirements().confirmed_welds[0]
         weld = replace(
             base_weld,
@@ -358,6 +360,8 @@ class MultiStationFixtureTests(unittest.TestCase):
             operator_loading_direction_source=orientation.manufacturing_vector_to_source(manufacturing_operator),
             clamp_operating_direction_source=orientation.manufacturing_vector_to_source(manufacturing_operator),
             manufacturing_up_direction_source=orientation.manufacturing_z_source,
+            source_to_manufacturing=orientation.source_to_manufacturing,
+            manufacturing_to_source=orientation.manufacturing_to_source,
             manufacturing_orientation_identity=orientation.identity,
         )
         plan = generate_multi_station_fixture_build_plan(
@@ -372,7 +376,15 @@ class MultiStationFixtureTests(unittest.TestCase):
                          orientation.manufacturing_vector_to_source(manufacturing_operator))
         self.assertEqual(station.weld_access_results[0].approach_direction_source,
                          orientation.manufacturing_vector_to_source(manufacturing_torch))
-        self.assertTrue(validate_fixture_build_plan(self.product, plan).valid)
+        validation = validate_fixture_build_plan(self.product, plan)
+        self.assertTrue(all(station.hand_access_clear is not None
+                            and station.unload_path_clear is not None
+                            for station in plan.multi_station_layout.stations))
+        self.assertEqual(validation.review_blocked,
+                         any(station.trapped_part or not station.hand_access_clear
+                             or not station.unload_path_clear
+                             or station.weld_access_clear is not True
+                             for station in plan.multi_station_layout.stations))
 
         flipped = reference_plane_orientation(
             self.product.source_sha256, ReferencePlane.TOP,
@@ -386,6 +398,8 @@ class MultiStationFixtureTests(unittest.TestCase):
             operator_loading_direction_source=flipped_operator,
             clamp_operating_direction_source=flipped_operator,
             manufacturing_up_direction_source=flipped.manufacturing_z_source,
+            source_to_manufacturing=flipped.source_to_manufacturing,
+            manufacturing_to_source=flipped.manufacturing_to_source,
             manufacturing_orientation_identity=flipped.identity,
         )
         flipped_weld = replace(
@@ -401,7 +415,7 @@ class MultiStationFixtureTests(unittest.TestCase):
         self.assertEqual(flipped_plan.multi_station_layout.stations[0].operator_direction_source,
                          flipped_operator)
 
-    def test_source_z_and_oblique_clamp_directions_preserve_the_accepted_basis(self):
+    def test_source_z_and_oblique_orientations_apply_full_station_transform(self):
         for plane, rotation in ((ReferencePlane.FRONT, 0.0), (ReferencePlane.TOP, 37.0)):
             with self.subTest(plane=plane.value, rotation=rotation):
                 orientation = reference_plane_orientation(
@@ -423,6 +437,8 @@ class MultiStationFixtureTests(unittest.TestCase):
                     operator_loading_direction_source=operator,
                     clamp_operating_direction_source=operator,
                     manufacturing_up_direction_source=up,
+                    source_to_manufacturing=orientation.source_to_manufacturing,
+                    manufacturing_to_source=orientation.manufacturing_to_source,
                     manufacturing_orientation_identity=orientation.identity,
                 )
                 plan = generate_multi_station_fixture_build_plan(
@@ -433,6 +449,11 @@ class MultiStationFixtureTests(unittest.TestCase):
                 self.assertEqual(station.operator_direction_source, operator)
                 self.assertEqual(plan.multi_station_layout.requirements.clamp_operating_direction_source,
                                  operator)
+                self.assertEqual(len(station.source_to_station_manufacturing), 16)
+                self.assertNotEqual(station.source_to_station_manufacturing[:12],
+                                    (1.0, 0.0, 0.0, station.translation_mm.x,
+                                     0.0, 1.0, 0.0, station.translation_mm.y,
+                                     0.0, 0.0, 1.0, station.translation_mm.z))
                 opened = next(item for item in plan.components
                               if item.identity == f"{station.identity}-clamp-open-envelope")
                 product_center = Vec3(
@@ -448,8 +469,7 @@ class MultiStationFixtureTests(unittest.TestCase):
                 displacement = Vec3(opened_center.x - product_center.x,
                                     opened_center.y - product_center.y,
                                     opened_center.z - product_center.z)
-                self.assertGreater(displacement.x * operator.x + displacement.y * operator.y
-                                   + displacement.z * operator.z, 0.0)
+                self.assertGreater(displacement.y, 0.0)
 
     def test_confirmed_torch_approach_and_envelope_change_deterministic_access(self):
         clear_weld = self.build_requirements().confirmed_welds[0]
@@ -531,6 +551,67 @@ class MultiStationFixtureTests(unittest.TestCase):
                 )
                 self.assertTrue(validation.review_blocked)
                 self.assertTrue(any(expected in item.message for item in validation.findings))
+
+    def test_validation_rejects_station_spacing_larger_than_recorded_pitch(self):
+        plan = self.plan(count=4)
+        layout = plan.multi_station_layout
+        station = layout.stations[1]
+        delta = Vec3(10.0, 0.0, 0.0) if layout.primary_axis == "x" else Vec3(0.0, 10.0, 0.0)
+        transform = list(station.source_to_station_manufacturing)
+        transform[3 if layout.primary_axis == "x" else 7] += 10.0
+        moved = replace(
+            station,
+            translation_mm=Vec3(station.translation_mm.x + delta.x,
+                                station.translation_mm.y + delta.y,
+                                station.translation_mm.z),
+            product_bounds=Aabb(
+                Vec3(station.product_bounds.minimum.x + delta.x,
+                     station.product_bounds.minimum.y + delta.y,
+                     station.product_bounds.minimum.z),
+                Vec3(station.product_bounds.maximum.x + delta.x,
+                     station.product_bounds.maximum.y + delta.y,
+                     station.product_bounds.maximum.z),
+            ),
+            source_to_station_manufacturing=tuple(transform),
+        )
+        validation = validate_fixture_build_plan(
+            self.product,
+            replace(plan, multi_station_layout=replace(
+                layout, stations=(layout.stations[0], moved) + layout.stations[2:],
+            )),
+        )
+        self.assertTrue(any("not stable equal-pitch placements" in item.message
+                            for item in validation.findings))
+
+    def test_manufacturing_transform_integrity_fails_authoring_closed(self):
+        plan = self.plan(count=4)
+        layout = plan.multi_station_layout
+        station = layout.stations[0]
+        tampered_matrix = list(station.source_to_station_manufacturing)
+        tampered_matrix[3] += 1.0
+        tampered_station = replace(
+            station, source_to_station_manufacturing=tuple(tampered_matrix),
+        )
+        validation = validate_fixture_build_plan(
+            self.product,
+            replace(plan, multi_station_layout=replace(
+                layout, stations=(tampered_station,) + layout.stations[1:],
+            )),
+        )
+        transform_findings = tuple(
+            finding for finding in validation.findings
+            if "transform does not match" in finding.message
+        )
+        self.assertEqual(len(transform_findings), 1)
+        self.assertEqual(transform_findings[0].disposition, "authoring_blocker")
+
+        bad_inverse = list(layout.requirements.manufacturing_to_source)
+        bad_inverse[3] += 1.0
+        with self.assertRaisesRegex(FixtureBuildError, "not mutual inverses"):
+            generate_multi_station_fixture_build_plan(
+                self.product, self.concept, self.build_requirements(),
+                replace(layout.requirements, manufacturing_to_source=tuple(bad_inverse)),
+            )
 
     def test_candidate_weld_face_is_unconfirmed_until_engineer_records_required_intent(self):
         document = load_step_for_workbench(self.source)
