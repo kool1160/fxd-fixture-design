@@ -25,6 +25,11 @@
           }
         },
         {
+          "name": "Fetch pull-request head evidence",
+          "if": "github.event_name == 'pull_request'",
+          "run": "git fetch --no-tags origin +refs/pull/${{ github.event.pull_request.number }}/head:refs/remotes/pull/${{ github.event.pull_request.number }}/head"
+        },
+        {
           "name": "Set up Python 3.12",
           "uses": "actions/setup-python@v5",
           "with": {

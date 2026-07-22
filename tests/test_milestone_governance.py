@@ -47,6 +47,8 @@ class MilestoneGovernanceTests(unittest.TestCase):
         implementation_prs: list[int] | None = None,
         implementation_subjects: list[str] | None = None,
         evidence_at_closeout: bool = True,
+        state_finalization_pr: int = 61,
+        create_finalization_ref: bool = True,
     ) -> dict:
         def git(*args: str) -> str:
             result = subprocess.run(
@@ -76,6 +78,9 @@ class MilestoneGovernanceTests(unittest.TestCase):
             implementation_commits.append(git("rev-parse", "HEAD"))
 
         closeout_data = self.data()
+        for legacy_milestone in closeout_data["milestones"]:
+            if legacy_milestone["number"] < 32:
+                legacy_milestone["merge_commits"] = [implementation_commits[0]]
         closeout = self.milestone(closeout_data, 32)
         evidence_results = {
             profile: [f"Reviewed evidence profile {profile}."]
@@ -103,7 +108,8 @@ class MilestoneGovernanceTests(unittest.TestCase):
         git("commit", "--quiet", "-m", "Milestone 32 closeout evidence (#60)")
         closeout_commit = git("rev-parse", "HEAD")
 
-        final_milestone = copy.deepcopy(closeout)
+        final_data = copy.deepcopy(closeout_data)
+        final_milestone = self.milestone(final_data, 32)
         final_milestone.update(
             {
                 "status": "Complete",
@@ -111,16 +117,44 @@ class MilestoneGovernanceTests(unittest.TestCase):
                 "evidence_results": evidence_results,
                 "completion_evidence": "All selected evidence profiles were reviewed in closeout PR #60.",
                 "closeout_merge_commit": closeout_commit,
+                "state_finalization_pr": state_finalization_pr,
                 "decisions": [
                     *closeout["decisions"],
                     f"Separate closeout PR #60 approved and merged as {closeout_commit}.",
                 ],
             }
         )
-        return {
-            "governance_effective_milestone": 32,
-            "milestones": [final_milestone],
-        }
+        disposition = final_data["product_lane"]["after_milestone_32_closeout"]
+        final_data["product_lane"].update(
+            {
+                "paused": disposition["paused"],
+                "active_milestone": disposition["active_milestone"],
+                "pause_reason": disposition["reason"],
+                "decision": disposition["decision"],
+            }
+        )
+        final_data["sequence_revision"] = closeout_data["sequence_revision"] + 1
+        final_data["sequence_decisions"] = [
+            "Issue #56 approved the post-Milestone-32 product-lane pause."
+        ]
+        registry.write_text(json.dumps(final_data, indent=2) + "\n", encoding="utf-8")
+        git("add", "docs/MILESTONE_STATE.json")
+        git("commit", "--quiet", "-m", "Finalize Milestone 32 governance state")
+        if create_finalization_ref:
+            git("update-ref", f"refs/pull/{state_finalization_pr}/head", "HEAD")
+        return final_data
+
+    def commit_registry(self, root: Path, data: dict, *, subject: str, pull_request: int | None = None) -> None:
+        registry = root / "docs" / "MILESTONE_STATE.json"
+        registry.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+        subprocess.run(["git", "add", "docs/MILESTONE_STATE.json"], cwd=root, check=True)
+        subprocess.run(["git", "commit", "--quiet", "-m", subject], cwd=root, check=True)
+        if pull_request is not None:
+            subprocess.run(
+                ["git", "update-ref", f"refs/pull/{pull_request}/head", "HEAD"],
+                cwd=root,
+                check=True,
+            )
 
     def test_registry_data_is_valid(self) -> None:
         self.assertEqual([], validate_registry_data(self.data()))
@@ -269,6 +303,7 @@ class MilestoneGovernanceTests(unittest.TestCase):
                 "evidence_results": {profile: [f"Profile {profile} accepted evidence."] for profile in "ABCDE"},
                 "closeout_pr": 60,
                 "closeout_merge_commit": merge,
+                "state_finalization_pr": 61,
                 "decisions": [f"Separate closeout PR #60 approved and merged as {merge}."],
             }
         )
@@ -308,6 +343,7 @@ class MilestoneGovernanceTests(unittest.TestCase):
                 "evidence_results": {"A": ["Deterministic suite passed."]},
                 "closeout_pr": 60,
                 "closeout_merge_commit": merge,
+                "state_finalization_pr": 61,
                 "decisions": [f"Separate closeout PR #60 approved and merged as {merge}."],
             }
         )
@@ -366,6 +402,56 @@ class MilestoneGovernanceTests(unittest.TestCase):
                 errors = validate_derived_documents(data, root)
             self.assertTrue(any("unrecognized or noncanonical status" in error for error in errors), errors)
 
+    def test_derived_milestone_colon_status_must_match_registry(self) -> None:
+        data = self.data()
+        self.milestone(data, 32)["status"] = "Complete"
+        data["derived_documents"] = ["CURRENT.md"]
+        data["historical_snapshot_documents"] = []
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / "CURRENT.md").write_text(
+                f"{AUTHORITY_MARKER}\n- Milestone 32: Active under Issue #57\n",
+                encoding="utf-8",
+            )
+            errors = validate_derived_documents(data, root)
+        self.assertTrue(any("Active != Complete" in error for error in errors), errors)
+
+    def test_current_milestone_heading_must_match_registry(self) -> None:
+        data = self.data()
+        self.milestone(data, 32)["status"] = "Complete"
+        data["product_lane"].update(
+            {
+                "paused": True,
+                "active_milestone": None,
+                "pause_reason": "Approved test pause.",
+                "decision": "Issue #56",
+            }
+        )
+        data["derived_documents"] = ["CURRENT.md"]
+        data["historical_snapshot_documents"] = []
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / "CURRENT.md").write_text(
+                f"{AUTHORITY_MARKER}\n## Current milestone\n\nContext.\n\nMilestone 32 - stale projection.\n",
+                encoding="utf-8",
+            )
+            errors = validate_derived_documents(data, root)
+        self.assertTrue(any("registry product lane is formally paused" in error for error in errors), errors)
+
+    def test_legal_current_derived_projections_are_accepted(self) -> None:
+        data = self.data()
+        data["derived_documents"] = ["CURRENT.md"]
+        data["historical_snapshot_documents"] = []
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / "CURRENT.md").write_text(
+                f"{AUTHORITY_MARKER}\n- Milestone 32: Active under Issue #57\n\n"
+                "## Current milestone\n\nMilestone 32 - Multi-station weld fixture synthesis.\n",
+                encoding="utf-8",
+            )
+            errors = validate_derived_documents(data, root)
+        self.assertEqual([], errors)
+
     def test_historical_document_requires_snapshot_marker(self) -> None:
         data = self.data()
         data["derived_documents"] = ["HISTORY.md"]
@@ -375,6 +461,20 @@ class MilestoneGovernanceTests(unittest.TestCase):
             (root / "HISTORY.md").write_text(AUTHORITY_MARKER, encoding="utf-8")
             errors = validate_derived_documents(data, root)
         self.assertTrue(any("not marked as a non-authoritative snapshot" in error for error in errors), errors)
+
+    def test_historical_snapshot_statuses_remain_accepted(self) -> None:
+        data = self.data()
+        data["derived_documents"] = ["HISTORY.md"]
+        data["historical_snapshot_documents"] = ["HISTORY.md"]
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / "HISTORY.md").write_text(
+                f"{AUTHORITY_MARKER}\n<!-- FXD-HISTORICAL-MILESTONE-SNAPSHOT -->\n"
+                "## Current milestone\nMilestone 20: Pending\n",
+                encoding="utf-8",
+            )
+            errors = validate_derived_documents(data, root)
+        self.assertEqual([], errors)
 
     def test_recorded_merge_commit_must_exist_in_local_history(self) -> None:
         data = self.data()
@@ -407,6 +507,65 @@ class MilestoneGovernanceTests(unittest.TestCase):
             data = self.build_post_governance_history(root)
             errors = validate_git_history(data, root, root / "docs" / "MILESTONE_STATE.json")
         self.assertEqual([], errors)
+
+    def test_valid_three_stage_completion_path_succeeds(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            data = self.build_post_governance_history(root)
+            milestone = self.milestone(data, 32)
+            self.assertEqual(61, milestone["state_finalization_pr"])
+            self.assertEqual(milestone["closeout_merge_commit"], milestone["merge_commits"][-1])
+            self.assertEqual([], validate_registry_data(data))
+            errors = validate_git_history(data, root, root / "docs" / "MILESTONE_STATE.json")
+        self.assertEqual([], errors)
+
+    def test_direct_non_pr_completion_commit_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            data = self.build_post_governance_history(root, create_finalization_ref=False)
+            errors = validate_git_history(data, root, root / "docs" / "MILESTONE_STATE.json")
+        self.assertTrue(any("no matching local pull-head ref" in error for error in errors), errors)
+
+    def test_completion_requires_distinct_state_finalization_pr(self) -> None:
+        for reused_pr in (54, 60):
+            with self.subTest(reused_pr=reused_pr), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp)
+                data = self.build_post_governance_history(root, state_finalization_pr=reused_pr)
+                errors = [
+                    *validate_registry_data(data),
+                    *validate_git_history(data, root, root / "docs" / "MILESTONE_STATE.json"),
+                ]
+            self.assertTrue(any("state-finalization PR must be distinct" in error for error in errors), errors)
+
+    def test_state_finalization_cannot_change_root_registry_fields(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            data = self.build_post_governance_history(root)
+            data["governance_issue"] = 999
+            self.commit_registry(root, data, subject="Tamper with governance root", pull_request=61)
+            errors = validate_git_history(data, root, root / "docs" / "MILESTONE_STATE.json")
+        self.assertTrue(any("unauthorized registry change at governance_issue" in error for error in errors), errors)
+
+    def test_state_finalization_cannot_change_maintenance_lane(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            data = self.build_post_governance_history(root)
+            data["maintenance_lane"]["candidates"][0]["status"] = "Complete"
+            self.commit_registry(root, data, subject="Tamper with maintenance lane", pull_request=61)
+            errors = validate_git_history(data, root, root / "docs" / "MILESTONE_STATE.json")
+        self.assertTrue(
+            any("maintenance_lane.candidates[0].status" in error for error in errors),
+            errors,
+        )
+
+    def test_state_finalization_cannot_change_unrelated_milestone(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            data = self.build_post_governance_history(root)
+            self.milestone(data, 31)["title"] = "Unauthorized rewrite"
+            self.commit_registry(root, data, subject="Tamper with Milestone 31", pull_request=61)
+            errors = validate_git_history(data, root, root / "docs" / "MILESTONE_STATE.json")
+        self.assertTrue(any("milestones[30].title" in error for error in errors), errors)
 
     def test_unrelated_merge_commit_cannot_impersonate_implementation_pr(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -449,7 +608,7 @@ class MilestoneGovernanceTests(unittest.TestCase):
             data = self.build_post_governance_history(root, evidence_at_closeout=False)
             errors = validate_git_history(data, root, root / "docs" / "MILESTONE_STATE.json")
         self.assertTrue(any("closeout evidence PR requires results" in error for error in errors), errors)
-        self.assertTrue(any("field 'evidence_results' differs" in error for error in errors), errors)
+        self.assertTrue(any("milestones[31].evidence_results" in error for error in errors), errors)
 
     def test_github_merge_and_squash_messages_associate_pr_number(self) -> None:
         self.assertTrue(commit_message_matches_pr("Close milestone (#60)", 60))
@@ -475,6 +634,69 @@ class MilestoneGovernanceTests(unittest.TestCase):
 
         current["sequence_revision"] = previous["sequence_revision"] + 1
         current["sequence_decisions"] = ["Issue #999 explicitly approved the sequence addition."]
+        self.assertEqual([], validate_sequence_transition(current, previous))
+
+    def test_paused_transition_requires_sequence_revision(self) -> None:
+        previous = self.data()
+        current = copy.deepcopy(previous)
+        self.milestone(current, 32)["status"] = "Paused"
+        current["product_lane"].update(
+            {
+                "paused": True,
+                "active_milestone": None,
+                "pause_reason": "Governed test pause.",
+                "decision": "Issue #999 approved the test pause.",
+            }
+        )
+        errors = validate_sequence_transition(current, previous)
+        self.assertTrue(any("sequence_revision" in error for error in errors), errors)
+
+    def test_paused_lane_transition_requires_new_decision(self) -> None:
+        previous = self.data()
+        previous["sequence_revision"] = 2
+        previous["sequence_decisions"] = ["Issue #900 approved an earlier sequence change."]
+        current = copy.deepcopy(previous)
+        self.milestone(current, 32)["status"] = "Paused"
+        current["product_lane"].update(
+            {
+                "paused": True,
+                "active_milestone": None,
+                "pause_reason": "Governed test pause.",
+                "decision": "Issue #999 approved the test pause.",
+            }
+        )
+        current["sequence_revision"] = 3
+        errors = validate_sequence_transition(current, previous)
+        self.assertTrue(any("newly added approving sequence decision" in error for error in errors), errors)
+
+    def test_sequence_revision_rejects_reused_decision_list(self) -> None:
+        previous = self.data()
+        previous["sequence_revision"] = 2
+        previous["sequence_decisions"] = ["Issue #900 approved an earlier sequence change."]
+        current = copy.deepcopy(previous)
+        current["product_lane"]["pause_reason"] = "Materially different governing reason."
+        current["sequence_revision"] = 3
+        current["sequence_decisions"] = list(previous["sequence_decisions"])
+        errors = validate_sequence_transition(current, previous)
+        self.assertTrue(any("newly added approving sequence decision" in error for error in errors), errors)
+
+    def test_approved_product_lane_pause_with_new_decision_is_accepted(self) -> None:
+        previous = self.data()
+        current = copy.deepcopy(previous)
+        self.milestone(current, 32)["status"] = "Complete"
+        disposition = current["product_lane"]["after_milestone_32_closeout"]
+        current["product_lane"].update(
+            {
+                "paused": disposition["paused"],
+                "active_milestone": disposition["active_milestone"],
+                "pause_reason": disposition["reason"],
+                "decision": disposition["decision"],
+            }
+        )
+        current["sequence_revision"] = previous["sequence_revision"] + 1
+        current["sequence_decisions"] = [
+            "Issue #56 approved the post-Milestone-32 product-lane pause."
+        ]
         self.assertEqual([], validate_sequence_transition(current, previous))
 
     def test_full_repository_registry_validation_passes(self) -> None:
@@ -525,6 +747,9 @@ class MilestoneGovernanceTests(unittest.TestCase):
         steps = workflow["jobs"]["ocp-acceptance"]["steps"]
         checkout = next(step for step in steps if step["name"] == "Check out repository")
         self.assertEqual(0, checkout["with"]["fetch-depth"])
+        pull_evidence = next(step for step in steps if step["name"] == "Fetch pull-request head evidence")
+        self.assertIn("refs/pull/", pull_evidence["run"])
+        self.assertIn("refs/remotes/pull/", pull_evidence["run"])
         self.assertNotIn("paths", workflow["on"]["pull_request"])
 
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import re
 import subprocess
@@ -28,7 +29,14 @@ HISTORICAL_MARKER = "<!-- FXD-HISTORICAL-MILESTONE-SNAPSHOT -->"
 SHA_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 HEADING_PATTERN = re.compile(r"^#{1,6}\s+Milestone\s+(\d+)\b", re.IGNORECASE)
 STATUS_PATTERN = re.compile(r"(?:\*\*Status:\*\*|\bStatus:)\s*([^\r\n]+)", re.IGNORECASE)
+MILESTONE_STATUS_PATTERN = re.compile(
+    r"^\s*(?:(?:[-*+]|\d+[.)])\s+)?(?:Milestone|M)\s*(\d+)\s*:\s*([^\r\n]+)",
+    re.IGNORECASE,
+)
 CURRENT_PATTERN = re.compile(r"\bcurrent\s+(?:product\s+)?milestone\s*(?::|is)?\s*(?:Milestone|M)?\s*(\d+)\b", re.IGNORECASE)
+CURRENT_HEADING_PATTERN = re.compile(r"^(#{1,6})\s+Current\s+(?:product\s+)?milestone\b", re.IGNORECASE)
+ANY_HEADING_PATTERN = re.compile(r"^(#{1,6})\s+")
+MILESTONE_REFERENCE_PATTERN = re.compile(r"\b(?:Milestone|M)\s*(\d+)\b", re.IGNORECASE)
 PROSE_STATUS_PATTERNS = (
     re.compile(
         r"\b(?:Milestone|M)\s*(\d+)\b\s+(?:is|remains|has status)\s+(?:the\s+sole\s+)?(Planned|Active|Blocked|Waiting|Paused|Complete|Superseded|Cancelled)\b",
@@ -84,14 +92,18 @@ def _sequence_projection(data: dict[str, Any]) -> dict[str, Any]:
         "product_lane": {
             "paused": lane.get("paused"),
             "active_milestone": lane.get("active_milestone"),
+            "pause_reason": lane.get("pause_reason"),
+            "decision": lane.get("decision"),
         },
         "milestones": [
             {
                 "number": milestone.get("number"),
                 "sequence_position": milestone.get("sequence_position"),
                 "predecessor": milestone.get("predecessor"),
-                "terminal_sequence_status": (
-                    milestone.get("status") if milestone.get("status") in {"Superseded", "Cancelled"} else None
+                "sequence_status": (
+                    milestone.get("status")
+                    if milestone.get("status") in {"Paused", "Superseded", "Cancelled"}
+                    else None
                 ),
                 "replacement_milestone": milestone.get("replacement_milestone"),
             }
@@ -102,7 +114,7 @@ def _sequence_projection(data: dict[str, Any]) -> dict[str, Any]:
 
 
 def validate_sequence_transition(current: dict[str, Any], previous: dict[str, Any]) -> list[str]:
-    """Require a one-step revision bump and decision when sequence fields change."""
+    """Require one new revision and newly approving decisions for a sequence change."""
 
     if _sequence_projection(current) == _sequence_projection(previous):
         return []
@@ -111,8 +123,27 @@ def validate_sequence_transition(current: dict[str, Any], previous: dict[str, An
     errors: list[str] = []
     if not _positive_int(previous_revision) or current_revision != previous_revision + 1:
         errors.append("sequence changes require sequence_revision to increment exactly once from the prior registry")
-    if not _nonempty_strings(current.get("sequence_decisions")):
+    previous_decisions = previous.get("sequence_decisions", [])
+    current_decisions = current.get("sequence_decisions")
+    if not isinstance(previous_decisions, list) or any(
+        not isinstance(decision, str) or not decision.strip() for decision in previous_decisions
+    ):
+        errors.append("the prior registry has invalid sequence_decisions")
+        previous_decisions = []
+    if not _nonempty_strings(current_decisions):
         errors.append("sequence changes require nonempty sequence_decisions")
+    else:
+        additions = current_decisions[len(previous_decisions) :]
+        if current_decisions[: len(previous_decisions)] != previous_decisions:
+            errors.append("sequence changes must preserve prior sequence_decisions in their existing order")
+        if len(current_decisions) != len(set(current_decisions)):
+            errors.append("sequence changes cannot reorder, duplicate, or reuse sequence_decisions")
+        if not additions or not any(
+            re.search(r"\b(?:approved|approves|authorized|authorizes)\b", decision, re.IGNORECASE)
+            and re.search(r"#\d+\b", decision)
+            for decision in additions
+        ):
+            errors.append("sequence changes require at least one newly added approving sequence decision")
     return errors
 
 
@@ -170,6 +201,145 @@ def implementation_pr_merge_mapping(
         if not assign(pull_request, set()):
             return None, []
     return {pull_request: commit for commit, pull_request in commit_to_pr.items()}, []
+
+
+def _milestone_by_number(data: dict[str, Any], number: int) -> dict[str, Any] | None:
+    return next(
+        (
+            milestone
+            for milestone in data.get("milestones", [])
+            if isinstance(milestone, dict) and milestone.get("number") == number
+        ),
+        None,
+    )
+
+
+def _structured_differences(expected: Any, actual: Any, path: str = "") -> list[tuple[str, Any, Any]]:
+    """Return deterministic JSON-value differences with reviewable field paths."""
+
+    if type(expected) is not type(actual):
+        return [(path or "<root>", expected, actual)]
+    if isinstance(expected, dict):
+        differences: list[tuple[str, Any, Any]] = []
+        for key in sorted(set(expected) | set(actual)):
+            child = f"{path}.{key}" if path else key
+            if key not in expected:
+                differences.append((child, "<absent>", actual[key]))
+            elif key not in actual:
+                differences.append((child, expected[key], "<absent>"))
+            else:
+                differences.extend(_structured_differences(expected[key], actual[key], child))
+        return differences
+    if isinstance(expected, list):
+        differences = []
+        common = min(len(expected), len(actual))
+        for index in range(common):
+            differences.extend(_structured_differences(expected[index], actual[index], f"{path}[{index}]"))
+        for index in range(common, max(len(expected), len(actual))):
+            expected_value = expected[index] if index < len(expected) else "<absent>"
+            actual_value = actual[index] if index < len(actual) else "<absent>"
+            differences.append((f"{path}[{index}]", expected_value, actual_value))
+        return differences
+    return [] if expected == actual else [(path or "<root>", expected, actual)]
+
+
+def validate_state_finalization_delta(
+    current: dict[str, Any],
+    closeout: dict[str, Any],
+    milestone_number: int,
+) -> list[str]:
+    """Allow only the contract-authorized third-stage registry transition."""
+
+    prefix = f"post-governance milestone {milestone_number!r} state-finalization"
+    errors: list[str] = []
+    reviewed_milestone = _milestone_by_number(closeout, milestone_number)
+    final_milestone = _milestone_by_number(current, milestone_number)
+    if reviewed_milestone is None or final_milestone is None:
+        return [f"{prefix} requires the milestone in both closeout and final registries"]
+
+    finalization_pr = final_milestone.get("state_finalization_pr")
+    closeout_pr = final_milestone.get("closeout_pr")
+    implementation_prs = final_milestone.get("implementation_prs")
+    if reviewed_milestone.get("state_finalization_pr") is not None:
+        errors.append(f"{prefix} closeout snapshot must not predeclare a state-finalization PR")
+    if not _positive_int(finalization_pr):
+        errors.append(f"{prefix} requires a distinct state-finalization PR")
+    elif finalization_pr == closeout_pr or (
+        isinstance(implementation_prs, list) and finalization_pr in implementation_prs
+    ):
+        errors.append(
+            f"{prefix} PR #{finalization_pr} must be distinct from every implementation and closeout PR"
+        )
+
+    closeout_commit = final_milestone.get("closeout_merge_commit")
+    reviewed_merges = reviewed_milestone.get("merge_commits")
+    final_merges = final_milestone.get("merge_commits")
+    if not isinstance(reviewed_merges, list) or not isinstance(final_merges, list) or final_merges != [
+        *reviewed_merges,
+        closeout_commit,
+    ]:
+        errors.append(f"{prefix} may append only the closeout merge commit to reviewed merge evidence")
+
+    reviewed_decisions = reviewed_milestone.get("decisions")
+    final_decisions = final_milestone.get("decisions")
+    linkage_decision: str | None = None
+    if not isinstance(reviewed_decisions, list) or not isinstance(final_decisions, list):
+        errors.append(f"{prefix} requires preserved milestone decisions")
+    elif final_decisions[: len(reviewed_decisions)] != reviewed_decisions or len(final_decisions) != len(
+        reviewed_decisions
+    ) + 1:
+        errors.append(f"{prefix} may add exactly one closeout PR/SHA linkage decision")
+    else:
+        linkage_decision = final_decisions[-1]
+        fragments = ("closeout", f"#{closeout_pr}", str(closeout_commit))
+        if not isinstance(linkage_decision, str) or not all(
+            fragment.casefold() in linkage_decision.casefold() for fragment in fragments
+        ):
+            errors.append(f"{prefix} linkage decision must identify the closeout PR and merge commit")
+
+    errors.extend(f"{prefix}: {error}" for error in validate_sequence_transition(current, closeout))
+
+    expected = copy.deepcopy(closeout)
+    expected["sequence_revision"] = current.get("sequence_revision")
+    expected["sequence_decisions"] = current.get("sequence_decisions")
+
+    reviewed_lane = closeout.get("product_lane")
+    if not isinstance(reviewed_lane, dict):
+        errors.append(f"{prefix} closeout snapshot has no valid product lane")
+    else:
+        disposition = reviewed_lane.get("after_milestone_32_closeout") if milestone_number == 32 else None
+        if not isinstance(disposition, dict):
+            errors.append(f"{prefix} has no pre-approved post-closeout product-lane disposition")
+        else:
+            expected_lane = copy.deepcopy(reviewed_lane)
+            expected_lane.update(
+                {
+                    "paused": disposition.get("paused"),
+                    "active_milestone": disposition.get("active_milestone"),
+                    "pause_reason": disposition.get("reason"),
+                    "decision": disposition.get("decision"),
+                }
+            )
+            expected["product_lane"] = expected_lane
+
+    expected_milestone = _milestone_by_number(expected, milestone_number)
+    if expected_milestone is not None:
+        expected_milestone.update(
+            {
+                "status": "Complete",
+                "merge_commits": final_merges,
+                "closeout_merge_commit": closeout_commit,
+                "state_finalization_pr": finalization_pr,
+                "decisions": final_decisions,
+            }
+        )
+
+    for path, expected_value, actual_value in _structured_differences(expected, current):
+        errors.append(
+            f"{prefix} PR #{finalization_pr} contains unauthorized registry change at {path}: "
+            f"expected {expected_value!r}, got {actual_value!r}"
+        )
+    return errors
 
 
 def load_registry(path: Path) -> dict[str, Any]:
@@ -295,6 +465,8 @@ def validate_registry_data(data: dict[str, Any]) -> list[str]:
         if post_governance:
             if "closeout_merge_commit" not in milestone:
                 errors.append(f"post-governance milestone {number!r} requires a closeout_merge_commit field")
+            if "state_finalization_pr" not in milestone:
+                errors.append(f"post-governance milestone {number!r} requires a state_finalization_pr field")
             if milestone.get("legacy") is not False:
                 errors.append(f"post-governance milestone {number!r} cannot be classified as legacy")
             if not isinstance(evidence_results, dict):
@@ -316,6 +488,14 @@ def validate_registry_data(data: dict[str, Any]) -> list[str]:
         decisions = milestone.get("decisions")
         if not isinstance(decisions, list) or any(not isinstance(decision, str) or not decision.strip() for decision in decisions):
             errors.append(f"milestone {number!r} decisions must be an array of nonempty strings")
+
+        state_finalization_pr = milestone.get("state_finalization_pr")
+        if state_finalization_pr is not None and not _positive_int(state_finalization_pr):
+            errors.append(f"milestone {number!r} state_finalization_pr must be null or a positive integer")
+        if post_governance and status != "Complete" and state_finalization_pr is not None:
+            errors.append(
+                f"post-governance milestone {number!r} cannot predeclare a future state-finalization PR"
+            )
 
         if status == "Active":
             if not _positive_int(issue):
@@ -376,6 +556,17 @@ def validate_registry_data(data: dict[str, Any]) -> list[str]:
                 ):
                     errors.append(
                         f"post-governance Complete milestone {number!r} requires an explicit closeout decision linking its PR and merge commit"
+                    )
+                if not _positive_int(state_finalization_pr):
+                    errors.append(
+                        f"post-governance Complete milestone {number!r} requires a distinct state-finalization PR"
+                    )
+                elif state_finalization_pr == closeout_pr or (
+                    isinstance(prs, list) and state_finalization_pr in prs
+                ):
+                    errors.append(
+                        f"post-governance Complete milestone {number!r} state-finalization PR must be distinct "
+                        "from implementation and closeout PRs"
                     )
         if status in {"Superseded", "Cancelled"}:
             if not _nonempty_strings(decisions):
@@ -483,6 +674,49 @@ def validate_registry_data(data: dict[str, Any]) -> list[str]:
     return errors
 
 
+def _validate_status_claim(
+    *,
+    relative: str,
+    line_number: int,
+    milestone_number: int | None,
+    raw_claim: str,
+    expected_status: dict[int, str],
+) -> list[str]:
+    """Validate one current-status claim while permitting explanatory prose after it."""
+
+    raw = raw_claim.strip().strip("*` .")
+    illegal = ILLEGAL_STATUS_PATTERN.search(raw)
+    if illegal:
+        return [f"{relative}:{line_number} uses non-authoritative status {illegal.group(1)!r}"]
+    status_match = re.match(
+        r"(Planned|Active|Blocked|Waiting|Paused|Complete|Superseded|Cancelled)\b",
+        raw,
+        re.IGNORECASE,
+    )
+    claimed = status_match.group(1) if status_match else next(iter(raw.split()), raw)
+    canonical = next((status for status in LEGAL_STATUSES if status.casefold() == claimed.casefold()), None)
+    if canonical is None or canonical != claimed:
+        return [f"{relative}:{line_number} uses unrecognized or noncanonical status {claimed!r}"]
+    if milestone_number in expected_status and canonical != expected_status[milestone_number]:
+        return [
+            f"{relative}:{line_number} conflicts for milestone {milestone_number}: "
+            f"{canonical} != {expected_status[milestone_number]}"
+        ]
+    return []
+
+
+def _validate_current_milestone_claim(
+    *, relative: str, line_number: int, claimed: int, active_number: Any, paused: Any
+) -> list[str]:
+    if paused is True:
+        return [
+            f"{relative}:{line_number} names milestone {claimed} as current; registry product lane is formally paused"
+        ]
+    if claimed != active_number:
+        return [f"{relative}:{line_number} names milestone {claimed} as current; registry selects {active_number}"]
+    return []
+
+
 def validate_derived_documents(data: dict[str, Any], repo_root: Path) -> list[str]:
     errors: list[str] = []
     documents = data.get("derived_documents")
@@ -501,7 +735,9 @@ def validate_derived_documents(data: dict[str, Any], repo_root: Path) -> list[st
         for milestone in data.get("milestones", [])
         if isinstance(milestone, dict) and _positive_int(milestone.get("number"))
     }
-    active_number = data.get("product_lane", {}).get("active_milestone")
+    lane = data.get("product_lane") if isinstance(data.get("product_lane"), dict) else {}
+    active_number = lane.get("active_milestone")
+    lane_paused = lane.get("paused")
 
     for relative in documents:
         path = repo_root / relative
@@ -518,31 +754,63 @@ def validate_derived_documents(data: dict[str, Any], repo_root: Path) -> list[st
             continue
 
         current_heading: int | None = None
+        current_section_level: int | None = None
         for line_number, line in enumerate(text.splitlines(), start=1):
+            any_heading = ANY_HEADING_PATTERN.match(line)
+            current_section = CURRENT_HEADING_PATTERN.match(line)
+            if current_section:
+                current_section_level = len(current_section.group(1))
+            elif any_heading and current_section_level is not None and len(any_heading.group(1)) <= current_section_level:
+                current_section_level = None
             heading = HEADING_PATTERN.match(line)
             if heading:
                 current_heading = int(heading.group(1))
             status_match = STATUS_PATTERN.search(line)
             if status_match:
-                raw_status = status_match.group(1).strip().strip("*` .")
-                illegal = ILLEGAL_STATUS_PATTERN.search(raw_status)
-                if illegal:
-                    errors.append(f"{relative}:{line_number} uses non-authoritative status {illegal.group(1)!r}")
-                else:
-                    canonical_status = next(
-                        (status for status in LEGAL_STATUSES if status.casefold() == raw_status.casefold()),
-                        None,
+                errors.extend(
+                    _validate_status_claim(
+                        relative=relative,
+                        line_number=line_number,
+                        milestone_number=current_heading,
+                        raw_claim=status_match.group(1),
+                        expected_status=expected_status,
                     )
-                    if canonical_status is None or canonical_status != raw_status:
-                        errors.append(f"{relative}:{line_number} uses unrecognized or noncanonical status {raw_status!r}")
-                    elif current_heading in expected_status and canonical_status != expected_status[current_heading]:
-                        errors.append(
-                            f"{relative}:{line_number} conflicts for milestone {current_heading}: "
-                            f"{canonical_status} != {expected_status[current_heading]}"
-                        )
+                )
+            milestone_status = MILESTONE_STATUS_PATTERN.match(line)
+            if milestone_status:
+                errors.extend(
+                    _validate_status_claim(
+                        relative=relative,
+                        line_number=line_number,
+                        milestone_number=int(milestone_status.group(1)),
+                        raw_claim=milestone_status.group(2),
+                        expected_status=expected_status,
+                    )
+                )
             current_match = CURRENT_PATTERN.search(line)
-            if current_match and int(current_match.group(1)) != active_number:
-                errors.append(f"{relative}:{line_number} names milestone {current_match.group(1)} as current; registry selects {active_number}")
+            if current_match:
+                errors.extend(
+                    _validate_current_milestone_claim(
+                        relative=relative,
+                        line_number=line_number,
+                        claimed=int(current_match.group(1)),
+                        active_number=active_number,
+                        paused=lane_paused,
+                    )
+                )
+            elif current_section_level is not None and not current_section:
+                section_milestone = MILESTONE_REFERENCE_PATTERN.search(line)
+                if section_milestone:
+                    errors.extend(
+                        _validate_current_milestone_claim(
+                            relative=relative,
+                            line_number=line_number,
+                            claimed=int(section_milestone.group(1)),
+                            active_number=active_number,
+                            paused=lane_paused,
+                        )
+                    )
+                    current_section_level = None
             for pattern in PROSE_STATUS_PATTERNS:
                 prose = pattern.search(line)
                 if not prose:
@@ -551,6 +819,102 @@ def validate_derived_documents(data: dict[str, Any], repo_root: Path) -> list[st
                 if number in expected_status and status != expected_status[number]:
                     errors.append(f"{relative}:{line_number} conflicts for milestone {number}: {status} != {expected_status[number]}")
     return errors
+
+
+def _registry_at_revision(repo_root: Path, revision: str, registry_relative: str) -> dict[str, Any] | None:
+    result = subprocess.run(
+        ["git", "show", f"{revision}:{registry_relative}"],
+        cwd=repo_root,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        return None
+    try:
+        data = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def _is_ancestor(repo_root: Path, ancestor: str, descendant: str) -> bool:
+    return (
+        subprocess.run(
+            ["git", "merge-base", "--is-ancestor", ancestor, descendant],
+            cwd=repo_root,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        ).returncode
+        == 0
+    )
+
+
+def _state_finalization_registry_evidence(
+    *,
+    current: dict[str, Any],
+    repo_root: Path,
+    registry_relative: str,
+    milestone_number: int,
+    state_finalization_pr: int,
+    closeout_commit: str,
+    reserved_commits: set[str],
+) -> tuple[dict[str, Any] | None, str | None]:
+    """Find the open PR-head ref or eventual merged commit that carried finalization."""
+
+    pull_refs = (
+        f"refs/pull/{state_finalization_pr}/head",
+        f"refs/remotes/pull/{state_finalization_pr}/head",
+        f"refs/remotes/origin/pull/{state_finalization_pr}/head",
+    )
+    for pull_ref in pull_refs:
+        target = subprocess.run(
+            ["git", "rev-parse", "--verify", pull_ref],
+            cwd=repo_root,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        commit = target.stdout.strip()
+        if target.returncode != 0 or not commit or commit in reserved_commits:
+            continue
+        if not _is_ancestor(repo_root, closeout_commit, commit) or not _is_ancestor(repo_root, commit, "HEAD"):
+            continue
+        pull_data = _registry_at_revision(repo_root, commit, registry_relative)
+        if pull_data == current:
+            return pull_data, f"{pull_ref} at {commit}"
+
+    history = subprocess.run(
+        ["git", "log", "--format=%H", "HEAD"],
+        cwd=repo_root,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if history.returncode != 0:
+        return None, None
+    for commit in history.stdout.splitlines():
+        if commit in reserved_commits or not _is_ancestor(repo_root, closeout_commit, commit):
+            continue
+        message = subprocess.run(
+            ["git", "show", "-s", "--format=%B", commit],
+            cwd=repo_root,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        if message.returncode != 0 or not commit_message_matches_pr(message.stdout, state_finalization_pr):
+            continue
+        merged_data = _registry_at_revision(repo_root, commit, registry_relative)
+        merged_milestone = _milestone_by_number(merged_data or {}, milestone_number)
+        if (
+            merged_milestone is not None
+            and merged_milestone.get("status") == "Complete"
+            and merged_milestone.get("state_finalization_pr") == state_finalization_pr
+        ):
+            return merged_data, f"PR-number-bearing commit {commit}"
+    return None, None
 
 
 def validate_git_history(
@@ -691,14 +1055,6 @@ def validate_git_history(
                         f"post-governance milestone {number!r} must remain the sole Active milestone "
                         "in the closeout merge commit registry"
                     )
-                finalization_fields = {"status", "merge_commits", "closeout_merge_commit", "decisions"}
-                reviewed_fields = (set(closeout_milestone) | set(milestone)) - finalization_fields
-                for field in sorted(reviewed_fields):
-                    if closeout_milestone.get(field) != milestone.get(field):
-                        errors.append(
-                            f"post-governance milestone {number!r} field {field!r} differs from "
-                            "the reviewed closeout merge commit registry"
-                        )
                 if closeout_milestone.get("closeout_merge_commit") is not None:
                     errors.append(
                         f"post-governance milestone {number!r} closeout merge commit registry must not "
@@ -721,32 +1077,29 @@ def validate_git_history(
                             f"post-governance milestone {number!r} closeout merge commit registry does not "
                             "map implementation PRs one-to-one to distinct merge evidence"
                         )
-                final_merges = milestone.get("merge_commits")
-                if isinstance(reviewed_merges, list) and isinstance(final_merges, list):
-                    if set(final_merges) != {*reviewed_merges, closeout_commit}:
+                state_finalization_pr = milestone.get("state_finalization_pr")
+                if _positive_int(state_finalization_pr):
+                    finalization_data, evidence = _state_finalization_registry_evidence(
+                        current=data,
+                        repo_root=repo_root,
+                        registry_relative=registry_relative,
+                        milestone_number=number,
+                        state_finalization_pr=state_finalization_pr,
+                        closeout_commit=closeout_commit,
+                        reserved_commits=set(milestone.get("merge_commits", [])),
+                    )
+                    if finalization_data is None:
                         errors.append(
-                            f"post-governance milestone {number!r} state finalization may add only the "
-                            "closeout merge commit to the reviewed merge evidence"
+                            f"post-governance milestone {number!r} expected state-finalization PR "
+                            f"#{state_finalization_pr} evidence, but no matching local pull-head ref or "
+                            "distinct PR-number-bearing merge commit carries the finalization registry"
                         )
-                reviewed_decisions = closeout_milestone.get("decisions")
-                final_decisions = milestone.get("decisions")
-                if isinstance(reviewed_decisions, list) and isinstance(final_decisions, list):
-                    missing_reviewed_decisions = set(reviewed_decisions) - set(final_decisions)
-                    if missing_reviewed_decisions:
-                        errors.append(
-                            f"post-governance milestone {number!r} state finalization removed a reviewed "
-                            "closeout decision"
-                        )
-                    added_decisions = set(final_decisions) - set(reviewed_decisions)
-                    required_fragments = ("closeout", f"#{closeout_pr}", closeout_commit)
-                    if any(
-                        not all(fragment.casefold() in decision.casefold() for fragment in required_fragments)
-                        for decision in added_decisions
-                    ):
-                        errors.append(
-                            f"post-governance milestone {number!r} state finalization may add only a "
-                            "closeout PR and merge-commit linkage decision"
-                        )
+                    else:
+                        errors.extend(validate_state_finalization_delta(finalization_data, closeout_data, number))
+                        if evidence is None:
+                            errors.append(
+                                f"post-governance milestone {number!r} state-finalization PR evidence is missing"
+                            )
     return errors
 
 
