@@ -1,0 +1,58 @@
+name: Maintenance work
+description: Govern repository, dependency, CI, or documentation maintenance outside the product lane.
+title: "Maintenance: "
+labels: ["maintenance"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Maintenance work is separate from the product lane and cannot own or change product milestone status.
+  - type: dropdown
+    id: classification
+    attributes:
+      label: Maintenance classification
+      options:
+        - Documentation/publication
+        - Dependency/licensing
+        - CI/tooling
+        - Security/repository integrity
+        - Defect repair outside active milestone scope
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope and exclusions
+      description: Explain why this work does not absorb the Active product milestone.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Required evidence and checks
+      description: Include profile F when documentation-only, plus all deterministic, licensing, security, or platform evidence required.
+    validations:
+      required: true
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Dependency and licensing impact
+      description: Name additions or changes, exact versions, licenses, redistribution obligations, and commercial implications; write “None” when applicable.
+    validations:
+      required: true
+  - type: textarea
+    id: blockers
+    attributes:
+      label: Blockers and completion conditions
+      description: List open findings and the exact evidence required to close them.
+    validations:
+      required: true
+  - type: checkboxes
+    id: boundaries
+    attributes:
+      label: Lane acknowledgement
+      options:
+        - label: This issue does not activate, complete, supersede, cancel, or reorder a product milestone.
+          required: true
+        - label: Product behavior and protected engineering boundaries will not change unless separately authorized.
+          required: true

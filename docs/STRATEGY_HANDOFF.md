@@ -1,7 +1,10 @@
+<!-- FXD-MILESTONE-STATE: docs/MILESTONE_STATE.json -->
 # FXD Strategy Handoff
 
-This is the short-form cross-task repository handoff. It does not override
-`BACKLOG.md`, `docs/ROADMAP_QUEUE.md`, or the Engineering Constitution.
+This is derived short-form cross-task context. It does not override the
+Engineering Constitution, Product Direction, accepted decisions,
+`docs/MILESTONE_CONTRACT.md`, `docs/MILESTONE_STATE.json`, or the Active
+milestone's authoritative GitHub issue.
 
 ## Current repository state
 
@@ -15,17 +18,16 @@ This is the short-form cross-task repository handoff. It does not override
 - Milestone 29 was independently visually accepted and squash-merged through
   PR #51 at `4b6691a`.
 - Milestone 30 was squash-merged through PR #52 at `edf65bb`.
+- Milestone 31 was accepted and squash-merged through PR #53 at `ac1e7a1`.
+- Milestones 1 through 31 are reconciled as legacy Complete by Issue #56.
 
 ## Active milestone
 
-Milestone 31 is active on
-`milestone-31-ai-fixture-engineer-guided-validation`. It adds the versioned,
-provider-neutral AI Fixture Engineer proposal boundary, a deterministic offline
-baseline, a minimal intent interview, strict response quarantine, guided
-validation and correction routing, recommendation review/edit decisions, and
-schema-v5 persistence. Proposal generation follows accepted manufacturing
-orientation and composes existing placement, concept, access, weld, validation,
-revision, approval, and export contracts rather than replacing them.
+Milestone 32 is the sole Active product milestone. Issue #57 is authoritative,
+and draft PR #54 is its implementation PR. Evidence profiles A, B, C, D, and E
+are required. The milestone remains Active through implementation merge and
+requires a separate closeout evidence PR followed, after merge, by a distinct
+state-finalization PR that records the already-existing closeout merge SHA.
 
 The application preserves ordinary vendor STEP import, source bytes and
 SHA-256, XCAF color evidence, zero-based tessellation, and fail-closed behavior.
@@ -34,13 +36,17 @@ geometry and cannot be represented as source or final manufacturing geometry.
 
 ## Review boundary
 
-Milestone 31 has 278 passing automated tests, governed repository CI and real
-OCP proof, hosted pinned-OCP acceptance, clean fresh Codex review, and local
-Windows native VTK proposal-workflow acceptance. It remains in progress until
-user Windows visual acceptance, engineering acceptance, and explicit merge
-authorization are recorded. The workbench and all exports remain engineering-
-review-only and never imply production, structural, weld-process, or safety
-approval.
+PR #54 remains draft, open, and unmerged. Its implementation evidence does not
+complete Milestone 32. A closeout evidence PR must reconcile the required
+evidence profiles, explicit human acceptance, merge evidence, remaining risks,
+and Issue #57 while M32 remains Active. After that PR merges, a distinct
+state-finalization PR records its merge SHA, sets Complete, and formally pauses
+the product lane with zero Active milestones. No Milestone 33 is created or
+implied.
+
+PR #55 is blocked documentation maintenance governed by Issue #58. It does not
+own product status, and its dependency/licensing, byte-determinism, and
+unsupported-bookmark findings remain in the maintenance lane.
 
 ## Governing principles
 

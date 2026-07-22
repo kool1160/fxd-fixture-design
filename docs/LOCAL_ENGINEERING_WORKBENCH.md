@@ -1,3 +1,4 @@
+<!-- FXD-MILESTONE-STATE: docs/MILESTONE_STATE.json -->
 # Unified Local Engineering Workbench
 
 FXD's desktop shell is a PySide6 `QMainWindow` with one native VTK render child
@@ -159,6 +160,6 @@ revisions, and timing evidence. V1 through v4 projects remain readable. Invalid
 concepts and stale or blocked proposals remain blocked from review export;
 provisional output retains the engineering-review-only boundary.
 
-Milestone 30 was squash-merged through PR #52 at `edf65bb`. Milestone 31 remains
-Pending until hosted validation, independent review, user Windows visual
-acceptance, engineering acceptance, and merge.
+Milestones 30 and 31 were squash-merged through PRs #52 and #53. Current
+milestone status belongs only to `docs/MILESTONE_STATE.json`; Issue #57 governs
+the sole Active Milestone 32 implementation in draft PR #54.

@@ -1,0 +1,79 @@
+name: Product milestone proposal
+description: Propose a governed FXD product milestone or define an approved Active milestone.
+title: "Milestone proposal: "
+labels: ["milestone"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This form does not activate a milestone. Activation requires explicit human approval and an update to `docs/MILESTONE_STATE.json` under `docs/MILESTONE_CONTRACT.md`.
+  - type: input
+    id: milestone
+    attributes:
+      label: Proposed milestone number
+      description: Do not skip the registered sequence or invent a successor without approval.
+      placeholder: "32"
+    validations:
+      required: true
+  - type: input
+    id: predecessor
+    attributes:
+      label: Registered predecessor
+      placeholder: "Milestone 31 — Complete"
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Complete product outcome
+      description: State one reviewable outcome, not a collection of unrelated changes.
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope and exclusions
+      description: Identify included work, excluded work, and implementation-PR boundaries.
+    validations:
+      required: true
+  - type: checkboxes
+    id: profiles
+    attributes:
+      label: Required evidence profiles
+      description: Select every materially applicable profile from the milestone contract.
+      options:
+        - label: "A — repository and deterministic core"
+        - label: "B — real geometry/manufacturing evidence"
+        - label: "C — Windows desktop/visual acceptance"
+        - label: "D — engineering acceptance"
+        - label: "E — AI/provider boundary"
+        - label: "F — documentation-only work"
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Deterministic acceptance criteria
+      description: Include tests, evidence, failure behavior, human review, and remaining manual boundaries.
+    validations:
+      required: true
+  - type: textarea
+    id: children
+    attributes:
+      label: Child-issue decomposition
+      description: List disjoint child issues or explain why none are required. Child issues cannot own milestone status.
+    validations:
+      required: true
+  - type: checkboxes
+    id: protected
+    attributes:
+      label: Protected-boundary acknowledgement
+      options:
+        - label: Source CAD remains immutable and CAD-neutral boundaries remain intact.
+          required: true
+        - label: Deterministic validation remains authoritative and approval/export fail closed.
+          required: true
+        - label: Units, tolerances, traceability, privacy, licensing review, and human approval remain explicit.
+          required: true
+        - label: A separate closeout evidence PR and post-merge state-finalization PR are required after implementation merge.
+          required: true

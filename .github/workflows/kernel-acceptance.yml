@@ -3,28 +3,9 @@
   "on": {
     "workflow_dispatch": {},
     "push": {
-      "branches": ["main"],
-      "paths": [
-        "fxd_geometry/**",
-        "fxd_qt_app.py",
-        "tests/**",
-        "scripts/**",
-        "requirements-kernel.txt",
-        "requirements-desktop.txt",
-        ".github/workflows/kernel-acceptance.yml"
-      ]
+      "branches": ["main"]
     },
-    "pull_request": {
-      "paths": [
-        "fxd_geometry/**",
-        "fxd_qt_app.py",
-        "tests/**",
-        "scripts/**",
-        "requirements-kernel.txt",
-        "requirements-desktop.txt",
-        ".github/workflows/kernel-acceptance.yml"
-      ]
-    }
+    "pull_request": {}
   },
   "permissions": {
     "contents": "read",
@@ -38,7 +19,15 @@
       "steps": [
         {
           "name": "Check out repository",
-          "uses": "actions/checkout@v4"
+          "uses": "actions/checkout@v4",
+          "with": {
+            "fetch-depth": 0
+          }
+        },
+        {
+          "name": "Fetch pull-request head evidence",
+          "if": "github.event_name == 'pull_request'",
+          "run": "git fetch --no-tags origin +refs/pull/${{ github.event.pull_request.number }}/head:refs/pull/${{ github.event.pull_request.number }}/head"
         },
         {
           "name": "Set up Python 3.12",
@@ -46,6 +35,11 @@
           "with": {
             "python-version": "3.12"
           }
+        },
+        {
+          "name": "Fetch declared state-finalization pull evidence",
+          "shell": "bash",
+          "run": "set -euo pipefail\nmapfile -t pull_requests < <(python - <<'PY'\nimport json\nfrom pathlib import Path\ndata = json.loads(Path('docs/MILESTONE_STATE.json').read_text(encoding='utf-8'))\nfor milestone in data.get('milestones', []):\n    pull_request = milestone.get('state_finalization_pr')\n    if isinstance(pull_request, int) and pull_request > 0:\n        print(pull_request)\nPY\n)\nfor pull_request in \"${pull_requests[@]}\"; do\n  git fetch --no-tags origin \"+refs/pull/${pull_request}/head:refs/pull/${pull_request}/head\"\ndone"
         },
         {
           "name": "Upgrade packaging tools",
