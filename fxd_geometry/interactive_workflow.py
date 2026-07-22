@@ -583,14 +583,20 @@ def _engineering_annotations(product: ProductModel,
             continue
         if values["weld_side"] == "Unknown" or length <= 0.0 or sequence < 1:
             continue
-        approach_manufacturing = {
+        direction_values = {
             "+X": Vec3(1.0, 0.0, 0.0), "-X": Vec3(-1.0, 0.0, 0.0),
             "+Y": Vec3(0.0, 1.0, 0.0), "-Y": Vec3(0.0, -1.0, 0.0),
             "+Z": Vec3(0.0, 0.0, 1.0), "-Z": Vec3(0.0, 0.0, -1.0),
-        }.get(values.get("weld_approach_direction_mfg", ""))
-        approach_source = (
-            orientation.manufacturing_vector_to_source(approach_manufacturing)
-            if approach_manufacturing is not None else None
+        }
+        approach_manufacturing = direction_values.get(
+            values.get("weld_approach_direction_mfg", "")
+        )
+        weld_direction_manufacturing = direction_values.get(
+            values.get("weld_direction_mfg", "")
+        )
+        weld_direction_source = (
+            orientation.manufacturing_vector_to_source(weld_direction_manufacturing)
+            if weld_direction_manufacturing is not None else None
         )
         torch_values = tuple(values.get(key, "") for key in (
             "torch_envelope_width_mm", "torch_envelope_height_mm", "torch_envelope_length_mm",
@@ -600,11 +606,13 @@ def _engineering_annotations(product: ProductModel,
         )
         if approach_manufacturing is not None:
             notes += f"; approach_mfg={values['weld_approach_direction_mfg']}"
+        if weld_direction_manufacturing is not None:
+            notes += f"; weld_direction_mfg={values['weld_direction_mfg']}"
         if all(torch_values):
             notes += "; torch_envelope_mm=" + "x".join(torch_values)
         welds.append(WeldJoint(
             item.identity, (item.reference,), values["weld_process"], notes, sequence,
-            direction=approach_source, assumptions=item.assumptions,
+            direction=weld_direction_source, assumptions=item.assumptions,
         ))
     assumptions = [
         Assumption("fixture_type", setup.fixture_type or "unknown", "Engineer process setup."),

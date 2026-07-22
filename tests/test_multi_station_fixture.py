@@ -631,6 +631,61 @@ class MultiStationFixtureTests(unittest.TestCase):
             long_plan.multi_station_layout.stations[0].weld_access_results[0].evidence,
         )
 
+    def test_current_product_overlap_keeps_weld_access_unevaluated(self):
+        weld = replace(
+            self.build_requirements().confirmed_welds[0],
+            joint_position_source_mm=Vec3(2.0, 30.0, 30.0),
+            weld_length_mm=10.0,
+            torch_envelope_mm=Vec3(2.0, 2.0, 2.0),
+            weld_direction_manufacturing=Vec3(0.0, 0.0, 1.0),
+            weld_direction_source=Vec3(0.0, 0.0, 1.0),
+        )
+        plan = generate_multi_station_fixture_build_plan(
+            self.product, self.concept, self.build_requirements(welds=(weld,)),
+            self.station_requirements(count=4),
+        )
+        for station in plan.multi_station_layout.stations:
+            result = station.weld_access_results[0]
+            self.assertIsNone(result.clear)
+            self.assertIn("torch_body_vs_current_product=not_evaluated", result.evidence)
+            self.assertIsNone(station.weld_access_clear)
+        validation = validate_fixture_build_plan(self.product, plan)
+        self.assertTrue(validation.review_blocked)
+        self.assertTrue(any("not evaluated against current product geometry" in item.message
+                            for item in validation.findings))
+        restored = FixtureBuildPlan.from_dict(plan.to_dict())
+        self.assertIsNone(restored.multi_station_layout.stations[0].weld_access_results[0].clear)
+
+    def test_engineering_weld_direction_uses_seam_tangent_not_torch_approach(self):
+        document = load_step_for_workbench(self.source)
+        reference = self.annotations.permitted_locating_surfaces[0]
+        annotation = face_annotation(document, reference, AnnotationRole.WELD_JOINT)
+        annotation = replace(annotation, evidence=annotation.evidence + (
+            "weld_candidate_status=confirmed", "weld_side=operator",
+            "weld_length_mm=38.000", "weld_process=synthetic MIG weld",
+            "weld_sequence=1", "weld_approach_direction_mfg=+Y",
+            "weld_direction_mfg=+X",
+        ))
+        orientation = source_orientation(self.product.source_sha256, accepted=True)
+        workflow = InteractiveWorkflow(
+            self.product.source_sha256,
+            ProcessSetup(
+                "explicit seam direction",
+                fixture_family=FixtureFamily.LINEAR_MULTI_STATION_WELD.value,
+                fixture_type="Full weld fixture", manufacturing_process="synthetic MIG weld",
+                operation_mode="Manual", production_quantity=100,
+                manufacturing_orientation=orientation,
+                manufacturing_build_direction=Vec3(0.0, 0.0, 1.0),
+                manufacturing_loading_direction=Vec3(1.0, 0.0, 0.0),
+                manufacturing_unloading_direction=Vec3(-1.0, 0.0, 0.0),
+            ),
+            (annotation,),
+        )
+        engineering = _engineering_annotations(self.product, workflow)
+        self.assertEqual(len(engineering.weld_joints), 1)
+        self.assertEqual(engineering.weld_joints[0].direction, Vec3(1.0, 0.0, 0.0))
+        self.assertNotEqual(engineering.weld_joints[0].direction, Vec3(0.0, 1.0, 0.0))
+
     def test_weld_access_uses_explicit_seam_tangent_and_missing_tangent_stays_unevaluated(self):
         weld = self.build_requirements().confirmed_welds[0]
         along_x = self.plan(count=4)
@@ -712,6 +767,20 @@ class MultiStationFixtureTests(unittest.TestCase):
         ))
         finding = next(item for item in validate_fixture_build_plan(self.product, invalid).findings
                        if "occupies the datum rail volume" in item.message)
+        self.assertEqual(finding.disposition, "authoring_blocker")
+
+        disconnected = replace(brace, bounds=Aabb(
+            Vec3(brace.bounds.minimum.x, brace.bounds.minimum.y - 1.0,
+                 brace.bounds.minimum.z),
+            Vec3(brace.bounds.maximum.x, brace.bounds.maximum.y - 1.0,
+                 brace.bounds.maximum.z),
+        ))
+        invalid = replace(plan, components=tuple(
+            disconnected if item.identity == brace.identity else item
+            for item in plan.components
+        ))
+        finding = next(item for item in validate_fixture_build_plan(self.product, invalid).findings
+                       if "does not share a weldable face boundary" in item.message)
         self.assertEqual(finding.disposition, "authoring_blocker")
 
     def test_multi_station_release_requires_current_accepted_proposal_binding(self):

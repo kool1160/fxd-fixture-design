@@ -551,7 +551,7 @@ class WeldJointAccessResult:
     """One deterministic station/joint torch-envelope result."""
 
     joint_identity: str
-    clear: bool
+    clear: bool | None
     torch_envelope: Aabb
     approach_direction_source: Vec3
     blocking_component_identities: tuple[str, ...] = ()
@@ -560,6 +560,8 @@ class WeldJointAccessResult:
     def __post_init__(self) -> None:
         if not self.joint_identity.strip():
             raise FixtureBuildError("weld access result requires a joint identity")
+        if self.clear is not None and not isinstance(self.clear, bool):
+            raise FixtureBuildError("weld access result must be clear, blocked, or unevaluated")
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -575,7 +577,7 @@ class WeldJointAccessResult:
     def from_dict(cls, data: dict[str, object]) -> "WeldJointAccessResult":
         bounds = data["torch_envelope"]
         return cls(
-            str(data["joint_identity"]), bool(data["clear"]),
+            str(data["joint_identity"]), data.get("clear"),
             Aabb(Vec3(**bounds["minimum"]), Vec3(**bounds["maximum"])),
             Vec3(**data["approach_direction_source"]),
             tuple(data.get("blocking_component_identities", ())),
@@ -1546,6 +1548,46 @@ def _positive_bounds_overlap(left: Aabb, right: Aabb, tolerance: float = 1e-7) -
     )
 
 
+def _bounds_share_face(left: Aabb, right: Aabb, tolerance: float = 1e-7) -> bool:
+    """Return true only for a boundary contact with positive shared face area."""
+    for axis in ("x", "y", "z"):
+        touches = (
+            abs(getattr(left.maximum, axis) - getattr(right.minimum, axis)) <= tolerance
+            or abs(getattr(right.maximum, axis) - getattr(left.minimum, axis)) <= tolerance
+        )
+        if not touches:
+            continue
+        other_axes = tuple(item for item in ("x", "y", "z") if item != axis)
+        if all(
+            min(getattr(left.maximum, item), getattr(right.maximum, item))
+            - max(getattr(left.minimum, item), getattr(right.minimum, item)) > tolerance
+            for item in other_axes
+        ):
+            return True
+    return False
+
+
+def _current_product_torch_overlap_candidates(
+        product: ProductModel, torch_envelope: Aabb, translation: Vec3,
+        source_to_manufacturing: tuple[float, ...]) -> tuple[str, ...]:
+    """Conservative product broad phase; any overlap stays unevaluated.
+
+    A disjoint transformed body AABB proves the torch cannot intersect that
+    body.  A positive AABB overlap does not prove safe seam contact versus a
+    workpiece collision, so the caller must not report access as clear.
+    """
+    candidates: list[str] = []
+    for component in product.components:
+        for body in component.bodies:
+            source_bounds = body.bounds.transformed(component.transform)
+            station_bounds = _translated(
+                _transformed_bounds(source_bounds, source_to_manufacturing), translation,
+            )
+            if _positive_bounds_overlap(torch_envelope, station_bounds):
+                candidates.append(f"{component.identity}/{body.identity}")
+    return tuple(sorted(candidates))
+
+
 def _motion_path_clear(bounds: Aabb, motion: Vec3, distance: float,
                        obstacles: tuple[Aabb, ...]) -> bool:
     # Deliberate seating contacts at the final position are allowed.  The
@@ -2164,7 +2206,14 @@ def generate_multi_station_fixture_build_plan(
                                  or ("operator" in normalized_side and "opposite" not in normalized_side
                                      and side_alignment <= 1e-7))
                 blockers_tuple = tuple(blockers)
-                clear = not blockers_tuple and not side_conflict
+                current_product_candidates = _current_product_torch_overlap_candidates(
+                    product, torch_envelope, station.translation_mm,
+                    multi_station.source_to_manufacturing,
+                )
+                fixture_clear = not blockers_tuple and not side_conflict
+                clear = False if not fixture_clear else (
+                    None if current_product_candidates else True
+                )
                 weld_results.append(WeldJointAccessResult(
                     weld.identity, clear, torch_envelope,
                     approach_source,
@@ -2183,10 +2232,18 @@ def generate_multi_station_fixture_build_plan(
                         f"orientation={weld.manufacturing_orientation_identity}",
                         f"torch_envelope_mm=({weld.torch_envelope_mm.x:.3f},{weld.torch_envelope_mm.y:.3f},{weld.torch_envelope_mm.z:.3f})",
                         "weld_side_vs_approach=" + ("conflict" if side_conflict else "consistent"),
-                        "torch_body_vs_fixture_clamps_adjacent_stations=" + ("clear" if clear else "blocked"),
+                        "torch_body_vs_fixture_clamps_adjacent_stations="
+                        + ("clear" if fixture_clear else "blocked"),
+                        "torch_body_vs_current_product="
+                        + ("not_evaluated" if current_product_candidates else "clear"),
+                        f"current_product_overlap_candidate_count={len(current_product_candidates)}",
                     ),
                 ))
-            weld_clear = all(item.clear for item in weld_results)
+            weld_clear = (
+                False if any(item.clear is False for item in weld_results)
+                else True if weld_results and all(item.clear is True for item in weld_results)
+                else None
+            )
         evaluated_station = replace(
             station,
             clamp_tip_reaches_surface=closed.intersects(station.product_bounds),
@@ -2355,6 +2412,12 @@ def _multi_station_findings(plan: FixtureBuildPlan) -> tuple[FixtureBuildFinding
                     "end brace occupies the datum rail volume instead of meeting its boundary",
                     components=(brace.identity, rail.identity), disposition="authoring_blocker",
                 ))
+            elif not _bounds_share_face(rail.bounds, brace.bounds):
+                findings.append(_finding(
+                    "FXD-M32-CON", "error",
+                    "end brace does not share a weldable face boundary with the datum rail",
+                    components=(brace.identity, rail.identity), disposition="authoring_blocker",
+                ))
     component_ids = {item.identity for item in plan.components}
     expected_weld_identities = tuple(item.identity for item in plan.requirements.confirmed_welds)
     for station in layout.stations:
@@ -2415,7 +2478,11 @@ def _multi_station_findings(plan: FixtureBuildPlan) -> tuple[FixtureBuildFinding
                 disposition="review_blocker",
             ))
         if exact_weld_result_set and expected_weld_identities:
-            aggregate = all(item.clear for item in station.weld_access_results)
+            aggregate = (
+                False if any(item.clear is False for item in station.weld_access_results)
+                else True if all(item.clear is True for item in station.weld_access_results)
+                else None
+            )
             if station.weld_access_clear is not aggregate:
                 findings.append(_finding(
                     "FXD-M32-ACC", "error",
@@ -2425,12 +2492,19 @@ def _multi_station_findings(plan: FixtureBuildPlan) -> tuple[FixtureBuildFinding
                 ))
         if station.weld_access_results:
             for result in station.weld_access_results:
-                if not result.clear:
+                if result.clear is False:
                     findings.append(_finding(
                         "FXD-M32-ACC", "error",
                         f"station weld/torch access is blocked for confirmed joint {result.joint_identity}",
                         components=(station.identity,) + result.blocking_component_identities,
                         evidence=result.evidence,
+                        disposition="review_blocker",
+                    ))
+                elif result.clear is None:
+                    findings.append(_finding(
+                        "FXD-M32-ACC", "error",
+                        f"station weld/torch access is not evaluated against current product geometry for confirmed joint {result.joint_identity}",
+                        components=(station.identity,), evidence=result.evidence,
                         disposition="review_blocker",
                     ))
         elif station.weld_access_clear is False:
