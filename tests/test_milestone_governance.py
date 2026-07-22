@@ -53,6 +53,8 @@ class MilestoneGovernanceTests(unittest.TestCase):
         create_finalization_ref: bool = True,
         finalization_subject: str = "Finalize Milestone 32 governance state",
         simulate_squash_merge: bool = False,
+        closeout_files: dict[str, str] | None = None,
+        finalization_files: dict[str, str] | None = None,
     ) -> dict:
         def git(*args: str) -> str:
             result = subprocess.run(
@@ -108,7 +110,11 @@ class MilestoneGovernanceTests(unittest.TestCase):
         registry = root / "docs" / "MILESTONE_STATE.json"
         registry.parent.mkdir(parents=True)
         registry.write_text(json.dumps(closeout_data, indent=2) + "\n", encoding="utf-8")
-        git("add", "docs/MILESTONE_STATE.json")
+        for relative, content in (closeout_files or {}).items():
+            path = root / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(content, encoding="utf-8")
+        git("add", "docs/MILESTONE_STATE.json", *(closeout_files or {}).keys())
         git("commit", "--quiet", "-m", "Milestone 32 closeout evidence (#60)")
         closeout_commit = git("rev-parse", "HEAD")
 
@@ -142,7 +148,11 @@ class MilestoneGovernanceTests(unittest.TestCase):
             "Issue #56 approved the post-Milestone-32 product-lane pause."
         ]
         registry.write_text(json.dumps(final_data, indent=2) + "\n", encoding="utf-8")
-        git("add", "docs/MILESTONE_STATE.json")
+        for relative, content in (finalization_files or {}).items():
+            path = root / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(content, encoding="utf-8")
+        git("add", "docs/MILESTONE_STATE.json", *(finalization_files or {}).keys())
         git("commit", "--quiet", "-m", finalization_subject)
         if create_finalization_ref:
             git("update-ref", f"refs/pull/{state_finalization_pr}/head", "HEAD")
@@ -614,6 +624,174 @@ class MilestoneGovernanceTests(unittest.TestCase):
             errors = validate_git_history(data, root, root / "docs" / "MILESTONE_STATE.json")
         self.assertEqual([], errors)
 
+    def test_origin_pull_named_branch_cannot_authenticate_finalization_pr(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            data = self.build_post_governance_history(root)
+            final_head = subprocess.run(
+                ["git", "rev-parse", "refs/pull/61/head"],
+                cwd=root,
+                text=True,
+                capture_output=True,
+                check=True,
+            ).stdout.strip()
+            subprocess.run(["git", "update-ref", "-d", "refs/pull/61/head"], cwd=root, check=True)
+            subprocess.run(
+                ["git", "update-ref", "refs/remotes/origin/pull/61/head", final_head],
+                cwd=root,
+                check=True,
+            )
+            errors = validate_git_history(data, root, root / "docs" / "MILESTONE_STATE.json")
+        self.assertTrue(any("exact dedicated pull-head ref" in error for error in errors), errors)
+
+    def test_alternate_refs_cannot_authenticate_finalization_pr(self) -> None:
+        for alternate_ref in (
+            "refs/heads/pull/61/head",
+            "refs/tags/pull-61-head",
+            "refs/remotes/pull/61/head",
+            "refs/vendor/pull/61/head",
+        ):
+            with self.subTest(alternate_ref=alternate_ref), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp)
+                data = self.build_post_governance_history(root, create_finalization_ref=False)
+                subprocess.run(["git", "update-ref", alternate_ref, "HEAD"], cwd=root, check=True)
+                errors = validate_git_history(data, root, root / "docs" / "MILESTONE_STATE.json")
+            self.assertTrue(any("exact dedicated pull-head ref" in error for error in errors), errors)
+
+    def test_symbolic_pull_ref_cannot_authenticate_finalization_pr(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            data = self.build_post_governance_history(root, create_finalization_ref=False)
+            subprocess.run(
+                ["git", "symbolic-ref", "refs/pull/61/head", "refs/heads/master"],
+                cwd=root,
+                check=True,
+            )
+            errors = validate_git_history(data, root, root / "docs" / "MILESTONE_STATE.json")
+        self.assertTrue(any("exact pull-head ref is symbolic" in error for error in errors), errors)
+
+    def test_state_finalization_pull_head_rejects_product_code_changes(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            data = self.build_post_governance_history(root)
+            product = root / "fxd_geometry" / "concealed.py"
+            product.parent.mkdir()
+            product.write_text("CONCEALED_PRODUCT_CHANGE = True\n", encoding="utf-8")
+            subprocess.run(["git", "add", product.relative_to(root).as_posix()], cwd=root, check=True)
+            subprocess.run(
+                ["git", "commit", "--quiet", "-m", "Conceal product work in finalization"],
+                cwd=root,
+                check=True,
+            )
+            subprocess.run(["git", "update-ref", "refs/pull/61/head", "HEAD"], cwd=root, check=True)
+            errors = validate_git_history(data, root, root / "docs" / "MILESTONE_STATE.json")
+        self.assertTrue(any("unauthorized finalization tree path fxd_geometry/concealed.py" in error for error in errors), errors)
+
+    def test_state_finalization_pull_head_rejects_unrelated_document_changes(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            data = self.build_post_governance_history(
+                root,
+                closeout_files={"README.md": f"{AUTHORITY_MARKER}\n**Status:** Active\nStable prose.\n"},
+            )
+            readme = root / "README.md"
+            readme.write_text(
+                f"{AUTHORITY_MARKER}\n**Status:** Complete\nUnrelated finalization prose.\n",
+                encoding="utf-8",
+            )
+            subprocess.run(["git", "add", "README.md"], cwd=root, check=True)
+            subprocess.run(
+                ["git", "commit", "--quiet", "-m", "Conceal unrelated documentation"],
+                cwd=root,
+                check=True,
+            )
+            subprocess.run(["git", "update-ref", "refs/pull/61/head", "HEAD"], cwd=root, check=True)
+            errors = validate_git_history(data, root, root / "docs" / "MILESTONE_STATE.json")
+        self.assertTrue(any("unrelated derived-document content" in error for error in errors), errors)
+
+    def test_state_finalization_pull_head_rejects_unauthorized_tree_operations(self) -> None:
+        cases = {
+            "new source file": (None, "new_module.py", "print('unauthorized')\n"),
+            "workflow change": (None, ".github/workflows/hidden.yml", "name: hidden\n"),
+            "dependency change": (None, "requirements-hidden.txt", "unsafe-dependency\n"),
+        }
+        for label, (_, relative, content) in cases.items():
+            with self.subTest(label=label), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp)
+                data = self.build_post_governance_history(root)
+                path = root / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(content, encoding="utf-8")
+                subprocess.run(["git", "add", relative], cwd=root, check=True)
+                subprocess.run(["git", "commit", "--quiet", "-m", label], cwd=root, check=True)
+                subprocess.run(["git", "update-ref", "refs/pull/61/head", "HEAD"], cwd=root, check=True)
+                errors = validate_git_history(data, root, root / "docs" / "MILESTONE_STATE.json")
+            self.assertTrue(any(f"unauthorized finalization tree path {relative}" in error for error in errors), errors)
+
+        for operation in ("delete", "rename"):
+            with self.subTest(operation=operation), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp)
+                data = self.build_post_governance_history(
+                    root,
+                    closeout_files={"reviewed.txt": "reviewed closeout content\n"},
+                )
+                if operation == "delete":
+                    (root / "reviewed.txt").unlink()
+                    subprocess.run(["git", "add", "-u", "reviewed.txt"], cwd=root, check=True)
+                else:
+                    subprocess.run(["git", "mv", "reviewed.txt", "renamed.txt"], cwd=root, check=True)
+                subprocess.run(["git", "commit", "--quiet", "-m", f"Unauthorized {operation}"], cwd=root, check=True)
+                subprocess.run(["git", "update-ref", "refs/pull/61/head", "HEAD"], cwd=root, check=True)
+                errors = validate_git_history(data, root, root / "docs" / "MILESTONE_STATE.json")
+            self.assertTrue(any("unauthorized finalization tree" in error for error in errors), errors)
+
+    def test_state_finalization_pull_head_accepts_only_authorized_paths(self) -> None:
+        marker = f"{AUTHORITY_MARKER}\n"
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            data = self.build_post_governance_history(
+                root,
+                closeout_files={
+                    "docs/ROADMAP_QUEUE.md": marker + "**Status:** Active\n",
+                    "docs/project-records/README.md": (
+                        marker + "## Current milestone\n\nMilestone 32 - Multi-station weld fixture synthesis.\n"
+                    ),
+                },
+                finalization_files={
+                    "docs/ROADMAP_QUEUE.md": marker + "**Status:** Complete\n",
+                    "docs/project-records/README.md": marker + "## Current milestone\n\nProduct lane is Paused.\n",
+                },
+            )
+            errors = validate_git_history(data, root, root / "docs" / "MILESTONE_STATE.json")
+        self.assertEqual([], errors)
+
+    def test_state_finalization_pull_head_rejects_binary_derived_changes(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            data = self.build_post_governance_history(
+                root,
+                closeout_files={"README.md": f"{AUTHORITY_MARKER}\n**Status:** Active\n"},
+            )
+            (root / "README.md").write_bytes(b"\x00binary finalization content\n")
+            subprocess.run(["git", "add", "README.md"], cwd=root, check=True)
+            subprocess.run(["git", "commit", "--quiet", "-m", "Binary derived rewrite"], cwd=root, check=True)
+            subprocess.run(["git", "update-ref", "refs/pull/61/head", "HEAD"], cwd=root, check=True)
+            errors = validate_git_history(data, root, root / "docs" / "MILESTONE_STATE.json")
+        self.assertTrue(any("cannot contain binary changes" in error for error in errors), errors)
+
+    def test_state_finalization_pull_head_rejects_file_mode_changes(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            data = self.build_post_governance_history(
+                root,
+                closeout_files={"README.md": f"{AUTHORITY_MARKER}\n**Status:** Active\n"},
+            )
+            subprocess.run(["git", "update-index", "--chmod=+x", "README.md"], cwd=root, check=True)
+            subprocess.run(["git", "commit", "--quiet", "-m", "Change derived file mode"], cwd=root, check=True)
+            subprocess.run(["git", "update-ref", "refs/pull/61/head", "HEAD"], cwd=root, check=True)
+            errors = validate_git_history(data, root, root / "docs" / "MILESTONE_STATE.json")
+        self.assertTrue(any("unauthorized finalization tree mode change" in error for error in errors), errors)
+
     def test_completion_requires_distinct_state_finalization_pr(self) -> None:
         for reused_pr in (54, 60):
             with self.subTest(reused_pr=reused_pr), tempfile.TemporaryDirectory() as temp:
@@ -1039,12 +1217,14 @@ class MilestoneGovernanceTests(unittest.TestCase):
         self.assertEqual(0, checkout["with"]["fetch-depth"])
         pull_evidence = next(step for step in steps if step["name"] == "Fetch pull-request head evidence")
         self.assertIn("refs/pull/", pull_evidence["run"])
-        self.assertIn("refs/remotes/pull/", pull_evidence["run"])
+        self.assertNotIn("refs/remotes/", pull_evidence["run"])
+        self.assertRegex(pull_evidence["run"], r"refs/pull/.+/head:refs/pull/.+/head")
         declared_evidence = next(
             step for step in steps if step["name"] == "Fetch declared state-finalization pull evidence"
         )
         self.assertIn("state_finalization_pr", declared_evidence["run"])
         self.assertIn("refs/pull/${pull_request}/head", declared_evidence["run"])
+        self.assertNotIn("refs/remotes/", declared_evidence["run"])
         self.assertNotIn("paths", workflow["on"]["pull_request"])
 
     def test_foreman_validates_governance_before_selection(self) -> None:
@@ -1053,6 +1233,46 @@ class MilestoneGovernanceTests(unittest.TestCase):
         selection = workflow.index("name: Select milestone")
         self.assertLess(validation, selection)
         self.assertIn("python scripts/validate_milestones.py", workflow[validation:selection])
+
+    def test_foreman_rejects_closed_authoritative_milestone_issue(self) -> None:
+        workflow = (ROOT / ".github" / "workflows" / "fxd-foreman.yml").read_text(encoding="utf-8")
+        issue_step = workflow[workflow.index("name: Load authoritative milestone issue") :]
+        self.assertIn("--json number,state,body,url", issue_step)
+        self.assertRegex(issue_step, r'issue_state=.*state')
+        self.assertIn('"$issue_state" != "OPEN"', issue_step)
+        self.assertIn("authoritative milestone issue is not OPEN", issue_step)
+        self.assertIn("failed to fetch authoritative milestone issue", issue_step)
+
+    def test_foreman_loads_open_issue_before_codex_execution(self) -> None:
+        workflow = (ROOT / ".github" / "workflows" / "fxd-foreman.yml").read_text(encoding="utf-8")
+        issue_validation = workflow.index("name: Load authoritative milestone issue")
+        body_append = workflow.index(">> .fxd/selected-milestone.md", issue_validation)
+        codex = workflow.index("name: Run Codex milestone Foreman")
+        self.assertLess(issue_validation, body_append)
+        self.assertLess(body_append, codex)
+        validation_script = workflow[issue_validation:body_append]
+        self.assertIn("set -euo pipefail", validation_script)
+        self.assertIn("issue_state", validation_script)
+        self.assertIn("issue_number", validation_script)
+        self.assertIn("GITHUB_REPOSITORY", validation_script)
+
+    def test_foreman_issue_number_matches_registry_selection(self) -> None:
+        workflow = (ROOT / ".github" / "workflows" / "fxd-foreman.yml").read_text(encoding="utf-8")
+        issue_step = workflow[workflow.index("name: Load authoritative milestone issue") :]
+        self.assertIn("steps.milestone.outputs.issue_number", issue_step)
+        self.assertIn('"$issue_number" != "$selected_issue"', issue_step)
+        self.assertIn("authoritative milestone issue number mismatch", issue_step)
+        self.assertIn("kool1160/fxd-fixture-design", issue_step)
+        self.assertNotIn("gh issue view 57", issue_step)
+
+    def test_foreman_rejects_authoritative_issue_repository_mismatch(self) -> None:
+        workflow = (ROOT / ".github" / "workflows" / "fxd-foreman.yml").read_text(encoding="utf-8")
+        issue_step = workflow[workflow.index("name: Load authoritative milestone issue") :]
+        repository_check = issue_step.index('"$GITHUB_REPOSITORY" != "$EXPECTED_REPOSITORY"')
+        issue_fetch = issue_step.index("gh issue view")
+        self.assertLess(repository_check, issue_fetch)
+        self.assertIn("authoritative milestone issue repository mismatch", issue_step)
+        self.assertIn('issue_url" != "https://github.com/$EXPECTED_REPOSITORY/issues/$selected_issue', issue_step)
 
 
 if __name__ == "__main__":

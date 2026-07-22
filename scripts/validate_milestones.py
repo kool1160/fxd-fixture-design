@@ -41,6 +41,15 @@ REOPENING_HISTORY_FIELDS = (
     "legacy_reconciliation",
     "historical_gaps",
 )
+FINALIZATION_REGISTRY_PATH = "docs/MILESTONE_STATE.json"
+FINALIZATION_DERIVED_STATUS_PATHS = (
+    "README.md",
+    "BACKLOG.md",
+    "docs/ROADMAP_QUEUE.md",
+    "docs/STRATEGY_HANDOFF.md",
+    "docs/LOCAL_ENGINEERING_WORKBENCH.md",
+    "docs/project-records/README.md",
+)
 AUTHORITY_MARKER = "<!-- FXD-MILESTONE-STATE: docs/MILESTONE_STATE.json -->"
 HISTORICAL_MARKER = "<!-- FXD-HISTORICAL-MILESTONE-SNAPSHOT -->"
 SHA_PATTERN = re.compile(r"^[0-9a-f]{40}$")
@@ -964,6 +973,208 @@ def _is_ancestor(repo_root: Path, ancestor: str, descendant: str) -> bool:
     )
 
 
+def _git_blob(repo_root: Path, revision: str, relative: str) -> bytes | None:
+    result = subprocess.run(
+        ["git", "show", f"{revision}:{relative}"],
+        cwd=repo_root,
+        capture_output=True,
+        check=False,
+    )
+    return result.stdout if result.returncode == 0 else None
+
+
+def _git_tree_mode(repo_root: Path, revision: str, relative: str) -> str | None:
+    result = subprocess.run(
+        ["git", "ls-tree", "-z", revision, "--", relative],
+        cwd=repo_root,
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode != 0 or not result.stdout:
+        return None
+    metadata = result.stdout.split(b"\t", 1)[0].decode("ascii", errors="replace")
+    return metadata.split(" ", 1)[0] if " " in metadata else None
+
+
+def _finalization_projection_signature(line: str) -> tuple[str, str, str] | None:
+    """Return a stable signature only for an exact current-status projection line."""
+
+    statuses = "|".join(sorted(LEGAL_STATUSES, key=len, reverse=True))
+    patterns = (
+        (
+            "status",
+            re.compile(
+                rf"^(\s*(?:[-*+]\s+)?(?:\*\*)?Status:(?:\*\*)?\s*)({statuses})(\b.*)$"
+            ),
+        ),
+        (
+            "milestone-status",
+            re.compile(
+                rf"^(\s*(?:(?:[-*+]|\d+[.)])\s+)?(?:Milestone|M)\s*\d+\s*:\s*)"
+                rf"({statuses})(\b.*)$"
+            ),
+        ),
+        (
+            "milestone-prose",
+            re.compile(
+                rf"^(.*\b(?:Milestone|M)\s*\d+\b\s+(?:is|remains|has status)\s+"
+                rf"(?:the\s+sole\s+)?)(?:({statuses}))(\b.*)$",
+                re.IGNORECASE,
+            ),
+        ),
+    )
+    for category, pattern in patterns:
+        match = pattern.fullmatch(line)
+        if match:
+            return category, match.group(1), match.group(3)
+
+    lane = re.fullmatch(
+        r"\s*(?:[-*+]\s+)?(?:Current (?:product )?milestone|Product lane)\s*(?::|is)\s*"
+        r"(?:Milestone\s*\d+|M\s*\d+|Paused|None)\s*[.;]?\s*",
+        line,
+        re.IGNORECASE,
+    )
+    current_section_milestone = re.fullmatch(
+        r"\s*(?:Milestone|M)\s*\d+\s*(?:-|—|:)\s*[^\r\n]+",
+        line,
+        re.IGNORECASE,
+    )
+    return ("lane-projection", "", "") if lane or current_section_milestone else None
+
+
+def _line_is_in_current_milestone_section(lines: list[str], index: int) -> bool:
+    for previous in range(index - 1, -1, -1):
+        if not lines[previous].strip():
+            continue
+        return CURRENT_HEADING_PATTERN.fullmatch(lines[previous]) is not None
+    return False
+
+
+def _validate_derived_finalization_content(
+    repo_root: Path,
+    closeout_commit: str,
+    finalization_commit: str,
+    relative: str,
+) -> list[str]:
+    """Allow only in-place edits of exact current-status projection lines."""
+
+    before_blob = _git_blob(repo_root, closeout_commit, relative)
+    after_blob = _git_blob(repo_root, finalization_commit, relative)
+    if before_blob is None or after_blob is None:
+        return [f"state-finalization derived document {relative} must exist before and after finalization"]
+    if b"\x00" in before_blob or b"\x00" in after_blob:
+        return [f"state-finalization derived document {relative} cannot contain binary changes"]
+    try:
+        before = before_blob.decode("utf-8").splitlines()
+        after = after_blob.decode("utf-8").splitlines()
+    except UnicodeDecodeError:
+        return [f"state-finalization derived document {relative} must remain UTF-8 text"]
+    if len(before) != len(after):
+        return [
+            f"state-finalization derived document {relative} may reconcile status in place but cannot add or remove lines"
+        ]
+
+    errors: list[str] = []
+    for line_number, (reviewed_line, final_line) in enumerate(zip(before, after), start=1):
+        if reviewed_line == final_line:
+            continue
+        reviewed_signature = _finalization_projection_signature(reviewed_line)
+        final_signature = _finalization_projection_signature(final_line)
+        signatures_match = reviewed_signature is not None and reviewed_signature == final_signature
+        if signatures_match and reviewed_signature[0] == "lane-projection":
+            inline_projection = bool(
+                re.match(r"\s*(?:[-*+]\s+)?(?:Current (?:product )?milestone|Product lane)\b", reviewed_line, re.IGNORECASE)
+                and re.match(r"\s*(?:[-*+]\s+)?(?:Current (?:product )?milestone|Product lane)\b", final_line, re.IGNORECASE)
+            )
+            signatures_match = inline_projection or (
+                _line_is_in_current_milestone_section(before, line_number - 1)
+                and _line_is_in_current_milestone_section(after, line_number - 1)
+            )
+        if not signatures_match:
+            errors.append(
+                f"state-finalization derived document {relative}:{line_number} contains unrelated "
+                "derived-document content; only the existing current-status projection token may change"
+            )
+    return errors
+
+
+def _validate_state_finalization_tree_delta(
+    *,
+    repo_root: Path,
+    closeout_commit: str,
+    finalization_commit: str,
+    registry_relative: str,
+) -> list[str]:
+    """Reject every finalization pull-head tree delta outside the narrow contract allowlist."""
+
+    allowed_registry = registry_relative == FINALIZATION_REGISTRY_PATH
+    allowed_paths = {
+        registry_relative,
+        *(FINALIZATION_DERIVED_STATUS_PATHS if allowed_registry else ()),
+    }
+    result = subprocess.run(
+        [
+            "git",
+            "diff",
+            "--name-status",
+            "--no-renames",
+            "-z",
+            closeout_commit,
+            finalization_commit,
+            "--",
+        ],
+        cwd=repo_root,
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        return ["state-finalization pull-head tree could not be compared with the reviewed closeout tree"]
+    parts = result.stdout.split(b"\x00")
+    if parts and parts[-1] == b"":
+        parts.pop()
+    if len(parts) % 2:
+        return ["state-finalization pull-head tree produced malformed path evidence"]
+
+    errors: list[str] = []
+    for index in range(0, len(parts), 2):
+        try:
+            status = parts[index].decode("ascii")
+            relative = parts[index + 1].decode("utf-8")
+        except UnicodeDecodeError:
+            errors.append("state-finalization pull-head tree contains a non-UTF-8 path")
+            continue
+        if relative not in allowed_paths:
+            errors.append(
+                f"unauthorized finalization tree path {relative} has operation {status}; expected governance stage "
+                f"permits only {registry_relative} and exact current-status reconciliation paths"
+            )
+            continue
+        if status != "M":
+            errors.append(
+                f"unauthorized finalization tree operation {status} at {relative}; additions, deletions, and renames "
+                "are prohibited during state finalization"
+            )
+            continue
+        reviewed_mode = _git_tree_mode(repo_root, closeout_commit, relative)
+        final_mode = _git_tree_mode(repo_root, finalization_commit, relative)
+        if reviewed_mode != "100644" or final_mode != reviewed_mode:
+            errors.append(
+                f"unauthorized finalization tree mode change at {relative}: "
+                f"expected regular file mode 100644, got {reviewed_mode!r} -> {final_mode!r}"
+            )
+            continue
+        if relative != registry_relative:
+            errors.extend(
+                _validate_derived_finalization_content(
+                    repo_root,
+                    closeout_commit,
+                    finalization_commit,
+                    relative,
+                )
+            )
+    return errors
+
+
 def _state_finalization_registry_evidence(
     *,
     current: dict[str, Any],
@@ -972,37 +1183,55 @@ def _state_finalization_registry_evidence(
     state_finalization_pr: int,
     closeout_commit: str,
     reserved_commits: set[str],
-) -> tuple[dict[str, Any] | None, str | None]:
+) -> tuple[dict[str, Any] | None, str | None, list[str]]:
     """Find the exact declared GitHub pull-head ref that carried finalization."""
 
     if _registry_at_revision(repo_root, "HEAD", registry_relative) != current:
-        return None, None
+        return None, None, []
     if not _is_ancestor(repo_root, closeout_commit, "HEAD"):
-        return None, None
+        return None, None, []
 
-    pull_refs = (
-        f"refs/pull/{state_finalization_pr}/head",
-        f"refs/remotes/pull/{state_finalization_pr}/head",
-        f"refs/remotes/origin/pull/{state_finalization_pr}/head",
+    pull_ref = f"refs/pull/{state_finalization_pr}/head"
+    symbolic = subprocess.run(
+        ["git", "symbolic-ref", "-q", pull_ref],
+        cwd=repo_root,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=False,
     )
-    for pull_ref in pull_refs:
-        target = subprocess.run(
-            ["git", "rev-parse", "--verify", pull_ref],
-            cwd=repo_root,
-            text=True,
-            capture_output=True,
-            check=False,
-        )
-        commit = target.stdout.strip()
-        if target.returncode != 0 or not commit or commit in reserved_commits:
-            continue
-        if not _is_ancestor(repo_root, closeout_commit, commit):
-            continue
-        pull_data = _registry_at_revision(repo_root, commit, registry_relative)
-        if pull_data == current:
-            return pull_data, f"{pull_ref} at {commit}"
-
-    return None, None
+    if symbolic.returncode == 0:
+        return None, None, [f"state-finalization PR #{state_finalization_pr} exact pull-head ref is symbolic"]
+    target = subprocess.run(
+        ["git", "show-ref", "--verify", "--hash", pull_ref],
+        cwd=repo_root,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    commit = target.stdout.strip()
+    if target.returncode != 0 or not commit:
+        return None, None, []
+    object_type = subprocess.run(
+        ["git", "cat-file", "-t", commit],
+        cwd=repo_root,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if object_type.returncode != 0 or object_type.stdout.strip() != "commit":
+        return None, None, [f"state-finalization PR #{state_finalization_pr} exact pull-head ref must target a commit"]
+    if commit in reserved_commits or not _is_ancestor(repo_root, closeout_commit, commit):
+        return None, None, []
+    pull_data = _registry_at_revision(repo_root, commit, registry_relative)
+    if pull_data != current:
+        return None, None, []
+    tree_errors = _validate_state_finalization_tree_delta(
+        repo_root=repo_root,
+        closeout_commit=closeout_commit,
+        finalization_commit=commit,
+        registry_relative=registry_relative,
+    )
+    return pull_data, f"{pull_ref} at {commit}", tree_errors
 
 
 def validate_git_history(
@@ -1167,7 +1396,7 @@ def validate_git_history(
                         )
                 state_finalization_pr = milestone.get("state_finalization_pr")
                 if _positive_int(state_finalization_pr):
-                    finalization_data, evidence = _state_finalization_registry_evidence(
+                    finalization_data, evidence, tree_errors = _state_finalization_registry_evidence(
                         current=data,
                         repo_root=repo_root,
                         registry_relative=registry_relative,
@@ -1176,12 +1405,20 @@ def validate_git_history(
                         reserved_commits=set(milestone.get("merge_commits", [])),
                     )
                     if finalization_data is None:
+                        errors.extend(tree_errors)
                         errors.append(
                             f"post-governance milestone {number!r} expected state-finalization PR "
-                            f"#{state_finalization_pr} evidence, but no matching local pull-head ref carries "
-                            "the exact finalization registry in current HEAD history"
+                            f"#{state_finalization_pr} evidence, but no matching local pull-head ref exists; "
+                            "the exact dedicated pull-head ref "
+                            f"refs/pull/{state_finalization_pr}/head must carry the finalization registry in current "
+                            "HEAD history"
                         )
                     else:
+                        errors.extend(
+                            f"post-governance milestone {number!r} state-finalization PR #{state_finalization_pr}: "
+                            f"{error}"
+                            for error in tree_errors
+                        )
                         errors.extend(validate_state_finalization_delta(finalization_data, closeout_data, number))
                         if evidence is None:
                             errors.append(
