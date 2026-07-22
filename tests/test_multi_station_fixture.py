@@ -648,13 +648,23 @@ class MultiStationFixtureTests(unittest.TestCase):
             result = station.weld_access_results[0]
             self.assertIsNone(result.clear)
             self.assertIn("torch_body_vs_current_product=not_evaluated", result.evidence)
+            self.assertTrue(result.unevaluated_product_body_identities)
+            self.assertTrue(all(
+                f"current_product_overlap_candidate={identity}" in result.evidence
+                for identity in result.unevaluated_product_body_identities
+            ))
             self.assertIsNone(station.weld_access_clear)
         validation = validate_fixture_build_plan(self.product, plan)
         self.assertTrue(validation.review_blocked)
         self.assertTrue(any("not evaluated against current product geometry" in item.message
                             for item in validation.findings))
         restored = FixtureBuildPlan.from_dict(plan.to_dict())
-        self.assertIsNone(restored.multi_station_layout.stations[0].weld_access_results[0].clear)
+        restored_result = restored.multi_station_layout.stations[0].weld_access_results[0]
+        self.assertIsNone(restored_result.clear)
+        self.assertEqual(
+            restored_result.unevaluated_product_body_identities,
+            plan.multi_station_layout.stations[0].weld_access_results[0].unevaluated_product_body_identities,
+        )
 
     def test_engineering_weld_direction_uses_seam_tangent_not_torch_approach(self):
         document = load_step_for_workbench(self.source)

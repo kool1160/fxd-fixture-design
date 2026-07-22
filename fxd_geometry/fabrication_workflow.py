@@ -556,6 +556,7 @@ class WeldJointAccessResult:
     approach_direction_source: Vec3
     blocking_component_identities: tuple[str, ...] = ()
     evidence: tuple[str, ...] = ()
+    unevaluated_product_body_identities: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.joint_identity.strip():
@@ -571,6 +572,9 @@ class WeldJointAccessResult:
             "approach_direction_source": self.approach_direction_source.__dict__,
             "blocking_component_identities": list(self.blocking_component_identities),
             "evidence": list(self.evidence),
+            "unevaluated_product_body_identities": list(
+                self.unevaluated_product_body_identities
+            ),
         }
 
     @classmethod
@@ -582,6 +586,7 @@ class WeldJointAccessResult:
             Vec3(**data["approach_direction_source"]),
             tuple(data.get("blocking_component_identities", ())),
             tuple(data.get("evidence", ())),
+            tuple(data.get("unevaluated_product_body_identities", ())),
         )
 
 
@@ -2237,7 +2242,10 @@ def generate_multi_station_fixture_build_plan(
                         "torch_body_vs_current_product="
                         + ("not_evaluated" if current_product_candidates else "clear"),
                         f"current_product_overlap_candidate_count={len(current_product_candidates)}",
+                        *(f"current_product_overlap_candidate={identity}"
+                          for identity in current_product_candidates),
                     ),
+                    current_product_candidates,
                 ))
             weld_clear = (
                 False if any(item.clear is False for item in weld_results)
