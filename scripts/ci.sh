@@ -8,6 +8,7 @@ required_files=(
   BACKLOG.md
   requirements-kernel.txt
   requirements-desktop.txt
+  requirements-binder.txt
   docs/PRODUCT_DIRECTION.md
   docs/ENGINEERING_CONSTITUTION.md
   docs/ARCHITECTURE.md
@@ -21,6 +22,7 @@ for file in "${required_files[@]}"; do
 done
 
 python -m pip install --disable-pip-version-check --only-binary=:all: -r requirements-desktop.txt
+python -m pip install --disable-pip-version-check --only-binary=:all: -r requirements-binder.txt
 node scripts/fxd-backlog.mjs validate
 python -m json.tool .github/codex/schemas/planning-handoff.schema.json >/dev/null
 python -m unittest discover -s tests >/dev/null

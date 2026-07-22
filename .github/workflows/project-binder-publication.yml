@@ -6,7 +6,12 @@ on:
       - docs/audit-binders-through-milestone-31
     paths:
       - scripts/generate_project_binders.py
+      - tests/test_project_binders.py
+      - requirements-binder.txt
+      - .gitattributes
       - docs/project-records/AUDIT_MILESTONES_01_31.md
+      - docs/project-records/BINDER_DEPENDENCIES.md
+      - docs/project-records/README.md
       - assets/branding/logos/fxd-logo-approved-dark-1600x900.png
       - .github/workflows/project-binder-publication.yml
   workflow_dispatch:
@@ -30,10 +35,13 @@ jobs:
           python-version: '3.12'
 
       - name: Install binder dependencies
-        run: python -m pip install --disable-pip-version-check reportlab pypdf pillow
+        run: python -m pip install --disable-pip-version-check --requirement requirements-binder.txt
 
       - name: Generate and preflight audited binders
         run: python scripts/generate_project_binders.py
+
+      - name: Verify binder publication contract
+        run: python -m unittest -v tests.test_project_binders
 
       - name: Publish generated PDFs and integrity hashes
         shell: bash

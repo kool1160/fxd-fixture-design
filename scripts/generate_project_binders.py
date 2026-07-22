@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import hashlib
+import shutil
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 from pypdf import PdfReader, PdfWriter
 from reportlab.lib import colors
@@ -9,6 +11,7 @@ from reportlab.lib.enums import TA_CENTER
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import inch
+from reportlab.pdfgen.canvas import Canvas
 from reportlab.platypus import (
     HRFlowable,
     Image,
@@ -24,7 +27,12 @@ from reportlab.platypus import (
 
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / "docs" / "project-records" / "print"
+HASH_MANIFEST = ROOT / "docs" / "project-records" / "BINDER_SHA256SUMS.txt"
 LOGO = ROOT / "assets" / "branding" / "logos" / "fxd-logo-approved-dark-1600x900.png"
+VOLUME_1_NAME = "FXD_Engineering_Binder_Volume_1_Milestones_01-25_Final.pdf"
+VOLUME_2_NAME = "FXD_Engineering_Binder_Volume_2_Milestones_26-31_Final.pdf"
+COMBINED_NAME = "FXD_Engineering_Binder_Complete_Milestones_01-31_Final.pdf"
+FIXED_PDF_DATE = "D:20000101000000+00'00'"
 
 MILESTONES = [
     (1, "Establish the Runnable Technical Baseline", "#2", "Created the dependency-free geometry proof, explicit millimetre units, transforms, intersection and clearance checks, deterministic neutral serialization, CI entry points, and the first CAD-neutral architecture boundary.", "Baseline geometry and unit tests passed; the proof deliberately used bounded review geometry rather than claiming production B-Rep behavior.", "No STEP parser, real topology, production fixture geometry, certification, or production release."),
@@ -70,6 +78,7 @@ BLACK = colors.HexColor("#111111")
 styles = getSampleStyleSheet()
 styles.add(ParagraphStyle(name="BodyDense", parent=styles["BodyText"], fontName="Helvetica", fontSize=8.5, leading=10.7, textColor=BLACK, spaceAfter=4))
 styles.add(ParagraphStyle(name="Small", parent=styles["BodyText"], fontName="Helvetica", fontSize=7.1, leading=8.8, textColor=BLACK))
+styles.add(ParagraphStyle(name="MetaLabel", parent=styles["BodyDense"], fontName="Helvetica-Bold", textColor=WHITE))
 styles.add(ParagraphStyle(name="SectionBar", parent=styles["Heading1"], fontName="Helvetica-Bold", fontSize=14, leading=16, textColor=WHITE, backColor=NAVY, leftIndent=7, rightIndent=7, spaceBefore=8, spaceAfter=8))
 styles.add(ParagraphStyle(name="H2Blue", parent=styles["Heading2"], fontName="Helvetica-Bold", fontSize=11.2, leading=13.5, textColor=BLUE, spaceBefore=5, spaceAfter=3, keepWithNext=True))
 styles.add(ParagraphStyle(name="MilestoneTitle", parent=styles["Heading1"], fontName="Helvetica-Bold", fontSize=15.5, leading=18, textColor=NAVY, spaceAfter=5))
@@ -79,6 +88,36 @@ styles.add(ParagraphStyle(name="Callout", parent=styles["BodyText"], fontName="H
 styles.add(ParagraphStyle(name="Tracker", parent=styles["BodyText"], fontName="Helvetica", fontSize=6.2, leading=7.4, textColor=BLACK))
 styles.add(ParagraphStyle(name="TrackerHead", parent=styles["BodyText"], fontName="Helvetica-Bold", fontSize=6.3, leading=7.4, textColor=WHITE, alignment=TA_CENTER))
 styles.add(ParagraphStyle(name="BulletDense", parent=styles["BodyText"], fontName="Helvetica", fontSize=8.3, leading=10.3, leftIndent=11, firstLineIndent=-7, spaceAfter=2))
+
+
+class OutlineDocTemplate(SimpleDocTemplate):
+    """Create stable PDF outline entries from governed heading styles."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._outline_index = 0
+
+    def afterFlowable(self, flowable):
+        super().afterFlowable(flowable)
+        if not isinstance(flowable, Paragraph):
+            return
+        levels = {"SectionBar": 0, "MilestoneTitle": 1}
+        level = levels.get(flowable.style.name)
+        if level is None:
+            return
+        title = flowable.getPlainText()
+        key = f"fxd-outline-{self._outline_index:03d}"
+        self._outline_index += 1
+        self.canv.bookmarkPage(key)
+        self.canv.addOutlineEntry(title, key, level=level, closed=False)
+
+
+def invariant_canvas(*args, **kwargs):
+    """Return a ReportLab canvas with stable dates and document identifiers."""
+
+    kwargs["invariant"] = 1
+    kwargs["pageCompression"] = 1
+    return Canvas(*args, **kwargs)
 
 
 def header_footer(volume: str, milestone_range: str):
@@ -109,7 +148,7 @@ def cover_story(volume: str, milestone_range: str, subtitle: str):
         ["Audit Basis", "Merged pull requests, tests, CI, project law, architecture, decision, and project records"],
         ["Runtime Changes", "None - documentation only"],
     ]
-    table = Table([[Paragraph(f"<b>{a}</b>", styles["BodyDense"]), Paragraph(b, styles["BodyDense"])] for a, b in meta], colWidths=[1.45 * inch, 5.0 * inch])
+    table = Table([[Paragraph(a, styles["MetaLabel"]), Paragraph(b, styles["BodyDense"])] for a, b in meta], colWidths=[1.45 * inch, 5.0 * inch])
     table.setStyle(TableStyle([("BACKGROUND", (0, 0), (0, -1), NAVY), ("TEXTCOLOR", (0, 0), (0, -1), WHITE), ("GRID", (0, 0), (-1, -1), 0.5, GRID), ("VALIGN", (0, 0), (-1, -1), "TOP"), ("LEFTPADDING", (0, 0), (-1, -1), 6), ("RIGHTPADDING", (0, 0), (-1, -1), 6), ("TOPPADDING", (0, 0), (-1, -1), 5), ("BOTTOMPADDING", (0, 0), (-1, -1), 5)]))
     story += [Spacer(1, 0.1 * inch), table, Paragraph("AI proposes. Engineering validates.", styles["Callout"]), Paragraph("The software should think like an experienced fixture engineer.", styles["Callout"]), PageBreak()]
     return story
@@ -135,51 +174,158 @@ def detailed_records(records):
     return story
 
 
-def make_volume(filename: str, volume: str, milestone_range: str, records, summary: str, closeout: str, handoff: str):
-    OUTPUT.mkdir(parents=True, exist_ok=True)
+def make_volume(output_dir: Path, filename: str, volume: str, milestone_range: str, records, summary: str, closeout: str, handoff: str):
+    output_dir.mkdir(parents=True, exist_ok=True)
     story = cover_story(volume, milestone_range, "Audited engineering record based on the approved documentation-recovery structure")
     story += [Paragraph("1. Executive Summary", styles["SectionBar"]), Paragraph(summary, styles["BodyDense"]), Paragraph("Governing principles", styles["H2Blue"])]
     for principle in ["Source customer CAD remains immutable.", "Deterministic geometry, mathematics, and engineering rules remain authoritative.", "AI is advisory and may not approve a fixture.", "Every recommendation and validation result must remain explainable and traceable.", "Manufacturing practicality and qualified human approval remain mandatory."]:
-        story.append(Paragraph("• " + principle, styles["BulletDense"]))
+        story.append(Paragraph("- " + principle, styles["BulletDense"]))
     story += [Paragraph("2. Master Milestone Recovery Tracker", styles["SectionBar"]), Paragraph("Exact historical test counts are reported only when the controlling repository evidence states them.", styles["BodyDense"]), tracker(records), PageBreak(), Paragraph("3. Detailed Milestone Records", styles["SectionBar"])]
     story += detailed_records(records)
     story += [PageBreak(), Paragraph("4. Evidence and Validation Record", styles["SectionBar"]), Paragraph("Controlling evidence consists of merged pull requests, commit history, automated and hosted validation, real-kernel proof, Windows visual evidence where applicable, architecture decisions, project records, roadmap records, and explicit human-review boundaries. Exact missing historical values are not invented.", styles["BodyDense"]), Paragraph("5. Documentation Correction Note", styles["SectionBar"]), Paragraph("This audited edition replaces the earlier under-filled print layout. It restores dense milestone tracking, engineering scope, validation evidence, limitations, closeout, and content-driven pagination while preserving repository history as the source of truth.", styles["BodyDense"]), Paragraph("6. Volume Closeout", styles["SectionBar"]), Paragraph(closeout, styles["BodyDense"]), Paragraph("7. Controlled Handoff", styles["SectionBar"]), Paragraph(handoff, styles["BodyDense"]), Paragraph("8. Future Documentation Rule", styles["SectionBar"])]
     for rule in ["Planning -> Implementation -> Testing -> Documentation.", "Never mark an open or unmerged milestone complete.", "Update controlled binder batches while evidence is fresh.", "Record PR, validation evidence, limitations, and the next handoff.", "Pass results, not noise; never reconstruct missing facts by guessing."]:
-        story.append(Paragraph("• " + rule, styles["BulletDense"]))
-    doc = SimpleDocTemplate(str(OUTPUT / filename), pagesize=letter, rightMargin=0.58 * inch, leftMargin=0.58 * inch, topMargin=0.62 * inch, bottomMargin=0.55 * inch, title=f"FXD Engineering Binder {volume} - Milestones {milestone_range}", author="Christopher Hilton")
-    doc.build(story, onFirstPage=header_footer(volume, milestone_range), onLaterPages=header_footer(volume, milestone_range))
+        story.append(Paragraph("- " + rule, styles["BulletDense"]))
+    path = output_dir / filename
+    doc = OutlineDocTemplate(
+        str(path),
+        pagesize=letter,
+        rightMargin=0.58 * inch,
+        leftMargin=0.58 * inch,
+        topMargin=0.62 * inch,
+        bottomMargin=0.55 * inch,
+        title=f"FXD Engineering Binder {volume} - Milestones {milestone_range}",
+        author="Christopher Hilton",
+        subject="Audited FXD engineering history through Milestone 31",
+        creator="FXD deterministic binder generator",
+    )
+    doc.build(
+        story,
+        onFirstPage=header_footer(volume, milestone_range),
+        onLaterPages=header_footer(volume, milestone_range),
+        canvasmaker=invariant_canvas,
+    )
+    return path
 
 
 def combine(paths, output):
     writer = PdfWriter()
-    for path in paths:
-        reader = PdfReader(path)
-        for page in reader.pages:
-            writer.add_page(page)
+    for path, title in paths:
+        writer.append(path, outline_item=title, import_outline=True)
+    writer.add_metadata(
+        {
+            "/Title": "FXD Engineering Binder - Complete Milestones 01-31",
+            "/Author": "Christopher Hilton",
+            "/Subject": "Audited FXD engineering history through Milestone 31",
+            "/Creator": "FXD deterministic binder generator",
+            "/Producer": "pypdf 6.14.2",
+            "/CreationDate": FIXED_PDF_DATE,
+            "/ModDate": FIXED_PDF_DATE,
+        }
+    )
+    writer.generate_file_identifiers()
     with output.open("wb") as handle:
         writer.write(handle)
+    return output
 
 
-def write_hashes(paths):
-    lines = []
-    for path in paths:
-        lines.append(f"{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.name}")
-    (ROOT / "docs" / "project-records" / "BINDER_SHA256SUMS.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
+def digest_lines(paths):
+    return [f"{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.name}" for path in paths]
+
+
+def write_hashes(paths, manifest=HASH_MANIFEST):
+    manifest.write_text("\n".join(digest_lines(paths)) + "\n", encoding="utf-8")
+
+
+def outline_titles(reader):
+    titles = []
+
+    def visit(items):
+        for item in items:
+            if isinstance(item, list):
+                visit(item)
+            else:
+                titles.append(str(item.title))
+
+    visit(reader.outline)
+    return titles
+
+
+def expected_volume_outline(records):
+    return [
+        "1. Executive Summary",
+        "2. Master Milestone Recovery Tracker",
+        "3. Detailed Milestone Records",
+        *[f"Milestone {number:02d} - {title}" for number, title, *_ in records],
+        "4. Evidence and Validation Record",
+        "5. Documentation Correction Note",
+        "6. Volume Closeout",
+        "7. Controlled Handoff",
+        "8. Future Documentation Rule",
+    ]
+
+
+def require(condition, message):
+    if not condition:
+        raise RuntimeError(message)
+
+
+def preflight_pdf(path, expected_outline):
+    reader = PdfReader(path)
+    require(not reader.is_encrypted, f"encrypted PDF: {path}")
+    require(bool(reader.pages), f"empty PDF: {path}")
+    require(all(float(page.mediabox.width) == 612 and float(page.mediabox.height) == 792 for page in reader.pages), f"non-letter page: {path}")
+    require(all((page.extract_text() or "").strip() for page in reader.pages), f"non-searchable page: {path}")
+    require(all(not page.get("/Annots") for page in reader.pages), f"page annotations present: {path}")
+    require("/AcroForm" not in reader.trailer["/Root"], f"interactive form present: {path}")
+    require(outline_titles(reader) == expected_outline, f"outline mismatch: {path}")
+    require(bool(reader.trailer.get("/ID")), f"missing document identifier: {path}")
+    return reader
+
+
+def build_binders(output_dir):
+    vol1 = make_volume(output_dir, VOLUME_1_NAME, "Volume 1", "01-25", MILESTONES[:25], "Volume 1 records FXD's progression from a dependency-free geometry proof into a CAD-neutral digital fixture engineer with real STEP/OCP geometry, deterministic locating and weld-fixture rules, explainable concept generation, validation gates, visual engineering review, controlled edits, complete fixture structures, manufacturing geometry, drawings, and cost/volume/manufacturability analysis.", "Volume 1 closes at Milestone 25 because the first complete deterministic engineering foundation was established: imported assemblies could be interpreted, annotated, fixtured, validated, represented as manufacturing components, documented, and compared economically while preserving source-CAD immutability and human approval.", "Volume 2 begins at Milestone 26 and records the transition from the deterministic foundation into the local engineering workbench, unified application, interactive workflow, branding, real fixture-build workflows, and guided AI assistance.")
+    vol2 = make_volume(output_dir, VOLUME_2_NAME, "Volume 2", "26-31", MILESTONES[25:], "Volume 2 records the transformation of FXD from a completed deterministic fixture-engineering foundation into a serious local engineering application with real STEP viewing, a unified PySide6/VTK workbench, interactive engineering workflows, controlled branding, real fixture-construction geometry, and the advisory AI Fixture Engineer with guided validation.", "Volume 2 closes at Milestone 31. FXD now has a professional Windows engineering workbench, real source-geometry review, interactive intent and correction workflows, deterministic real fixture-build geometry, governed persistence, and an advisory AI proposal layer subordinate to validation and human authority.", "Work after Milestone 31 belongs to a later binder volume or addendum. Its current status is governed outside this retrospective binder by the authoritative milestone registry and active GitHub issue.")
+    combined = combine(
+        [
+            (vol1, "Volume 1 - Milestones 01-25"),
+            (vol2, "Volume 2 - Milestones 26-31"),
+        ],
+        output_dir / COMBINED_NAME,
+    )
+    preflight_pdf(vol1, expected_volume_outline(MILESTONES[:25]))
+    preflight_pdf(vol2, expected_volume_outline(MILESTONES[25:]))
+    preflight_pdf(
+        combined,
+        [
+            "Volume 1 - Milestones 01-25",
+            *expected_volume_outline(MILESTONES[:25]),
+            "Volume 2 - Milestones 26-31",
+            *expected_volume_outline(MILESTONES[25:]),
+        ],
+    )
+    return (vol1, vol2, combined)
+
+
+def publish_reproducible_binders(output_dir=OUTPUT, manifest=HASH_MANIFEST):
+    with TemporaryDirectory(prefix="fxd-binder-a-") as first_dir, TemporaryDirectory(prefix="fxd-binder-b-") as second_dir:
+        first = build_binders(Path(first_dir))
+        second = build_binders(Path(second_dir))
+        for first_path, second_path in zip(first, second, strict=True):
+            require(first_path.read_bytes() == second_path.read_bytes(), f"non-deterministic PDF bytes: {first_path.name}")
+        output_dir.mkdir(parents=True, exist_ok=True)
+        published = tuple(output_dir / path.name for path in first)
+        for source, destination in zip(first, published, strict=True):
+            shutil.copyfile(source, destination)
+    write_hashes(published, manifest)
+    return published
 
 
 def main():
-    vol1 = OUTPUT / "FXD_Engineering_Binder_Volume_1_Milestones_01-25_Final.pdf"
-    vol2 = OUTPUT / "FXD_Engineering_Binder_Volume_2_Milestones_26-31_Final.pdf"
-    combined = OUTPUT / "FXD_Engineering_Binder_Complete_Milestones_01-31_Final.pdf"
-    make_volume(vol1.name, "Volume 1", "01-25", MILESTONES[:25], "Volume 1 records FXD's progression from a dependency-free geometry proof into a CAD-neutral digital fixture engineer with real STEP/OCP geometry, deterministic locating and weld-fixture rules, explainable concept generation, validation gates, visual engineering review, controlled edits, complete fixture structures, manufacturing geometry, drawings, and cost/volume/manufacturability analysis.", "Volume 1 closes at Milestone 25 because the first complete deterministic engineering foundation was established: imported assemblies could be interpreted, annotated, fixtured, validated, represented as manufacturing components, documented, and compared economically while preserving source-CAD immutability and human approval.", "Volume 2 begins at Milestone 26 and records the transition from the deterministic foundation into the local engineering workbench, unified application, interactive workflow, branding, real fixture-build workflows, and guided AI assistance.")
-    make_volume(vol2.name, "Volume 2", "26-31", MILESTONES[25:], "Volume 2 records the transformation of FXD from a completed deterministic fixture-engineering foundation into a serious local engineering application with real STEP viewing, a unified PySide6/VTK workbench, interactive engineering workflows, controlled branding, real fixture-construction geometry, and the advisory AI Fixture Engineer with guided validation.", "Volume 2 closes at Milestone 31. FXD now has a professional Windows engineering workbench, real source-geometry review, interactive intent and correction workflows, deterministic real fixture-build geometry, governed persistence, and an advisory AI proposal layer subordinate to validation and human authority.", "Milestone 32 begins the next fixture-family expansion phase, starting with governed multi-station weld-fixture synthesis. It belongs to the next binder volume or addendum.")
-    combine([vol1, vol2], combined)
-    write_hashes([vol1, vol2, combined])
-    for path in [vol1, vol2, combined]:
+    paths = publish_reproducible_binders()
+    for path in paths:
         reader = PdfReader(path)
-        assert reader.pages, f"empty PDF: {path}"
-        assert all(page.mediabox.width == 612 and page.mediabox.height == 792 for page in reader.pages)
         print(f"generated {path.relative_to(ROOT)}: {len(reader.pages)} pages, {path.stat().st_size} bytes")
+    print("verified byte-identical output from two independent builds")
 
 
 if __name__ == "__main__":

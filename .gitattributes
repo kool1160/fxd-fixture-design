@@ -6,3 +6,4 @@
 /fxd_ui/theme/fxd.base.qss -text
 /fxd_ui/theme/fxd.tokens.json -text
 /docs/ui-branding/* -text
+/docs/project-records/print/*.pdf binary
