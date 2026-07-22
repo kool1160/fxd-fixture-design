@@ -12,6 +12,7 @@ from fxd_geometry import (
     FixtureBuildPlan, FixtureBuildRequirements, FixtureFamily, FixtureLifecycle,
     FixturePurpose, MultiStationRequirements, OcpKernel, Vec3, AnnotationRole, GeometryReference, author_fixture_build,
     build_fixture_build_package, generate_fixture_concepts,
+    generate_fixture_build_plan,
     generate_multi_station_fixture_alternatives, generate_multi_station_fixture_build_plan,
     generate_multi_station_layout,
     load_step_for_workbench,
@@ -113,6 +114,18 @@ class MultiStationFixtureTests(unittest.TestCase):
             self.product, self.concept, self.build_requirements(),
             self.station_requirements(count=count, maximum_length=maximum_length),
         )
+
+    def test_auto_method_resolution_preserves_confirmed_weld_contract(self):
+        requirements = replace(
+            self.build_requirements(), construction_method=ConstructionMethod.AUTO,
+            confirmed_weld_evidence=("Synthetic engineer-confirmed weld contract.",),
+        )
+
+        plan = generate_fixture_build_plan(self.product, self.concept, requirements)
+
+        self.assertEqual(plan.requirements, replace(
+            requirements, construction_method=ConstructionMethod.WELDED_TUBE_FRAME,
+        ))
 
     def accepted_proposal(self):
         orientation = source_orientation(self.product.source_sha256, accepted=True)

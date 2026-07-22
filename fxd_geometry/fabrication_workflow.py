@@ -1368,15 +1368,7 @@ def generate_fixture_build_plan(product: ProductModel, concept: CompleteFixtureC
         raise FixtureBuildError("fixture concept does not match immutable source geometry")
     method = _method_for(requirements)
     if method != requirements.construction_method:
-        requirements = FixtureBuildRequirements(
-            requirements.source_sha256, requirements.fixture_purpose, method, requirements.lifecycle,
-            requirements.job_revision, requirements.fixture_revision, requirements.production_quantity,
-            requirements.repeat_frequency, requirements.weld_process, requirements.shop_capabilities,
-            requirements.tack_access_available, requirements.full_weld_access_available,
-            requirements.unload_clearance_evaluated, requirements.adjustment_state,
-            requirements.assumptions, requirements.evidence, requirements.cleco_strategy,
-            requirements.product_hole_approved, requirements.product_hole_justification,
-        )
+        requirements = replace(requirements, construction_method=method)
     product_box = _product_bounds(product)
     reference = _component_reference(product)
     margin, plate = 35.0, 12.0
