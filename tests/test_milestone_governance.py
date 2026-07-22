@@ -44,6 +44,8 @@ class MilestoneGovernanceTests(unittest.TestCase):
         root: Path,
         *,
         implementation_subject_pr: int = 54,
+        implementation_prs: list[int] | None = None,
+        implementation_subjects: list[str] | None = None,
         evidence_at_closeout: bool = True,
     ) -> dict:
         def git(*args: str) -> str:
@@ -59,10 +61,19 @@ class MilestoneGovernanceTests(unittest.TestCase):
         git("init", "--quiet")
         git("config", "user.name", "FXD Governance Test")
         git("config", "user.email", "governance-test@example.invalid")
-        (root / "implementation.txt").write_text("reviewed implementation\n", encoding="utf-8")
-        git("add", "implementation.txt")
-        git("commit", "--quiet", "-m", f"Milestone 32 implementation (#{implementation_subject_pr})")
-        implementation_commit = git("rev-parse", "HEAD")
+        declared_prs = [54] if implementation_prs is None else implementation_prs
+        subjects = (
+            [f"Milestone 32 implementation (#{implementation_subject_pr})"]
+            if implementation_subjects is None
+            else implementation_subjects
+        )
+        implementation_commits: list[str] = []
+        for index, subject in enumerate(subjects, start=1):
+            relative = f"implementation-{index}.txt"
+            (root / relative).write_text(f"reviewed implementation {index}\n", encoding="utf-8")
+            git("add", relative)
+            git("commit", "--quiet", "-m", subject)
+            implementation_commits.append(git("rev-parse", "HEAD"))
 
         closeout_data = self.data()
         closeout = self.milestone(closeout_data, 32)
@@ -72,7 +83,8 @@ class MilestoneGovernanceTests(unittest.TestCase):
         }
         closeout.update(
             {
-                "merge_commits": [implementation_commit],
+                "implementation_prs": declared_prs,
+                "merge_commits": implementation_commits,
                 "evidence_results": evidence_results if evidence_at_closeout else {},
                 "completion_evidence": (
                     "All selected evidence profiles were reviewed in closeout PR #60."
@@ -95,7 +107,7 @@ class MilestoneGovernanceTests(unittest.TestCase):
         final_milestone.update(
             {
                 "status": "Complete",
-                "merge_commits": [implementation_commit, closeout_commit],
+                "merge_commits": [*implementation_commits, closeout_commit],
                 "evidence_results": evidence_results,
                 "completion_evidence": "All selected evidence profiles were reviewed in closeout PR #60.",
                 "closeout_merge_commit": closeout_commit,
@@ -405,6 +417,31 @@ class MilestoneGovernanceTests(unittest.TestCase):
             any("no recorded merge commit associated with implementation PR #54" in error for error in errors),
             errors,
         )
+
+    def test_implementation_prs_require_distinct_merge_commits(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            data = self.build_post_governance_history(
+                root,
+                implementation_prs=[54, 55],
+                implementation_subjects=["Combined implementations (#54) (#55)"],
+            )
+            errors = validate_git_history(data, root, root / "docs" / "MILESTONE_STATE.json")
+        self.assertTrue(any("one-to-one mapping to distinct recorded merge commits" in error for error in errors), errors)
+        self.assertTrue(any("one-to-one to distinct merge evidence" in error for error in errors), errors)
+
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            data = self.build_post_governance_history(
+                root,
+                implementation_prs=[54, 55],
+                implementation_subjects=[
+                    "Milestone 32 implementation (#54)",
+                    "Milestone 32 integration repair (#55)",
+                ],
+            )
+            errors = validate_git_history(data, root, root / "docs" / "MILESTONE_STATE.json")
+        self.assertEqual([], errors)
 
     def test_completion_evidence_must_exist_in_closeout_commit_registry(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

@@ -50,7 +50,7 @@ Large milestones may use child issues. Child issues must name their parent miles
 
 An implementation pull request may deliver code, tests, documentation, or acceptance evidence, but its merge does not make a post-governance milestone `Complete`. The milestone remains Active through implementation merge until a separate closeout evidence pull request reconciles every required evidence profile, unresolved risk, issue state, and merge evidence.
 
-Closeout uses two offline-verifiable phases because a pull request cannot know its own future merge commit. First, a closeout evidence PR records its known PR number, every implementation PR and its PR-number-bearing merge evidence, reviewable results for every selected evidence profile, explicit human approvals, risks, and decisions while the milestone remains `Active`. After that PR is approved and merged, a distinct state-finalization PR records the now-existing closeout merge SHA, changes the milestone to `Complete`, and applies the approved next-lane disposition. Every implementation and closeout merge or squash commit subject must retain GitHub's PR-number form so offline validation can prove each declared PR-to-commit association. Neither phase may be combined with an implementation PR.
+Closeout uses two offline-verifiable phases because a pull request cannot know its own future merge commit. First, a closeout evidence PR records its known PR number, every implementation PR and its distinct PR-number-bearing merge evidence, reviewable results for every selected evidence profile, explicit human approvals, risks, and decisions while the milestone remains `Active`. After that PR is approved and merged, a distinct state-finalization PR records the now-existing closeout merge SHA, changes the milestone to `Complete`, and applies the approved next-lane disposition. Every implementation and closeout merge or squash commit subject must retain GitHub's PR-number form so offline validation can prove each declared PR-to-commit association. One commit cannot supply merge evidence for multiple implementation PRs. Neither phase may be combined with an implementation PR.
 
 ## Maintenance lane
 
@@ -75,7 +75,7 @@ A milestone may become `Complete` only when:
 
 1. its issue scope and acceptance criteria are satisfied;
 2. every required evidence profile has reviewable results;
-3. every implementation pull request is merged and is bound to a locally present, PR-number-bearing merge or squash commit in repository history;
+3. every implementation pull request is merged and is bound one-to-one to its own distinct, locally present, PR-number-bearing merge or squash commit in repository history;
 4. deterministic validation passes without weakening protected boundaries;
 5. material risks, assumptions, specialist disagreements, and limitations are recorded;
 6. required human engineering and visual acceptance is explicit;

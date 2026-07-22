@@ -131,6 +131,47 @@ def commit_message_matches_pr(message: str, pull_request: int) -> bool:
     )
 
 
+def implementation_pr_merge_mapping(
+    implementation_prs: list[int],
+    commit_messages: dict[str, str],
+    *,
+    allowed_commits: list[str] | set[str] | None = None,
+) -> tuple[dict[int, str] | None, list[int]]:
+    """Map every implementation PR to a distinct PR-number-bearing commit."""
+
+    allowed = set(commit_messages) if allowed_commits is None else set(allowed_commits)
+    candidates = {
+        pull_request: [
+            commit
+            for commit, message in commit_messages.items()
+            if commit in allowed and commit_message_matches_pr(message, pull_request)
+        ]
+        for pull_request in implementation_prs
+        if _positive_int(pull_request)
+    }
+    missing = [pull_request for pull_request, commits in candidates.items() if not commits]
+    if missing:
+        return None, missing
+
+    commit_to_pr: dict[str, int] = {}
+
+    def assign(pull_request: int, visited: set[str]) -> bool:
+        for commit in candidates[pull_request]:
+            if commit in visited:
+                continue
+            visited.add(commit)
+            owner = commit_to_pr.get(commit)
+            if owner is None or assign(owner, visited):
+                commit_to_pr[commit] = pull_request
+                return True
+        return False
+
+    for pull_request in sorted(candidates, key=lambda item: (len(candidates[item]), item)):
+        if not assign(pull_request, set()):
+            return None, []
+    return {pull_request: commit for commit, pull_request in commit_to_pr.items()}, []
+
+
 def load_registry(path: Path) -> dict[str, Any]:
     try:
         raw = path.read_text(encoding="utf-8")
@@ -568,17 +609,26 @@ def validate_git_history(
             and number >= governance_start
         ):
             implementation_prs = milestone.get("implementation_prs")
-            if isinstance(implementation_prs, list):
-                for implementation_pr in implementation_prs:
-                    if _positive_int(implementation_pr) and not any(
-                        commit_message_matches_pr(message, implementation_pr)
-                        for message in commit_messages.values()
-                    ):
-                        errors.append(
-                            f"post-governance milestone {number!r} has no recorded merge commit associated "
-                            f"with implementation PR #{implementation_pr} by its Git commit subject"
-                        )
             closeout_commit = milestone.get("closeout_merge_commit")
+            if isinstance(implementation_prs, list):
+                implementation_commits = set(commit_messages)
+                if isinstance(closeout_commit, str):
+                    implementation_commits.discard(closeout_commit)
+                implementation_mapping, missing_prs = implementation_pr_merge_mapping(
+                    implementation_prs,
+                    commit_messages,
+                    allowed_commits=implementation_commits,
+                )
+                for implementation_pr in missing_prs:
+                    errors.append(
+                        f"post-governance milestone {number!r} has no recorded merge commit associated "
+                        f"with implementation PR #{implementation_pr} by its Git commit subject"
+                    )
+                if implementation_mapping is None and not missing_prs:
+                    errors.append(
+                        f"post-governance milestone {number!r} implementation PRs do not have a one-to-one "
+                        "mapping to distinct recorded merge commits"
+                    )
             closeout_pr = milestone.get("closeout_pr")
             if isinstance(closeout_commit, str) and SHA_PATTERN.fullmatch(closeout_commit) and _positive_int(closeout_pr):
                 closeout_message = commit_messages.get(closeout_commit, "")
@@ -656,16 +706,21 @@ def validate_git_history(
                     )
                 reviewed_merges = closeout_milestone.get("merge_commits")
                 if isinstance(implementation_prs, list) and isinstance(reviewed_merges, list):
-                    for implementation_pr in implementation_prs:
-                        if _positive_int(implementation_pr) and not any(
-                            commit in reviewed_merges
-                            and commit_message_matches_pr(message, implementation_pr)
-                            for commit, message in commit_messages.items()
-                        ):
-                            errors.append(
-                                f"post-governance milestone {number!r} closeout merge commit registry "
-                                f"does not record implementation PR #{implementation_pr} merge evidence"
-                            )
+                    reviewed_mapping, missing_reviewed_prs = implementation_pr_merge_mapping(
+                        implementation_prs,
+                        commit_messages,
+                        allowed_commits=reviewed_merges,
+                    )
+                    for implementation_pr in missing_reviewed_prs:
+                        errors.append(
+                            f"post-governance milestone {number!r} closeout merge commit registry "
+                            f"does not record implementation PR #{implementation_pr} merge evidence"
+                        )
+                    if reviewed_mapping is None and not missing_reviewed_prs:
+                        errors.append(
+                            f"post-governance milestone {number!r} closeout merge commit registry does not "
+                            "map implementation PRs one-to-one to distinct merge evidence"
+                        )
                 final_merges = milestone.get("merge_commits")
                 if isinstance(reviewed_merges, list) and isinstance(final_merges, list):
                     if set(final_merges) != {*reviewed_merges, closeout_commit}:
