@@ -1,4 +1,12 @@
+<!-- FXD-MILESTONE-STATE: docs/MILESTONE_STATE.json -->
+<!-- FXD-HISTORICAL-MILESTONE-SNAPSHOT -->
 # FXD Milestone Records 26-30
+
+> Non-authoritative historical snapshot. Period-accurate current-status prose
+> is preserved below. The registry now records Milestones 26 through 30 as
+> legacy Complete. Milestone 30 is controlled by PR #52, and Milestone 31 was
+> later completed by PR #53 at
+> `ac1e7a1799ef9be674f6ab5739e48d178fa2f1dc`.
 
 This addendum begins Volume 2 of the FXD professional project binder. Milestones 26-29 are verified complete from merged repository evidence. Milestone 30 is the current pending milestone and is not recorded as complete.
 

@@ -24,6 +24,34 @@ Record durable product and engineering decisions here.
 
 ## Initial decisions
 
+### 2026-07-21 — Establish one milestone contract and state registry
+
+**Decision:** `docs/MILESTONE_CONTRACT.md` governs product-milestone sequence
+and completion, and `docs/MILESTONE_STATE.json` is the sole current status
+projection. The Foreman selects only the sole Active registry milestone and
+loads its authoritative GitHub issue. Post-governance implementation merge and
+completion are separated by a closeout evidence PR and a state-finalization PR.
+
+**Context:** Issue #56 found conflicting Markdown status claims and an unsafe
+selector that could choose stale Milestone 20 work despite merged PR #40.
+
+**Reasoning:** A small offline-validated registry makes status deterministic
+while issues and pull requests retain scope and evidence. Historical records
+remain intact but visibly non-authoritative.
+
+**Risks and tradeoffs:** A pull request cannot record its own future merge SHA.
+The closeout evidence PR therefore merges while the milestone remains Active;
+a distinct state-finalization PR may set `Complete` only after that merge SHA
+exists locally and its Git commit message verifies the closeout PR number.
+
+**Supporting evidence:** Issue #56; PR #40 at
+`5f90765b96140f0cb3103f3ac5e04a79f82ab604`; PR #53 at
+`ac1e7a1799ef9be674f6ab5739e48d178fa2f1dc`; Issue #57 and draft PR #54 for the
+sole Active Milestone 32; maintenance Issue #58 for blocked PR #55.
+
+**Revisit trigger:** Explicit human approval of a sequence revision, including
+any future proposal after the mandated post-Milestone-32 product-lane pause.
+
 ### 2026-07-13 — Keep the core CAD-neutral
 
 **Decision:** FXD will use a neutral product model and thin CAD connectors rather than placing core fixture logic inside one CAD platform.

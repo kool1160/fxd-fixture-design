@@ -24,6 +24,7 @@ jobs:
     timeout-minutes: 90
     permissions:
       contents: read
+      issues: read
     outputs:
       milestone_number: ${{ steps.milestone.outputs.number }}
       milestone_title: ${{ steps.milestone.outputs.title }}
@@ -47,6 +48,9 @@ jobs:
         with:
           python-version: '3.13'
 
+      - name: Validate authoritative milestone governance
+        run: python scripts/validate_milestones.py
+
       - name: Select milestone
         id: milestone
         shell: bash
@@ -59,6 +63,52 @@ jobs:
             --number "$REQUESTED_MILESTONE" \
             --context .fxd/selected-milestone.md
           printf '.fxd/\n' >> .git/info/exclude
+
+      - name: Load authoritative milestone issue
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_REPOSITORY: kool1160/fxd-fixture-design
+        run: |
+          set -euo pipefail
+          selected_issue="${{ steps.milestone.outputs.issue_number }}"
+          if [[ "$GITHUB_REPOSITORY" != "$EXPECTED_REPOSITORY" ]]; then
+            echo "authoritative milestone issue repository mismatch: expected $EXPECTED_REPOSITORY, got $GITHUB_REPOSITORY" >&2
+            exit 1
+          fi
+
+          issue_error="$RUNNER_TEMP/fxd-authoritative-issue-error.txt"
+          if ! issue_json="$(gh issue view "$selected_issue" \
+            --repo "$EXPECTED_REPOSITORY" \
+            --json number,state,body,url 2>"$issue_error")"; then
+            echo "failed to fetch authoritative milestone issue #$selected_issue from $EXPECTED_REPOSITORY" >&2
+            cat "$issue_error" >&2
+            exit 1
+          fi
+          issue_number="$(jq -r '.number // empty' <<<"$issue_json")"
+          issue_state="$(jq -r '.state // empty' <<<"$issue_json")"
+          issue_url="$(jq -r '.url // empty' <<<"$issue_json")"
+          if [[ "$issue_number" != "$selected_issue" ]]; then
+            echo "authoritative milestone issue number mismatch: selected #$selected_issue, fetched #$issue_number" >&2
+            exit 1
+          fi
+          if [[ "$issue_url" != "https://github.com/$EXPECTED_REPOSITORY/issues/$selected_issue" ]]; then
+            echo "authoritative milestone issue repository or URL mismatch: $issue_url" >&2
+            exit 1
+          fi
+          if [[ "$issue_state" != "OPEN" ]]; then
+            echo "authoritative milestone issue is not OPEN: #$selected_issue is $issue_state" >&2
+            exit 1
+          fi
+          issue_body="$(jq -r '.body // empty' <<<"$issue_json")"
+          if [[ ! "$issue_body" =~ [^[:space:]] ]]; then
+            echo "authoritative milestone issue #$selected_issue has no non-whitespace body" >&2
+            exit 1
+          fi
+          {
+            printf '\n## Authoritative GitHub issue body\n\n'
+            printf '%s\n' "$issue_body"
+          } >> .fxd/selected-milestone.md
 
       - name: Read Foreman model default
         id: model

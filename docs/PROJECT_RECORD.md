@@ -1,4 +1,23 @@
+<!-- FXD-MILESTONE-STATE: docs/MILESTONE_STATE.json -->
+<!-- FXD-HISTORICAL-MILESTONE-SNAPSHOT -->
 # FXD Project Record
+
+> This is a dated, non-authoritative historical record. Period-accurate status
+> wording is preserved below. Current milestone status comes only from
+> `docs/MILESTONE_STATE.json`.
+
+## 2026-07-21 - Milestone governance reconciliation
+
+Issue #56 reconciles Milestones 1 through 31 as legacy Complete from real
+merged evidence. Milestone 20 is controlled by PR #40 and merge commit
+`5f90765b96140f0cb3103f3ac5e04a79f82ab604`; its earlier Pending entry below
+describes the pre-acceptance state and was not rewritten. Milestone 31 is
+controlled by PR #53 and merge commit
+`ac1e7a1799ef9be674f6ab5739e48d178fa2f1dc`; its implementation handoff still
+required approval before later user acceptance and merge supplied controlling
+completion evidence. Issue #57 and draft PR #54 govern the sole Active
+Milestone 32. A separate closeout PR is required, after which the product lane
+becomes formally paused without creating or implying Milestone 33.
 
 ## 2026-07-17 - Milestone 27 unified workbench implementation
 

@@ -1,4 +1,10 @@
+<!-- FXD-MILESTONE-STATE: docs/MILESTONE_STATE.json -->
+<!-- FXD-HISTORICAL-MILESTONE-SNAPSHOT -->
 # FXD Milestone Records 23-26
+
+> Non-authoritative historical snapshot. Period-accurate current-status prose
+> is preserved below. The registry now records Milestones 23 through 26 as
+> legacy Complete from their merged implementation evidence.
 
 This addendum extends the professional project binder through the current governed milestone.
 

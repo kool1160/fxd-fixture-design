@@ -1,6 +1,7 @@
+<!-- FXD-MILESTONE-STATE: docs/MILESTONE_STATE.json -->
 # FXD Milestone Backlog
 
-The Foreman selects the first milestone whose status is not Complete, Blocked, Waiting, or Paused unless a milestone number is supplied explicitly.
+This is a derived record of Milestones 1 through 20. Current sequence and status come only from `docs/MILESTONE_STATE.json`; the Foreman must not select work from this file.
 
 ## Forward-queue reconciliation
 
@@ -349,7 +350,9 @@ Acceptance criteria:
 
 ## Milestone 20 — Harden projects, packaging, and release operations
 
-**Status:** Pending
+**Status:** Complete
+
+Reconciled by Issue #56. PR #40 and merge commit `5f90765b96140f0cb3103f3ac5e04a79f82ab604` are controlling evidence. Older dated project records that reported Pending remain historical snapshots of the pre-merge state.
 
 Prepare the proven engineering application for dependable installation and controlled release without implying automatic production approval.
 

@@ -1,6 +1,7 @@
+<!-- FXD-MILESTONE-STATE: docs/MILESTONE_STATE.json -->
 # FXD Forward Milestone Queue
 
-This roadmap extends the product beyond the current Phase 3 backlog. It preserves the governing principle: **AI proposes. Engineering validates.** Source CAD remains immutable, deterministic engineering remains authoritative, and no generated fixture is approved for production without qualified human review.
+This is a derived roadmap. Current sequence and status come only from `docs/MILESTONE_STATE.json`, under `docs/MILESTONE_CONTRACT.md`. It preserves the governing principle: **AI proposes. Engineering validates.** Source CAD remains immutable, deterministic engineering remains authoritative, and no generated fixture is approved for production without qualified human review.
 
 ## Queue
 
@@ -16,6 +17,8 @@ This roadmap extends the product beyond the current Phase 3 backlog. It preserve
 10. Milestone 28 - Interactive fixture engineering workflow
 11. Milestone 29 - Implement the desktop UI and branding system
 12. Milestone 30 - Real manufacturing geometry and tack/location fixtures
+13. Milestone 31 - AI Fixture Engineer and guided validation
+14. Milestone 32 - Multi-station weld fixture synthesis
 
 ## Milestone 21 — Generate complete fixture structures
 
@@ -255,9 +258,7 @@ merge.
 
 **Status:** Complete
 
-Accepted and squash-merged through PR #53 at
-`ac1e7a1799ef9be674f6ab5739e48d178fa2f1dc`. The provider-neutral proposal
-boundary remains advisory and deterministic validation remains authoritative.
+Reconciled by Issue #56 from merged PR #53 at `ac1e7a1799ef9be674f6ab5739e48d178fa2f1dc`. The implementation handoff's earlier approval-required wording remains historical; later acceptance and merge are controlling evidence.
 
 Add one provider-neutral, versioned, editable fixture proposal after accepted
 manufacturing orientation. Ask only for missing essential intent, use the
@@ -276,8 +277,14 @@ rules, supplier scraping, or paid-service enablement is included.
 
 ## Milestone 32 - Multi-station weld-fixture synthesis
 
-**Status:** Hosted pinned-OCP acceptance passed; draft review PR #54 open;
-engineering acceptance pending
+**Status:** Active
+
+Issue #57 is the authoritative scope. Draft PR #54 is the implementation PR.
+Evidence profiles A, B, C, D, and E are required. The milestone remains Active
+through implementation merge and its separate closeout evidence PR. After that
+PR merges, a distinct state-finalization PR must record the closeout merge SHA,
+mark M32 Complete, and formally pause the approved product lane with zero Active
+milestones; no Milestone 33 is created or implied.
 
 Turn an accepted proposal and deterministic manufacturing intent into the first
 practical editable multi-station OCP fixture assembly. The supported family is
