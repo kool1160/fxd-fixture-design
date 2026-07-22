@@ -39,6 +39,77 @@ class MilestoneGovernanceTests(unittest.TestCase):
         errors = validate_registry_data(data)
         self.assertTrue(any(phrase in error for error in errors), errors)
 
+    def build_post_governance_history(
+        self,
+        root: Path,
+        *,
+        implementation_subject_pr: int = 54,
+        evidence_at_closeout: bool = True,
+    ) -> dict:
+        def git(*args: str) -> str:
+            result = subprocess.run(
+                ["git", *args],
+                cwd=root,
+                text=True,
+                capture_output=True,
+                check=True,
+            )
+            return result.stdout.strip()
+
+        git("init", "--quiet")
+        git("config", "user.name", "FXD Governance Test")
+        git("config", "user.email", "governance-test@example.invalid")
+        (root / "implementation.txt").write_text("reviewed implementation\n", encoding="utf-8")
+        git("add", "implementation.txt")
+        git("commit", "--quiet", "-m", f"Milestone 32 implementation (#{implementation_subject_pr})")
+        implementation_commit = git("rev-parse", "HEAD")
+
+        closeout_data = self.data()
+        closeout = self.milestone(closeout_data, 32)
+        evidence_results = {
+            profile: [f"Reviewed evidence profile {profile}."]
+            for profile in closeout["evidence_profiles"]
+        }
+        closeout.update(
+            {
+                "merge_commits": [implementation_commit],
+                "evidence_results": evidence_results if evidence_at_closeout else {},
+                "completion_evidence": (
+                    "All selected evidence profiles were reviewed in closeout PR #60."
+                    if evidence_at_closeout
+                    else None
+                ),
+                "closeout_pr": 60,
+                "closeout_merge_commit": None,
+                "decisions": [*closeout["decisions"], "Closeout evidence approved for finalization."],
+            }
+        )
+        registry = root / "docs" / "MILESTONE_STATE.json"
+        registry.parent.mkdir(parents=True)
+        registry.write_text(json.dumps(closeout_data, indent=2) + "\n", encoding="utf-8")
+        git("add", "docs/MILESTONE_STATE.json")
+        git("commit", "--quiet", "-m", "Milestone 32 closeout evidence (#60)")
+        closeout_commit = git("rev-parse", "HEAD")
+
+        final_milestone = copy.deepcopy(closeout)
+        final_milestone.update(
+            {
+                "status": "Complete",
+                "merge_commits": [implementation_commit, closeout_commit],
+                "evidence_results": evidence_results,
+                "completion_evidence": "All selected evidence profiles were reviewed in closeout PR #60.",
+                "closeout_merge_commit": closeout_commit,
+                "decisions": [
+                    *closeout["decisions"],
+                    f"Separate closeout PR #60 approved and merged as {closeout_commit}.",
+                ],
+            }
+        )
+        return {
+            "governance_effective_milestone": 32,
+            "milestones": [final_milestone],
+        }
+
     def test_registry_data_is_valid(self) -> None:
         self.assertEqual([], validate_registry_data(self.data()))
 
@@ -318,10 +389,36 @@ class MilestoneGovernanceTests(unittest.TestCase):
         data["milestones"][0]["closeout_pr"] = 40
         self.assertFalse(any("not associated" in error for error in validate_git_history(data, ROOT)))
 
+    def test_post_governance_history_binds_each_implementation_pr_and_reviewed_closeout(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            data = self.build_post_governance_history(root)
+            errors = validate_git_history(data, root, root / "docs" / "MILESTONE_STATE.json")
+        self.assertEqual([], errors)
+
+    def test_unrelated_merge_commit_cannot_impersonate_implementation_pr(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            data = self.build_post_governance_history(root, implementation_subject_pr=99)
+            errors = validate_git_history(data, root, root / "docs" / "MILESTONE_STATE.json")
+        self.assertTrue(
+            any("no recorded merge commit associated with implementation PR #54" in error for error in errors),
+            errors,
+        )
+
+    def test_completion_evidence_must_exist_in_closeout_commit_registry(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            data = self.build_post_governance_history(root, evidence_at_closeout=False)
+            errors = validate_git_history(data, root, root / "docs" / "MILESTONE_STATE.json")
+        self.assertTrue(any("closeout evidence PR requires results" in error for error in errors), errors)
+        self.assertTrue(any("field 'evidence_results' differs" in error for error in errors), errors)
+
     def test_github_merge_and_squash_messages_associate_pr_number(self) -> None:
         self.assertTrue(commit_message_matches_pr("Close milestone (#60)", 60))
         self.assertTrue(commit_message_matches_pr("Merge pull request #60 from governance/closeout", 60))
         self.assertFalse(commit_message_matches_pr("Close milestone (#59)", 60))
+        self.assertFalse(commit_message_matches_pr("Unrelated change (#99)\n\nMentions implementation PR (#60).", 60))
 
     def test_sequence_change_requires_revision_bump_and_decision(self) -> None:
         previous = self.data()

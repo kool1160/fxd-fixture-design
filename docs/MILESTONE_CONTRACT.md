@@ -50,7 +50,7 @@ Large milestones may use child issues. Child issues must name their parent miles
 
 An implementation pull request may deliver code, tests, documentation, or acceptance evidence, but its merge does not make a post-governance milestone `Complete`. The milestone remains Active through implementation merge until a separate closeout evidence pull request reconciles every required evidence profile, unresolved risk, issue state, and merge evidence.
 
-Closeout uses two offline-verifiable phases because a pull request cannot know its own future merge commit. First, a closeout evidence PR records its known PR number, reviewable results for every selected evidence profile, explicit human approvals, risks, and decisions while the milestone remains `Active`. After that PR is approved and merged, a distinct state-finalization PR records the now-existing closeout merge SHA, changes the milestone to `Complete`, and applies the approved next-lane disposition. The closeout merge or squash commit message must retain GitHub's PR-number form so offline validation can prove the PR-to-commit association. Neither phase may be combined with an implementation PR.
+Closeout uses two offline-verifiable phases because a pull request cannot know its own future merge commit. First, a closeout evidence PR records its known PR number, every implementation PR and its PR-number-bearing merge evidence, reviewable results for every selected evidence profile, explicit human approvals, risks, and decisions while the milestone remains `Active`. After that PR is approved and merged, a distinct state-finalization PR records the now-existing closeout merge SHA, changes the milestone to `Complete`, and applies the approved next-lane disposition. Every implementation and closeout merge or squash commit subject must retain GitHub's PR-number form so offline validation can prove each declared PR-to-commit association. Neither phase may be combined with an implementation PR.
 
 ## Maintenance lane
 
@@ -75,16 +75,16 @@ A milestone may become `Complete` only when:
 
 1. its issue scope and acceptance criteria are satisfied;
 2. every required evidence profile has reviewable results;
-3. implementation pull requests are merged and their commits are in repository history;
+3. every implementation pull request is merged and is bound to a locally present, PR-number-bearing merge or squash commit in repository history;
 4. deterministic validation passes without weakening protected boundaries;
 5. material risks, assumptions, specialist disagreements, and limitations are recorded;
 6. required human engineering and visual acceptance is explicit;
 7. no approval, release, export, or safety claim exceeds the evidence;
 8. a separate closeout evidence pull request reconciles the evidence and derived documents, records its distinct PR number, and is explicitly approved and merged;
-9. a distinct state-finalization pull request records that already-present closeout merge commit, verifies its PR-number association from local Git history, and applies the `Complete` registry state; and
+9. a distinct state-finalization pull request verifies that the closeout merge commit's registry blob contains the sole `Active` milestone, its declared closeout PR, its implementation PR merge evidence, and complete results for every selected evidence profile; then records that already-present closeout merge commit, verifies its PR-number association from local Git history, and applies the `Complete` registry state; and
 10. the registry contains reviewable evidence entries for every selected evidence profile.
 
-The implementation PR, closeout evidence PR, and state-finalization PR must remain separate for milestones governed by this contract. The final closeout decision must link the closeout PR number and its locally present merge commit. State finalization changes governance state; it does not conceal implementation changes.
+The implementation PR, closeout evidence PR, and state-finalization PR must remain separate for milestones governed by this contract. The final closeout decision must link the closeout PR number and its locally present merge commit. State finalization may add only the closeout merge SHA, the `Complete` status, the closeout PR/SHA linkage decision, and the approved next-lane disposition; it must not first author or rewrite reviewed scope, implementation identities, evidence profiles, completion evidence, or per-profile results. State finalization changes governance state; it does not conceal implementation or evidence changes.
 
 ## Sequence changes and interruptions
 

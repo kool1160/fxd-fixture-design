@@ -121,10 +121,11 @@ def commit_message_matches_pr(message: str, pull_request: int) -> bool:
 
     if not isinstance(message, str) or not _positive_int(pull_request):
         return False
+    subject = next((line.strip() for line in message.splitlines() if line.strip()), "")
     return bool(
         re.search(
             rf"(?:\(\s*#{pull_request}\s*\)|\bmerge\s+pull\s+request\s+#{pull_request}\b)",
-            message,
+            subject,
             re.IGNORECASE,
         )
     )
@@ -511,11 +512,21 @@ def validate_derived_documents(data: dict[str, Any], repo_root: Path) -> list[st
     return errors
 
 
-def validate_git_history(data: dict[str, Any], repo_root: Path) -> list[str]:
+def validate_git_history(
+    data: dict[str, Any],
+    repo_root: Path,
+    registry: Path | None = None,
+) -> list[str]:
     errors: list[str] = []
+    registry = registry or repo_root / "docs" / "MILESTONE_STATE.json"
+    try:
+        registry_relative = registry.resolve().relative_to(repo_root.resolve()).as_posix()
+    except ValueError:
+        return ["milestone registry must be inside the repository for Git-history validation"]
     for milestone in data.get("milestones", []):
         if not isinstance(milestone, dict):
             continue
+        commit_messages: dict[str, str] = {}
         for commit in milestone.get("merge_commits", []):
             if not isinstance(commit, str) or not SHA_PATTERN.fullmatch(commit):
                 continue
@@ -538,6 +549,16 @@ def validate_git_history(data: dict[str, Any], repo_root: Path) -> list[str]:
             )
             if ancestor.returncode != 0:
                 errors.append(f"milestone {milestone.get('number')!r} merge commit {commit} is not in current HEAD history")
+                continue
+            message = subprocess.run(
+                ["git", "show", "-s", "--format=%B", commit],
+                cwd=repo_root,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            if message.returncode == 0:
+                commit_messages[commit] = message.stdout
         number = milestone.get("number")
         governance_start = data.get("governance_effective_milestone")
         if (
@@ -546,21 +567,131 @@ def validate_git_history(data: dict[str, Any], repo_root: Path) -> list[str]:
             and _positive_int(governance_start)
             and number >= governance_start
         ):
+            implementation_prs = milestone.get("implementation_prs")
+            if isinstance(implementation_prs, list):
+                for implementation_pr in implementation_prs:
+                    if _positive_int(implementation_pr) and not any(
+                        commit_message_matches_pr(message, implementation_pr)
+                        for message in commit_messages.values()
+                    ):
+                        errors.append(
+                            f"post-governance milestone {number!r} has no recorded merge commit associated "
+                            f"with implementation PR #{implementation_pr} by its Git commit subject"
+                        )
             closeout_commit = milestone.get("closeout_merge_commit")
             closeout_pr = milestone.get("closeout_pr")
             if isinstance(closeout_commit, str) and SHA_PATTERN.fullmatch(closeout_commit) and _positive_int(closeout_pr):
-                message = subprocess.run(
-                    ["git", "show", "-s", "--format=%B", closeout_commit],
+                closeout_message = commit_messages.get(closeout_commit, "")
+                if not commit_message_matches_pr(closeout_message, closeout_pr):
+                    errors.append(
+                        f"post-governance milestone {number!r} closeout merge commit is not associated "
+                        f"with closeout PR #{closeout_pr} by its Git commit subject"
+                    )
+                registry_blob = subprocess.run(
+                    ["git", "show", f"{closeout_commit}:{registry_relative}"],
                     cwd=repo_root,
                     text=True,
                     capture_output=True,
                     check=False,
                 )
-                if message.returncode == 0 and not commit_message_matches_pr(message.stdout, closeout_pr):
+                if registry_blob.returncode != 0:
                     errors.append(
-                        f"post-governance milestone {number!r} closeout merge commit is not associated "
-                        f"with closeout PR #{closeout_pr} by its Git commit message"
+                        f"post-governance milestone {number!r} closeout merge commit does not contain "
+                        f"{registry_relative}"
                     )
+                    continue
+                try:
+                    closeout_data = json.loads(registry_blob.stdout)
+                except json.JSONDecodeError:
+                    errors.append(
+                        f"post-governance milestone {number!r} closeout merge commit contains a malformed registry"
+                    )
+                    continue
+                if not isinstance(closeout_data, dict):
+                    errors.append(
+                        f"post-governance milestone {number!r} closeout merge commit registry must be an object"
+                    )
+                    continue
+                closeout_errors = validate_registry_data(closeout_data)
+                errors.extend(
+                    f"post-governance milestone {number!r} closeout merge commit registry: {error}"
+                    for error in closeout_errors
+                )
+                closeout_milestone = next(
+                    (
+                        item
+                        for item in closeout_data.get("milestones", [])
+                        if isinstance(item, dict) and item.get("number") == number
+                    ),
+                    None,
+                )
+                if closeout_milestone is None:
+                    errors.append(
+                        f"post-governance milestone {number!r} is absent from the closeout merge commit registry"
+                    )
+                    continue
+                closeout_lane = closeout_data.get("product_lane")
+                if (
+                    closeout_milestone.get("status") != "Active"
+                    or not isinstance(closeout_lane, dict)
+                    or closeout_lane.get("paused") is not False
+                    or closeout_lane.get("active_milestone") != number
+                ):
+                    errors.append(
+                        f"post-governance milestone {number!r} must remain the sole Active milestone "
+                        "in the closeout merge commit registry"
+                    )
+                finalization_fields = {"status", "merge_commits", "closeout_merge_commit", "decisions"}
+                reviewed_fields = (set(closeout_milestone) | set(milestone)) - finalization_fields
+                for field in sorted(reviewed_fields):
+                    if closeout_milestone.get(field) != milestone.get(field):
+                        errors.append(
+                            f"post-governance milestone {number!r} field {field!r} differs from "
+                            "the reviewed closeout merge commit registry"
+                        )
+                if closeout_milestone.get("closeout_merge_commit") is not None:
+                    errors.append(
+                        f"post-governance milestone {number!r} closeout merge commit registry must not "
+                        "predeclare its future closeout merge SHA"
+                    )
+                reviewed_merges = closeout_milestone.get("merge_commits")
+                if isinstance(implementation_prs, list) and isinstance(reviewed_merges, list):
+                    for implementation_pr in implementation_prs:
+                        if _positive_int(implementation_pr) and not any(
+                            commit in reviewed_merges
+                            and commit_message_matches_pr(message, implementation_pr)
+                            for commit, message in commit_messages.items()
+                        ):
+                            errors.append(
+                                f"post-governance milestone {number!r} closeout merge commit registry "
+                                f"does not record implementation PR #{implementation_pr} merge evidence"
+                            )
+                final_merges = milestone.get("merge_commits")
+                if isinstance(reviewed_merges, list) and isinstance(final_merges, list):
+                    if set(final_merges) != {*reviewed_merges, closeout_commit}:
+                        errors.append(
+                            f"post-governance milestone {number!r} state finalization may add only the "
+                            "closeout merge commit to the reviewed merge evidence"
+                        )
+                reviewed_decisions = closeout_milestone.get("decisions")
+                final_decisions = milestone.get("decisions")
+                if isinstance(reviewed_decisions, list) and isinstance(final_decisions, list):
+                    missing_reviewed_decisions = set(reviewed_decisions) - set(final_decisions)
+                    if missing_reviewed_decisions:
+                        errors.append(
+                            f"post-governance milestone {number!r} state finalization removed a reviewed "
+                            "closeout decision"
+                        )
+                    added_decisions = set(final_decisions) - set(reviewed_decisions)
+                    required_fragments = ("closeout", f"#{closeout_pr}", closeout_commit)
+                    if any(
+                        not all(fragment.casefold() in decision.casefold() for fragment in required_fragments)
+                        for decision in added_decisions
+                    ):
+                        errors.append(
+                            f"post-governance milestone {number!r} state finalization may add only a "
+                            "closeout PR and merge-commit linkage decision"
+                        )
     return errors
 
 
@@ -637,7 +768,7 @@ def validate_registry(path: Path, repo_root: Path, *, check_git_history: bool = 
     errors = validate_registry_data(data)
     errors.extend(validate_derived_documents(data, repo_root))
     if check_git_history:
-        errors.extend(validate_git_history(data, repo_root))
+        errors.extend(validate_git_history(data, repo_root, path))
         errors.extend(validate_sequence_history(data, path, repo_root))
     if errors:
         raise MilestoneValidationError(errors)
