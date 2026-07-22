@@ -75,10 +75,10 @@ For each milestone:
 10. Fix failures caused by the work.
 11. Review the final diff.
 12. Update derived records only when evidence supports the update; never change status outside the registry.
-13. Preserve the separate closeout-PR boundary for post-governance milestones.
+13. Preserve the post-governance closeout boundary: a closeout evidence PR while the milestone remains Active, followed after merge by a distinct state-finalization PR that records the now-existing merge SHA.
 14. Stop only at a real approval boundary or material blocker.
 15. Finish with the structured Planning Handoff required by the Foreman schema.
 
 ## Completion standard
 
-A milestone is not complete because a plan exists or an implementation PR merges. Completion requires the contract gates, all selected evidence profiles, changed files, checks, discipline impacts, risks, disagreements, and unresolved items to be recorded and reconciled in a separate closeout PR.
+A milestone is not complete because a plan exists or an implementation PR merges. Completion requires the contract gates, reviewable results for all selected evidence profiles, changed files, checks, discipline impacts, risks, disagreements, and unresolved items to be reconciled in a separate closeout evidence PR, then finalized only after that PR's merge commit exists in local history.

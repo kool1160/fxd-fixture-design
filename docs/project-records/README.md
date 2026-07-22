@@ -28,7 +28,7 @@ Volume 1 is closed at Milestone 25. Milestones 26 and later belong to Volume 2. 
 Milestone 32 - Multi-station weld fixture synthesis. The authoritative scope is
 Issue #57, required evidence profiles are A through E, and draft PR #54 is the
 implementation PR. Implementation merge does not complete it; a separate
-closeout PR is required.
+closeout evidence PR and post-merge state-finalization PR are required.
 
 ## Record policy
 

@@ -75,5 +75,5 @@ body:
           required: true
         - label: Units, tolerances, traceability, privacy, licensing review, and human approval remain explicit.
           required: true
-        - label: A separate closeout PR is required after implementation merge.
+        - label: A separate closeout evidence PR and post-merge state-finalization PR are required after implementation merge.
           required: true

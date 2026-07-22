@@ -26,7 +26,8 @@ milestone's authoritative GitHub issue.
 Milestone 32 is the sole Active product milestone. Issue #57 is authoritative,
 and draft PR #54 is its implementation PR. Evidence profiles A, B, C, D, and E
 are required. The milestone remains Active through implementation merge and
-requires a separate closeout PR.
+requires a separate closeout evidence PR followed, after merge, by a distinct
+state-finalization PR that records the already-existing closeout merge SHA.
 
 The application preserves ordinary vendor STEP import, source bytes and
 SHA-256, XCAF color evidence, zero-based tessellation, and fail-closed behavior.
@@ -36,10 +37,12 @@ geometry and cannot be represented as source or final manufacturing geometry.
 ## Review boundary
 
 PR #54 remains draft, open, and unmerged. Its implementation evidence does not
-complete Milestone 32. Closeout must reconcile the required evidence profiles,
-explicit human acceptance, merge evidence, remaining risks, and Issue #57 in a
-separate PR. After that closeout, the product lane becomes formally paused with
-zero Active milestones. No Milestone 33 is created or implied.
+complete Milestone 32. A closeout evidence PR must reconcile the required
+evidence profiles, explicit human acceptance, merge evidence, remaining risks,
+and Issue #57 while M32 remains Active. After that PR merges, a distinct
+state-finalization PR records its merge SHA, sets Complete, and formally pauses
+the product lane with zero Active milestones. No Milestone 33 is created or
+implied.
 
 PR #55 is blocked documentation maintenance governed by Issue #58. It does not
 own product status, and its dependency/licensing, byte-determinism, and

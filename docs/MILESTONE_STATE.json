@@ -629,6 +629,7 @@
       "implementation_prs": [54],
       "merge_commits": [],
       "evidence_profiles": ["A", "B", "C", "D", "E"],
+      "evidence_results": {},
       "completion_evidence": null,
       "closeout_pr": null,
       "closeout_merge_commit": null,

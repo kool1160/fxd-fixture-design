@@ -30,7 +30,7 @@ Record durable product and engineering decisions here.
 and completion, and `docs/MILESTONE_STATE.json` is the sole current status
 projection. The Foreman selects only the sole Active registry milestone and
 loads its authoritative GitHub issue. Post-governance implementation merge and
-completion are separated by a closeout PR.
+completion are separated by a closeout evidence PR and a state-finalization PR.
 
 **Context:** Issue #56 found conflicting Markdown status claims and an unsafe
 selector that could choose stale Milestone 20 work despite merged PR #40.
@@ -38,6 +38,11 @@ selector that could choose stale Milestone 20 work despite merged PR #40.
 **Reasoning:** A small offline-validated registry makes status deterministic
 while issues and pull requests retain scope and evidence. Historical records
 remain intact but visibly non-authoritative.
+
+**Risks and tradeoffs:** A pull request cannot record its own future merge SHA.
+The closeout evidence PR therefore merges while the milestone remains Active;
+a distinct state-finalization PR may set `Complete` only after that merge SHA
+exists locally and its Git commit message verifies the closeout PR number.
 
 **Supporting evidence:** Issue #56; PR #40 at
 `5f90765b96140f0cb3103f3ac5e04a79f82ab604`; PR #53 at

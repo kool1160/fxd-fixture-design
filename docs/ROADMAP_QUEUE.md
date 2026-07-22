@@ -279,6 +279,6 @@ rules, supplier scraping, or paid-service enablement is included.
 
 **Status:** Active
 
-Issue #57 is the authoritative scope. Draft PR #54 is the implementation PR. Evidence profiles A, B, C, D, and E are required. The milestone remains Active through implementation merge and requires a separate closeout PR. After closeout, the approved product lane becomes formally paused with zero Active milestones; no Milestone 33 is created or implied.
+Issue #57 is the authoritative scope. Draft PR #54 is the implementation PR. Evidence profiles A, B, C, D, and E are required. The milestone remains Active through implementation merge and its separate closeout evidence PR. A distinct state-finalization PR must then record the closeout merge SHA and formally pause the approved product lane with zero Active milestones; no Milestone 33 is created or implied.
 
 **Recommended level:** Sol

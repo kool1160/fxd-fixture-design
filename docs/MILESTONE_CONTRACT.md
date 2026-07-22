@@ -48,7 +48,9 @@ Before product implementation begins, the milestone must have one open authorita
 
 Large milestones may use child issues. Child issues must name their parent milestone, inherit its protected boundaries, cover disjoint reviewable outcomes, and never own or change product-milestone status. Closing a child issue does not complete the milestone.
 
-An implementation pull request may deliver code, tests, documentation, or acceptance evidence, but its merge does not make a post-governance milestone `Complete`. The milestone remains Active through implementation merge until a separate closeout pull request reconciles every required evidence profile, unresolved risk, issue state, and merge evidence.
+An implementation pull request may deliver code, tests, documentation, or acceptance evidence, but its merge does not make a post-governance milestone `Complete`. The milestone remains Active through implementation merge until a separate closeout evidence pull request reconciles every required evidence profile, unresolved risk, issue state, and merge evidence.
+
+Closeout uses two offline-verifiable phases because a pull request cannot know its own future merge commit. First, a closeout evidence PR records its known PR number, reviewable results for every selected evidence profile, explicit human approvals, risks, and decisions while the milestone remains `Active`. After that PR is approved and merged, a distinct state-finalization PR records the now-existing closeout merge SHA, changes the milestone to `Complete`, and applies the approved next-lane disposition. The closeout merge or squash commit message must retain GitHub's PR-number form so offline validation can prove the PR-to-commit association. Neither phase may be combined with an implementation PR.
 
 ## Maintenance lane
 
@@ -78,14 +80,15 @@ A milestone may become `Complete` only when:
 5. material risks, assumptions, specialist disagreements, and limitations are recorded;
 6. required human engineering and visual acceptance is explicit;
 7. no approval, release, export, or safety claim exceeds the evidence;
-8. a separate closeout pull request reconciles the registry and derived documents, and the registry records its distinct PR number and merge commit; and
-9. the closeout pull request is explicitly approved and merged.
+8. a separate closeout evidence pull request reconciles the evidence and derived documents, records its distinct PR number, and is explicitly approved and merged;
+9. a distinct state-finalization pull request records that already-present closeout merge commit, verifies its PR-number association from local Git history, and applies the `Complete` registry state; and
+10. the registry contains reviewable evidence entries for every selected evidence profile.
 
-The implementation PR and closeout PR must remain separate for milestones governed by this contract. The closeout decision must link the distinct closeout PR number and its locally present merge commit. The closeout PR changes governance state; it does not conceal implementation changes.
+The implementation PR, closeout evidence PR, and state-finalization PR must remain separate for milestones governed by this contract. The final closeout decision must link the closeout PR number and its locally present merge commit. State finalization changes governance state; it does not conceal implementation changes.
 
 ## Sequence changes and interruptions
 
-Changing order, inserting, superseding, cancelling, or replacing a milestone requires an explicit human-approved decision recorded in the registry, an incremented `sequence_revision`, valid predecessor relationships, and updated issue links. A `Superseded` record names its replacement or explicit disposition. A `Cancelled` record names the cancellation decision. Silent renumbering and milestone skipping are prohibited.
+Changing order, inserting, superseding, cancelling, replacing, pausing, or activating a milestone requires an explicit human-approved decision recorded in `sequence_decisions`, an exactly one-step increment to `sequence_revision`, valid predecessor relationships, and updated issue links. The offline validator compares a branch registry with its `origin/main` merge base, falling back on main to the latest registry-changing commit's parent, so a later commit in the same PR cannot hide an omitted revision bump. A `Superseded` record names its replacement or explicit disposition. A `Cancelled` record names the cancellation decision. Milestones at or after `governance_effective_milestone` cannot opt into legacy reconciliation. Silent renumbering and milestone skipping are prohibited.
 
 An emergency may interrupt Active work only for a security, data-loss, legal/licensing, safety, or repository-integrity condition. The interruption must have a dedicated issue and human decision, set the affected milestone to `Blocked`, `Waiting`, or `Paused` as appropriate, preserve its evidence, and identify the exact resumption condition. An emergency does not silently activate another product milestone.
 

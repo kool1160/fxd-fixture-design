@@ -74,6 +74,62 @@ def _nonempty_strings(value: Any) -> bool:
     return isinstance(value, list) and bool(value) and all(isinstance(item, str) and item.strip() for item in value)
 
 
+def _sequence_projection(data: dict[str, Any]) -> dict[str, Any]:
+    """Return only fields whose change alters the governed product sequence."""
+
+    lane = data.get("product_lane") if isinstance(data.get("product_lane"), dict) else {}
+    milestones = data.get("milestones") if isinstance(data.get("milestones"), list) else []
+    return {
+        "governance_effective_milestone": data.get("governance_effective_milestone"),
+        "product_lane": {
+            "paused": lane.get("paused"),
+            "active_milestone": lane.get("active_milestone"),
+        },
+        "milestones": [
+            {
+                "number": milestone.get("number"),
+                "sequence_position": milestone.get("sequence_position"),
+                "predecessor": milestone.get("predecessor"),
+                "terminal_sequence_status": (
+                    milestone.get("status") if milestone.get("status") in {"Superseded", "Cancelled"} else None
+                ),
+                "replacement_milestone": milestone.get("replacement_milestone"),
+            }
+            for milestone in milestones
+            if isinstance(milestone, dict)
+        ],
+    }
+
+
+def validate_sequence_transition(current: dict[str, Any], previous: dict[str, Any]) -> list[str]:
+    """Require a one-step revision bump and decision when sequence fields change."""
+
+    if _sequence_projection(current) == _sequence_projection(previous):
+        return []
+    current_revision = current.get("sequence_revision")
+    previous_revision = previous.get("sequence_revision")
+    errors: list[str] = []
+    if not _positive_int(previous_revision) or current_revision != previous_revision + 1:
+        errors.append("sequence changes require sequence_revision to increment exactly once from the prior registry")
+    if not _nonempty_strings(current.get("sequence_decisions")):
+        errors.append("sequence changes require nonempty sequence_decisions")
+    return errors
+
+
+def commit_message_matches_pr(message: str, pull_request: int) -> bool:
+    """Recognize GitHub's merge and squash commit PR-number forms."""
+
+    if not isinstance(message, str) or not _positive_int(pull_request):
+        return False
+    return bool(
+        re.search(
+            rf"(?:\(\s*#{pull_request}\s*\)|\bmerge\s+pull\s+request\s+#{pull_request}\b)",
+            message,
+            re.IGNORECASE,
+        )
+    )
+
+
 def load_registry(path: Path) -> dict[str, Any]:
     try:
         raw = path.read_text(encoding="utf-8")
@@ -154,14 +210,66 @@ def validate_registry_data(data: dict[str, Any]) -> list[str]:
         prs = milestone.get("implementation_prs")
         if not isinstance(prs, list) or any(not _positive_int(pr) for pr in prs):
             errors.append(f"milestone {number!r} implementation_prs must contain positive integers")
+        elif len(prs) != len(set(prs)):
+            errors.append(f"milestone {number!r} implementation_prs cannot contain duplicates")
         merges = milestone.get("merge_commits")
         if not isinstance(merges, list) or any(not isinstance(commit, str) or not SHA_PATTERN.fullmatch(commit) for commit in merges):
             errors.append(f"milestone {number!r} merge_commits must contain lowercase 40-character SHAs")
+        elif len(merges) != len(set(merges)):
+            errors.append(f"milestone {number!r} merge_commits cannot contain duplicates")
         selected_profiles = milestone.get("evidence_profiles")
         if not isinstance(selected_profiles, list) or not selected_profiles:
             errors.append(f"milestone {number!r} must select at least one evidence profile")
         elif any(profile not in allowed_profiles for profile in selected_profiles):
             errors.append(f"milestone {number!r} selects an unknown evidence profile")
+        elif len(selected_profiles) != len(set(selected_profiles)):
+            errors.append(f"milestone {number!r} evidence_profiles cannot contain duplicates")
+
+        legacy = milestone.get("legacy")
+        if not isinstance(legacy, bool):
+            errors.append(f"milestone {number!r} legacy must be true or false")
+        legacy_reconciliation = milestone.get("legacy_reconciliation")
+        if legacy_reconciliation is not None and not isinstance(legacy_reconciliation, bool):
+            errors.append(f"milestone {number!r} legacy_reconciliation must be true, false, or omitted")
+        historical_gaps = milestone.get("historical_gaps")
+        if not isinstance(historical_gaps, list) or any(
+            not isinstance(gap, str) or not gap.strip() for gap in historical_gaps
+        ):
+            errors.append(f"milestone {number!r} historical_gaps must be an array of nonempty strings")
+        replacement = milestone.get("replacement_milestone")
+        if replacement is not None and not _positive_int(replacement):
+            errors.append(f"milestone {number!r} replacement_milestone must be null or a positive integer")
+        closeout_pr_value = milestone.get("closeout_pr")
+        if closeout_pr_value is not None and not _positive_int(closeout_pr_value):
+            errors.append(f"milestone {number!r} closeout_pr must be null or a positive integer")
+        closeout_commit_value = milestone.get("closeout_merge_commit")
+        if closeout_commit_value is not None and (
+            not isinstance(closeout_commit_value, str) or not SHA_PATTERN.fullmatch(closeout_commit_value)
+        ):
+            errors.append(f"milestone {number!r} closeout_merge_commit must be null or a lowercase 40-character SHA")
+
+        post_governance = _positive_int(governance_start) and _positive_int(number) and number >= governance_start
+        evidence_results = milestone.get("evidence_results")
+        if post_governance:
+            if "closeout_merge_commit" not in milestone:
+                errors.append(f"post-governance milestone {number!r} requires a closeout_merge_commit field")
+            if milestone.get("legacy") is not False:
+                errors.append(f"post-governance milestone {number!r} cannot be classified as legacy")
+            if not isinstance(evidence_results, dict):
+                errors.append(f"post-governance milestone {number!r} requires an evidence_results object")
+            else:
+                unknown_results = set(evidence_results) - set(selected_profiles or [])
+                if unknown_results:
+                    errors.append(
+                        f"post-governance milestone {number!r} has results for unselected evidence profiles: "
+                        f"{', '.join(sorted(unknown_results))}"
+                    )
+                for profile, entries in evidence_results.items():
+                    if not _nonempty_strings(entries):
+                        errors.append(
+                            f"post-governance milestone {number!r} evidence profile {profile!r} "
+                            "requires reviewable nonempty evidence entries"
+                        )
 
         decisions = milestone.get("decisions")
         if not isinstance(decisions, list) or any(not isinstance(decision, str) or not decision.strip() for decision in decisions):
@@ -172,23 +280,44 @@ def validate_registry_data(data: dict[str, Any]) -> list[str]:
                 errors.append(f"Active milestone {number!r} requires an authoritative issue")
             if not isinstance(prs, list) or not prs:
                 errors.append(f"Active milestone {number!r} requires an implementation PR")
+        if post_governance and milestone.get("closeout_pr") is not None:
+            closeout_pr = milestone.get("closeout_pr")
+            if not _positive_int(closeout_pr):
+                errors.append(f"post-governance milestone {number!r} closeout PR must be null or a positive integer")
+            elif isinstance(prs, list) and closeout_pr in prs:
+                errors.append(f"post-governance milestone {number!r} closeout PR must be distinct from implementation PRs")
+            if isinstance(evidence_results, dict):
+                missing_closeout_results = set(selected_profiles or []) - set(evidence_results)
+                if missing_closeout_results:
+                    errors.append(
+                        f"post-governance milestone {number!r} closeout evidence PR requires results for every selected "
+                        f"evidence profile: {', '.join(sorted(missing_closeout_results))}"
+                    )
+            evidence = milestone.get("completion_evidence")
+            if not isinstance(evidence, str) or not evidence.strip():
+                errors.append(f"post-governance milestone {number!r} closeout evidence PR requires completion_evidence")
         if status == "Complete":
             if not isinstance(merges, list) or not merges:
                 errors.append(f"Complete milestone {number!r} requires merged evidence")
             evidence = milestone.get("completion_evidence")
             if not isinstance(evidence, str) or not evidence.strip():
                 errors.append(f"Complete milestone {number!r} requires completion_evidence")
+            if post_governance and isinstance(evidence_results, dict):
+                missing_results = set(selected_profiles or []) - set(evidence_results)
+                if missing_results:
+                    errors.append(
+                        f"post-governance Complete milestone {number!r} requires results for every selected evidence profile: "
+                        f"{', '.join(sorted(missing_results))}"
+                    )
             if milestone.get("legacy"):
                 if milestone.get("legacy_reconciliation") is not True:
                     errors.append(f"legacy Complete milestone {number!r} requires explicit legacy_reconciliation")
                 if not _nonempty_strings(milestone.get("historical_gaps")):
                     errors.append(f"legacy Complete milestone {number!r} requires historical_gaps")
-            elif _positive_int(governance_start) and number >= governance_start:
+            elif post_governance:
                 closeout_pr = milestone.get("closeout_pr")
                 if not _positive_int(closeout_pr):
                     errors.append(f"post-governance Complete milestone {number!r} requires a separate closeout PR")
-                elif isinstance(prs, list) and closeout_pr in prs:
-                    errors.append(f"post-governance Complete milestone {number!r} closeout PR must be distinct from implementation PRs")
                 closeout_commit = milestone.get("closeout_merge_commit")
                 if not isinstance(closeout_commit, str) or not SHA_PATTERN.fullmatch(closeout_commit):
                     errors.append(f"post-governance Complete milestone {number!r} requires a closeout merge commit")
@@ -357,10 +486,18 @@ def validate_derived_documents(data: dict[str, Any], repo_root: Path) -> list[st
                 illegal = ILLEGAL_STATUS_PATTERN.search(raw_status)
                 if illegal:
                     errors.append(f"{relative}:{line_number} uses non-authoritative status {illegal.group(1)!r}")
-                elif current_heading in expected_status and raw_status in LEGAL_STATUSES and raw_status != expected_status[current_heading]:
-                    errors.append(
-                        f"{relative}:{line_number} conflicts for milestone {current_heading}: {raw_status} != {expected_status[current_heading]}"
+                else:
+                    canonical_status = next(
+                        (status for status in LEGAL_STATUSES if status.casefold() == raw_status.casefold()),
+                        None,
                     )
+                    if canonical_status is None or canonical_status != raw_status:
+                        errors.append(f"{relative}:{line_number} uses unrecognized or noncanonical status {raw_status!r}")
+                    elif current_heading in expected_status and canonical_status != expected_status[current_heading]:
+                        errors.append(
+                            f"{relative}:{line_number} conflicts for milestone {current_heading}: "
+                            f"{canonical_status} != {expected_status[current_heading]}"
+                        )
             current_match = CURRENT_PATTERN.search(line)
             if current_match and int(current_match.group(1)) != active_number:
                 errors.append(f"{relative}:{line_number} names milestone {current_match.group(1)} as current; registry selects {active_number}")
@@ -401,7 +538,98 @@ def validate_git_history(data: dict[str, Any], repo_root: Path) -> list[str]:
             )
             if ancestor.returncode != 0:
                 errors.append(f"milestone {milestone.get('number')!r} merge commit {commit} is not in current HEAD history")
+        number = milestone.get("number")
+        governance_start = data.get("governance_effective_milestone")
+        if (
+            milestone.get("status") == "Complete"
+            and _positive_int(number)
+            and _positive_int(governance_start)
+            and number >= governance_start
+        ):
+            closeout_commit = milestone.get("closeout_merge_commit")
+            closeout_pr = milestone.get("closeout_pr")
+            if isinstance(closeout_commit, str) and SHA_PATTERN.fullmatch(closeout_commit) and _positive_int(closeout_pr):
+                message = subprocess.run(
+                    ["git", "show", "-s", "--format=%B", closeout_commit],
+                    cwd=repo_root,
+                    text=True,
+                    capture_output=True,
+                    check=False,
+                )
+                if message.returncode == 0 and not commit_message_matches_pr(message.stdout, closeout_pr):
+                    errors.append(
+                        f"post-governance milestone {number!r} closeout merge commit is not associated "
+                        f"with closeout PR #{closeout_pr} by its Git commit message"
+                    )
     return errors
+
+
+def validate_sequence_history(data: dict[str, Any], registry: Path, repo_root: Path) -> list[str]:
+    """Validate the branch-wide registry transition against its merge base."""
+
+    try:
+        relative = registry.resolve().relative_to(repo_root.resolve()).as_posix()
+    except ValueError:
+        return ["milestone registry must be inside the repository for sequence-history validation"]
+    head_blob = subprocess.run(
+        ["git", "show", f"HEAD:{relative}"],
+        cwd=repo_root,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if head_blob.returncode == 0:
+        try:
+            head_data = json.loads(head_blob.stdout)
+        except json.JSONDecodeError:
+            return ["milestone registry at HEAD is malformed"]
+        if head_data != data:
+            return validate_sequence_transition(data, head_data)
+
+    merge_base = subprocess.run(
+        ["git", "merge-base", "HEAD", "origin/main"],
+        cwd=repo_root,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    previous_spec: str | None = None
+    if merge_base.returncode == 0 and merge_base.stdout.strip():
+        base = merge_base.stdout.strip()
+        head = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=repo_root,
+            text=True,
+            capture_output=True,
+            check=False,
+        ).stdout.strip()
+        if base != head:
+            previous_spec = f"{base}:{relative}"
+    if previous_spec is None:
+        latest = subprocess.run(
+            ["git", "log", "-1", "--format=%H", "--", relative],
+            cwd=repo_root,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        if latest.returncode != 0 or not latest.stdout.strip():
+            return []
+        previous_spec = f"{latest.stdout.strip()}^:{relative}"
+    previous = subprocess.run(
+        ["git", "show", previous_spec],
+        cwd=repo_root,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if previous.returncode != 0:
+        return []
+    try:
+        previous_data = json.loads(previous.stdout)
+    except json.JSONDecodeError:
+        return [f"prior milestone registry at {previous_spec} is malformed"]
+    return validate_sequence_transition(data, previous_data)
 
 
 def validate_registry(path: Path, repo_root: Path, *, check_git_history: bool = True) -> dict[str, Any]:
@@ -410,6 +638,7 @@ def validate_registry(path: Path, repo_root: Path, *, check_git_history: bool = 
     errors.extend(validate_derived_documents(data, repo_root))
     if check_git_history:
         errors.extend(validate_git_history(data, repo_root))
+        errors.extend(validate_sequence_history(data, path, repo_root))
     if errors:
         raise MilestoneValidationError(errors)
     return data

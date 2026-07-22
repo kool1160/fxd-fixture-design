@@ -10,11 +10,13 @@ from pathlib import Path
 from scripts.validate_milestones import (
     AUTHORITY_MARKER,
     MilestoneValidationError,
+    commit_message_matches_pr,
     load_registry,
     validate_derived_documents,
     validate_git_history,
     validate_registry,
     validate_registry_data,
+    validate_sequence_transition,
 )
 
 
@@ -55,6 +57,26 @@ class MilestoneGovernanceTests(unittest.TestCase):
         errors = validate_registry_data(data)
         self.assertTrue(any("unknown milestone schema" in error for error in errors), errors)
         self.assertTrue(any("unknown status 'Pending'" in error for error in errors), errors)
+
+    def test_registry_rejects_malformed_flags_references_and_duplicate_evidence(self) -> None:
+        data = self.data()
+        milestone = self.milestone(data, 32)
+        milestone["legacy"] = "false"
+        milestone["historical_gaps"] = [""]
+        milestone["replacement_milestone"] = "33"
+        milestone["closeout_merge_commit"] = "not-a-sha"
+        milestone["implementation_prs"] = [54, 54]
+        milestone["evidence_profiles"] = ["A", "A"]
+        errors = validate_registry_data(data)
+        for phrase in (
+            "legacy must be true or false",
+            "historical_gaps must be an array of nonempty strings",
+            "replacement_milestone must be null or a positive integer",
+            "closeout_merge_commit must be null or a lowercase 40-character SHA",
+            "implementation_prs cannot contain duplicates",
+            "evidence_profiles cannot contain duplicates",
+        ):
+            self.assertTrue(any(phrase in error for error in errors), (phrase, errors))
 
     def test_multiple_active_milestones_are_rejected(self) -> None:
         data = self.data()
@@ -112,6 +134,14 @@ class MilestoneGovernanceTests(unittest.TestCase):
         self.milestone(data, 20)["legacy_reconciliation"] = False
         self.assert_error(data, "legacy Complete milestone 20 requires explicit legacy_reconciliation")
 
+    def test_post_governance_milestone_cannot_claim_legacy_reconciliation(self) -> None:
+        data = self.data()
+        active = self.milestone(data, 32)
+        active["legacy"] = True
+        active["legacy_reconciliation"] = True
+        active["historical_gaps"] = ["Fabricated bypass."]
+        self.assert_error(data, "post-governance milestone 32 cannot be classified as legacy")
+
     def test_post_governance_complete_requires_closeout_pr(self) -> None:
         data = self.data()
         active = self.milestone(data, 32)
@@ -153,6 +183,7 @@ class MilestoneGovernanceTests(unittest.TestCase):
                 "status": "Complete",
                 "merge_commits": [merge],
                 "completion_evidence": "Synthetic test evidence.",
+                "evidence_results": {profile: [f"Profile {profile} accepted evidence."] for profile in "ABCDE"},
                 "closeout_pr": 60,
                 "closeout_merge_commit": merge,
                 "decisions": [f"Separate closeout PR #60 approved and merged as {merge}."],
@@ -163,6 +194,44 @@ class MilestoneGovernanceTests(unittest.TestCase):
         )
         closeout_errors = [error for error in validate_registry_data(data) if "closeout" in error]
         self.assertEqual([], closeout_errors)
+
+    def test_closeout_evidence_pr_can_merge_before_its_sha_exists(self) -> None:
+        data = self.data()
+        active = self.milestone(data, 32)
+        active["closeout_pr"] = 60
+        active["closeout_merge_commit"] = None
+        active["completion_evidence"] = "All selected evidence profiles were reviewed in closeout PR #60."
+        active["evidence_results"] = {profile: [f"Profile {profile} accepted evidence."] for profile in "ABCDE"}
+        errors = validate_registry_data(data)
+        self.assertFalse(any("closeout" in error for error in errors), errors)
+
+    def test_closeout_evidence_pr_requires_all_profile_results(self) -> None:
+        data = self.data()
+        active = self.milestone(data, 32)
+        active["closeout_pr"] = 60
+        active["completion_evidence"] = "Incomplete closeout evidence."
+        active["evidence_results"] = {"A": ["Only deterministic evidence was recorded."]}
+        self.assert_error(data, "closeout evidence PR requires results for every selected evidence profile")
+
+    def test_complete_requires_results_for_every_selected_evidence_profile(self) -> None:
+        data = self.data()
+        milestone = self.milestone(data, 32)
+        merge = "ac1e7a1799ef9be674f6ab5739e48d178fa2f1dc"
+        milestone.update(
+            {
+                "status": "Complete",
+                "merge_commits": [merge],
+                "completion_evidence": "Summary alone is insufficient.",
+                "evidence_results": {"A": ["Deterministic suite passed."]},
+                "closeout_pr": 60,
+                "closeout_merge_commit": merge,
+                "decisions": [f"Separate closeout PR #60 approved and merged as {merge}."],
+            }
+        )
+        data["product_lane"].update(
+            {"paused": True, "active_milestone": None, "pause_reason": "Test pause", "decision": "Test decision"}
+        )
+        self.assert_error(data, "requires results for every selected evidence profile")
 
     def test_superseded_milestone_requires_decision_and_replacement(self) -> None:
         data = self.data()
@@ -200,6 +269,20 @@ class MilestoneGovernanceTests(unittest.TestCase):
             errors = validate_derived_documents(data, root)
         self.assertTrue(any("Active != Complete" in error for error in errors), errors)
 
+    def test_unrecognized_and_noncanonical_derived_statuses_are_rejected(self) -> None:
+        data = self.data()
+        data["derived_documents"] = ["ROADMAP.md"]
+        data["historical_snapshot_documents"] = []
+        for raw_status in ("Bogus", "active"):
+            with self.subTest(raw_status=raw_status), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp)
+                (root / "ROADMAP.md").write_text(
+                    f"{AUTHORITY_MARKER}\n## Milestone 32 - Test\n**Status:** {raw_status}\n",
+                    encoding="utf-8",
+                )
+                errors = validate_derived_documents(data, root)
+            self.assertTrue(any("unrecognized or noncanonical status" in error for error in errors), errors)
+
     def test_historical_document_requires_snapshot_marker(self) -> None:
         data = self.data()
         data["derived_documents"] = ["HISTORY.md"]
@@ -215,6 +298,50 @@ class MilestoneGovernanceTests(unittest.TestCase):
         self.milestone(data, 20)["merge_commits"] = ["0" * 40]
         errors = validate_git_history(data, ROOT)
         self.assertTrue(any("absent from local Git history" in error for error in errors), errors)
+
+    def test_closeout_commit_message_must_identify_declared_pr(self) -> None:
+        merge = "5f90765b96140f0cb3103f3ac5e04a79f82ab604"
+        data = {
+            "governance_effective_milestone": 32,
+            "milestones": [
+                {
+                    "number": 32,
+                    "status": "Complete",
+                    "merge_commits": [merge],
+                    "closeout_pr": 60,
+                    "closeout_merge_commit": merge,
+                }
+            ],
+        }
+        errors = validate_git_history(data, ROOT)
+        self.assertTrue(any("not associated with closeout PR #60" in error for error in errors), errors)
+        data["milestones"][0]["closeout_pr"] = 40
+        self.assertFalse(any("not associated" in error for error in validate_git_history(data, ROOT)))
+
+    def test_github_merge_and_squash_messages_associate_pr_number(self) -> None:
+        self.assertTrue(commit_message_matches_pr("Close milestone (#60)", 60))
+        self.assertTrue(commit_message_matches_pr("Merge pull request #60 from governance/closeout", 60))
+        self.assertFalse(commit_message_matches_pr("Close milestone (#59)", 60))
+
+    def test_sequence_change_requires_revision_bump_and_decision(self) -> None:
+        previous = self.data()
+        current = copy.deepcopy(previous)
+        current["milestones"].append(
+            {
+                "number": 33,
+                "sequence_position": 33,
+                "predecessor": 32,
+                "status": "Planned",
+                "replacement_milestone": None,
+            }
+        )
+        errors = validate_sequence_transition(current, previous)
+        self.assertTrue(any("sequence_revision" in error for error in errors), errors)
+        self.assertTrue(any("sequence_decisions" in error for error in errors), errors)
+
+        current["sequence_revision"] = previous["sequence_revision"] + 1
+        current["sequence_decisions"] = ["Issue #999 explicitly approved the sequence addition."]
+        self.assertEqual([], validate_sequence_transition(current, previous))
 
     def test_full_repository_registry_validation_passes(self) -> None:
         validated = validate_registry(REGISTRY, ROOT)
@@ -259,12 +386,12 @@ class MilestoneGovernanceTests(unittest.TestCase):
         self.assertNotEqual(0, selected.returncode)
         self.assertIn("Milestone 20 is not Active", selected.stderr)
 
-    def test_hosted_acceptance_fetches_history_and_watches_registry(self) -> None:
+    def test_hosted_acceptance_fetches_history_and_runs_for_every_pr(self) -> None:
         workflow = json.loads((ROOT / ".github" / "workflows" / "kernel-acceptance.yml").read_text(encoding="utf-8"))
         steps = workflow["jobs"]["ocp-acceptance"]["steps"]
         checkout = next(step for step in steps if step["name"] == "Check out repository")
         self.assertEqual(0, checkout["with"]["fetch-depth"])
-        self.assertIn("docs/MILESTONE_STATE.json", workflow["on"]["pull_request"]["paths"])
+        self.assertNotIn("paths", workflow["on"]["pull_request"])
 
 
 if __name__ == "__main__":

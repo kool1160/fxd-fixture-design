@@ -1,7 +1,8 @@
 ## Classification
 
 - [ ] Product milestone implementation
-- [ ] Separate product milestone closeout
+- [ ] Product milestone closeout evidence
+- [ ] Product milestone state finalization
 - [ ] Maintenance
 - [ ] Governance/documentation only
 
@@ -38,6 +39,8 @@ Record exact commands, totals, failures, errors, skips, hosted results, and rema
 
 ## Closeout boundary
 
-For implementation PRs: the milestone remains Active after this PR merges; a separate closeout PR is required.
+For implementation PRs: the milestone remains Active after this PR merges; a separate closeout evidence PR and later state-finalization PR are required.
 
-For closeout PRs: link all implementation merges, evidence profiles, explicit human approvals, unresolved risks, and the governing issue before changing the registry. Record a closeout PR number distinct from every implementation PR, its merge commit, and the explicit closeout decision.
+For closeout evidence PRs: link all implementation merges, record reviewable results for every selected evidence profile, explicit human approvals, unresolved risks, and the governing issue. Record the known closeout PR number but keep the milestone Active because this PR cannot know its future merge SHA.
+
+For state-finalization PRs: after the separate closeout evidence PR merges, record its locally present PR-number-bearing merge commit, the explicit closeout decision, `Complete` status, and the approved next-lane disposition. State finalization must remain distinct from implementation and closeout evidence.

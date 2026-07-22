@@ -55,4 +55,4 @@ Prepare all safe code, tests, documents, and exact next steps up to a protected 
 
 ## Completion
 
-Leave the repository in a clean, reviewable state. An implementation PR does not complete the milestone; preserve the separate closeout-PR boundary. Your final response must conform to `.github/codex/schemas/planning-handoff.schema.json`.
+Leave the repository in a clean, reviewable state. An implementation PR does not complete the milestone; preserve the separate closeout evidence PR and post-merge state-finalization PR boundary. Your final response must conform to `.github/codex/schemas/planning-handoff.schema.json`.
