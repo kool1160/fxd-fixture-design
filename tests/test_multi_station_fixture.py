@@ -635,6 +635,37 @@ class MultiStationFixtureTests(unittest.TestCase):
                 replace(layout.requirements, manufacturing_to_source=tuple(bad_inverse)),
             )
 
+    def test_validation_rejects_access_evidence_stale_for_current_geometry(self):
+        plan = self.plan(count=4)
+        shim = next(item for item in plan.components if item.role == BuildComponentRole.SHIM_PACK)
+        changed_shim = replace(shim, bounds=Aabb(
+            shim.bounds.minimum,
+            Vec3(shim.bounds.maximum.x + 1.0, shim.bounds.maximum.y, shim.bounds.maximum.z),
+        ))
+        changed_components = tuple(
+            changed_shim if item.identity == shim.identity else item
+            for item in plan.components
+        )
+        validation = validate_fixture_build_plan(
+            self.product, replace(plan, components=changed_components),
+        )
+        stale = tuple(item for item in validation.findings
+                      if "access evidence is missing or stale" in item.message)
+        self.assertEqual(len(stale), len(plan.multi_station_layout.stations))
+        self.assertTrue(validation.review_blocked)
+
+        station = plan.multi_station_layout.stations[0]
+        missing_digest_layout = replace(
+            plan.multi_station_layout,
+            stations=(replace(station, access_evidence_digest=""),)
+            + plan.multi_station_layout.stations[1:],
+        )
+        missing_validation = validate_fixture_build_plan(
+            self.product, replace(plan, multi_station_layout=missing_digest_layout),
+        )
+        self.assertTrue(any("access evidence is missing or stale" in item.message
+                            for item in missing_validation.findings))
+
     def test_candidate_weld_face_is_unconfirmed_until_engineer_records_required_intent(self):
         document = load_step_for_workbench(self.source)
         component = self.product.components[0]

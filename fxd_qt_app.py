@@ -4727,11 +4727,18 @@ class FxdWorkbenchWindow(QMainWindow):
                     ),
                 })
             layout = self.project.fixture_build.multi_station_layout
-            if layout is not None and self.document is not None and "product_instances" not in self.project.hidden_layers:
+            if layout is not None and self.document is not None:
+                hidden_layers = self.project.hidden_layers
                 for component in self.project.fixture_build.components:
                     if component.geometry_authority.value != "purchased_component_geometry":
                         continue
                     is_open = component.role.value == "vendor_neutral_clamp_open_envelope"
+                    if "clamps" in hidden_layers:
+                        continue
+                    if is_open and "access_envelopes" in hidden_layers:
+                        continue
+                    if not is_open and "purchased_tooling" in hidden_layers:
+                        continue
                     items.append({
                         "identity": "tooling-review:" + component.identity,
                         "kind": "clamp_open_envelope" if is_open else "purchased_tooling_closed",
@@ -4744,71 +4751,73 @@ class FxdWorkbenchWindow(QMainWindow):
                         "semantic": "clamp_open_sweep" if is_open else "provisional_purchased_tooling_closed",
                         "evidence": "; ".join(component.evidence),
                     })
-                source_vertices = tuple((mesh.vertices_mm, mesh.triangles) for mesh in self.document.meshes)
-                for station in layout.stations:
-                    vertices = []
-                    triangles = []
-                    transform = station.source_to_station_manufacturing
-                    for mesh_vertices, mesh_triangles in source_vertices:
-                        offset = len(vertices)
-                        if transform:
-                            vertices.extend([[
-                                transform[0] * point[0] + transform[1] * point[1]
-                                + transform[2] * point[2] + transform[3],
-                                transform[4] * point[0] + transform[5] * point[1]
-                                + transform[6] * point[2] + transform[7],
-                                transform[8] * point[0] + transform[9] * point[1]
-                                + transform[10] * point[2] + transform[11],
-                            ] for point in mesh_vertices])
-                        else:
-                            vertices.extend([[point[0] + station.translation_mm.x,
-                                              point[1] + station.translation_mm.y,
-                                              point[2] + station.translation_mm.z]
-                                             for point in mesh_vertices])
-                        triangles.extend([[offset + index for index in triangle] for triangle in mesh_triangles])
-                    items.append({
-                        "identity": "product-review:" + station.identity,
-                        "kind": "product_review_mesh", "vertices": vertices, "triangles": triangles,
-                        "status": "valid", "color": [0.30, 0.61, 0.96],
-                        "representation": "surface", "opacity": 0.58,
-                        "semantic": "immutable_source_product_instance",
-                        "evidence": "immutable source-product review instance with deterministic station transform",
-                    })
-                for station in layout.stations:
-                    center = [
-                        (station.product_bounds.minimum.x + station.product_bounds.maximum.x) * 0.5,
-                        (station.product_bounds.minimum.y + station.product_bounds.maximum.y) * 0.5,
-                        station.product_bounds.maximum.z + 26.0,
-                    ]
-                    for label, token, direction, color in (
-                        ("load", station.loading_direction, station.loading_direction_source,
-                         [1.0, 0.48, 0.0]),
-                        ("unload", station.unloading_direction, station.unloading_direction_source,
-                         [0.72, 0.54, 0.97]),
-                    ):
-                        source_to_manufacturing = layout.requirements.source_to_manufacturing
-                        if direction is None or len(source_to_manufacturing) != 16:
-                            continue
-                        rendered_direction = [
-                            source_to_manufacturing[0] * direction.x
-                            + source_to_manufacturing[1] * direction.y
-                            + source_to_manufacturing[2] * direction.z,
-                            source_to_manufacturing[4] * direction.x
-                            + source_to_manufacturing[5] * direction.y
-                            + source_to_manufacturing[6] * direction.z,
-                            source_to_manufacturing[8] * direction.x
-                            + source_to_manufacturing[9] * direction.y
-                            + source_to_manufacturing[10] * direction.z,
-                        ]
+                if "product_instances" not in hidden_layers:
+                    source_vertices = tuple((mesh.vertices_mm, mesh.triangles) for mesh in self.document.meshes)
+                    for station in layout.stations:
+                        vertices = []
+                        triangles = []
+                        transform = station.source_to_station_manufacturing
+                        for mesh_vertices, mesh_triangles in source_vertices:
+                            offset = len(vertices)
+                            if transform:
+                                vertices.extend([[
+                                    transform[0] * point[0] + transform[1] * point[1]
+                                    + transform[2] * point[2] + transform[3],
+                                    transform[4] * point[0] + transform[5] * point[1]
+                                    + transform[6] * point[2] + transform[7],
+                                    transform[8] * point[0] + transform[9] * point[1]
+                                    + transform[10] * point[2] + transform[11],
+                                ] for point in mesh_vertices])
+                            else:
+                                vertices.extend([[point[0] + station.translation_mm.x,
+                                                  point[1] + station.translation_mm.y,
+                                                  point[2] + station.translation_mm.z]
+                                                 for point in mesh_vertices])
+                            triangles.extend([[offset + index for index in triangle] for triangle in mesh_triangles])
                         items.append({
-                            "identity": f"m32-{label}:{station.identity}",
-                            "kind": "orientation_arrow", "origin": center,
-                            "direction": rendered_direction,
-                            "length": max(28.0, layout.requirements.hand_clearance_mm * 0.72),
-                            "status": "provisional", "color": color, "opacity": 0.98,
-                            "representation": "surface", "semantic": f"{label}_direction",
-                            "evidence": f"{label} direction {token}; source evidence transformed into the manufacturing review frame",
+                            "identity": "product-review:" + station.identity,
+                            "kind": "product_review_mesh", "vertices": vertices, "triangles": triangles,
+                            "status": "valid", "color": [0.30, 0.61, 0.96],
+                            "representation": "surface", "opacity": 0.58,
+                            "semantic": "immutable_source_product_instance",
+                            "evidence": "immutable source-product review instance with deterministic station transform",
                         })
+                if "access_envelopes" not in hidden_layers and "access" not in hidden_layers:
+                    for station in layout.stations:
+                        center = [
+                            (station.product_bounds.minimum.x + station.product_bounds.maximum.x) * 0.5,
+                            (station.product_bounds.minimum.y + station.product_bounds.maximum.y) * 0.5,
+                            station.product_bounds.maximum.z + 26.0,
+                        ]
+                        for label, token, direction, color in (
+                            ("load", station.loading_direction, station.loading_direction_source,
+                             [1.0, 0.48, 0.0]),
+                            ("unload", station.unloading_direction, station.unloading_direction_source,
+                             [0.72, 0.54, 0.97]),
+                        ):
+                            source_to_manufacturing = layout.requirements.source_to_manufacturing
+                            if direction is None or len(source_to_manufacturing) != 16:
+                                continue
+                            rendered_direction = [
+                                source_to_manufacturing[0] * direction.x
+                                + source_to_manufacturing[1] * direction.y
+                                + source_to_manufacturing[2] * direction.z,
+                                source_to_manufacturing[4] * direction.x
+                                + source_to_manufacturing[5] * direction.y
+                                + source_to_manufacturing[6] * direction.z,
+                                source_to_manufacturing[8] * direction.x
+                                + source_to_manufacturing[9] * direction.y
+                                + source_to_manufacturing[10] * direction.z,
+                            ]
+                            items.append({
+                                "identity": f"m32-{label}:{station.identity}",
+                                "kind": "orientation_arrow", "origin": center,
+                                "direction": rendered_direction,
+                                "length": max(28.0, layout.requirements.hand_clearance_mm * 0.72),
+                                "status": "provisional", "color": color, "opacity": 0.98,
+                                "representation": "surface", "semantic": f"{label}_direction",
+                                "evidence": f"{label} direction {token}; source evidence transformed into the manufacturing review frame",
+                            })
         return items + orientation_items
 
     def _orientation_review_items(self) -> list[dict[str, object]]:

@@ -374,6 +374,26 @@ class QtWorkbenchTests(unittest.TestCase):
         self.assertNotEqual(tuple(load_arrow["direction"]), tuple(source_direction.__dict__.values()))
         for actual, expected in zip(load_arrow["direction"], expected_direction):
             self.assertAlmostEqual(actual, expected, places=7)
+        visible_project = self.window.project
+        expectations = {
+            "product_instances": (0, 5, 5, 10),
+            "purchased_tooling": (5, 0, 5, 10),
+            "access_envelopes": (5, 5, 0, 0),
+            "clamps": (5, 0, 0, 10),
+        }
+        for layer, expected_counts in expectations.items():
+            with self.subTest(hidden_layer=layer):
+                self.window.project = visible_project.toggle_layer(layer)
+                filtered = self.window._review_geometry_items()
+                counts = (
+                    sum(item["kind"] == "product_review_mesh" for item in filtered),
+                    sum(item["kind"] == "purchased_tooling_closed" for item in filtered),
+                    sum(item["kind"] == "clamp_open_envelope" for item in filtered),
+                    sum(item.get("semantic") in {"load_direction", "unload_direction"}
+                        for item in filtered),
+                )
+                self.assertEqual(counts, expected_counts)
+        self.window.project = visible_project
 
     def test_editing_accepted_station_count_creates_new_intent(self):
         self.window._replace_project(self._project())

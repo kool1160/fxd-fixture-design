@@ -612,6 +612,7 @@ class StationTransform:
     operator_direction_source: Vec3 | None = None
     weld_access_results: tuple[WeldJointAccessResult, ...] = ()
     source_to_station_manufacturing: tuple[float, ...] = ()
+    access_evidence_digest: str = ""
 
     def __post_init__(self) -> None:
         if not self.identity.strip() or self.station_index < 1 or len(self.product_source_sha256) != 64:
@@ -622,6 +623,10 @@ class StationTransform:
                 len(self.source_to_station_manufacturing) != 16
                 or not all(math.isfinite(value) for value in self.source_to_station_manufacturing)):
             raise FixtureBuildError("station source-to-manufacturing transform must contain 16 finite values")
+        if self.access_evidence_digest and (
+                len(self.access_evidence_digest) != 64
+                or any(value not in "0123456789abcdef" for value in self.access_evidence_digest)):
+            raise FixtureBuildError("station access evidence digest must be a lowercase SHA-256")
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -649,6 +654,7 @@ class StationTransform:
             "operator_direction_source": self.operator_direction_source.__dict__ if self.operator_direction_source else None,
             "weld_access_results": [item.to_dict() for item in self.weld_access_results],
             "source_to_station_manufacturing": list(self.source_to_station_manufacturing),
+            "access_evidence_digest": self.access_evidence_digest,
         }
 
     @classmethod
@@ -675,6 +681,7 @@ class StationTransform:
             Vec3(**data["operator_direction_source"]) if data.get("operator_direction_source") else None,
             tuple(WeldJointAccessResult.from_dict(item) for item in data.get("weld_access_results", ())),
             tuple(float(value) for value in data.get("source_to_station_manufacturing", ())),
+            str(data.get("access_evidence_digest", "")),
         )
 
 
@@ -1600,6 +1607,36 @@ def _clamp_review_bounds(product: Aabb, operator_outward: Vec3,
     return _cardinal_clamp_review_bounds(product, outward)
 
 
+def _station_access_evidence_digest(
+        station: StationTransform,
+        components: tuple[FixtureBuildComponent, ...],
+        stations: tuple[StationTransform, ...],
+        requirements: FixtureBuildRequirements,
+        multi_station: MultiStationRequirements) -> str:
+    station_evidence = station.to_dict()
+    station_evidence.pop("access_evidence_digest", None)
+    placement_evidence = tuple({
+        "identity": item.identity,
+        "translation_mm": item.translation_mm.__dict__,
+        "product_bounds": {
+            "minimum": item.product_bounds.minimum.__dict__,
+            "maximum": item.product_bounds.maximum.__dict__,
+        },
+        "source_to_station_manufacturing": list(item.source_to_station_manufacturing),
+    } for item in sorted(stations, key=lambda value: value.identity))
+    payload = {
+        "schema": "fxd-m32-access-evidence-v1",
+        "station": station_evidence,
+        "station_placements": placement_evidence,
+        "components": [item.to_dict() for item in sorted(components, key=lambda value: value.identity)],
+        "fixture_requirements": requirements.to_dict(),
+        "multi_station_requirements": multi_station.to_dict(),
+    }
+    return hashlib.sha256(json.dumps(
+        payload, sort_keys=True, separators=(",", ":"),
+    ).encode("utf-8")).hexdigest()
+
+
 @dataclass(frozen=True)
 class MultiStationFitProposal:
     """Deterministic, explicitly accepted response to a length-constrained request."""
@@ -2035,7 +2072,7 @@ def generate_multi_station_fixture_build_plan(
                     ),
                 ))
             weld_clear = all(item.clear for item in weld_results)
-        evaluated_stations.append(replace(
+        evaluated_station = replace(
             station,
             clamp_tip_reaches_surface=closed.intersects(station.product_bounds),
             open_clamp_envelope_clear=open_clear,
@@ -2065,6 +2102,13 @@ def generate_multi_station_fixture_build_plan(
                 "unloading_sweep_vs_rail_station_plate_locator_stop_open_clamp_brace=" + ("clear" if unloading_clear else "blocked"),
                 "open_clamp_sweep_vs_product=" + ("clear" if open_clear else "blocked"),
                 "weld_access=" + ("clear" if weld_clear is True else "blocked" if weld_clear is False else "not_evaluated"),
+            ),
+        )
+        evaluated_stations.append(replace(
+            evaluated_station,
+            access_evidence_digest=_station_access_evidence_digest(
+                evaluated_station, tuple(components), layout.stations,
+                requirements, multi_station,
             ),
         ))
     layout = replace(layout, stations=tuple(evaluated_stations), rationale=layout.rationale + (
@@ -2180,6 +2224,16 @@ def _multi_station_findings(plan: FixtureBuildPlan) -> tuple[FixtureBuildFinding
             findings.append(_finding("FXD-M32-STA", "error", "station is missing required support, locating, stop, clamp-mount, or clamp geometry", components=(station.identity,), disposition="review_blocker"))
         if role_counts[BuildComponentRole.SUPPORT_PAD] > 3:
             findings.append(_finding("FXD-DAT-001", "error", "station uses more than three fixed primary supports", components=(station.identity,), disposition="review_blocker"))
+        expected_access_digest = _station_access_evidence_digest(
+            station, plan.components, layout.stations, plan.requirements, req,
+        )
+        if station.access_evidence_digest != expected_access_digest:
+            findings.append(_finding(
+                "FXD-M32-ACC", "error",
+                "station access evidence is missing or stale for the current fixture geometry and station transforms",
+                components=(station.identity,), evidence=station.access_evidence,
+                disposition="review_blocker",
+            ))
         access_checks = (
             (station.clamp_tip_reaches_surface, "FXD-M32-CLP", "clamp-tip reach"),
             (station.open_clamp_envelope_clear, "FXD-M32-CLP", "open-clamp loading and release envelope"),
