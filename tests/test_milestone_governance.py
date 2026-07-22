@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import json
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -16,6 +17,7 @@ from scripts.validate_milestones import (
     validate_git_history,
     validate_registry,
     validate_registry_data,
+    validate_sequence_history,
     validate_sequence_transition,
 )
 
@@ -49,6 +51,8 @@ class MilestoneGovernanceTests(unittest.TestCase):
         evidence_at_closeout: bool = True,
         state_finalization_pr: int = 61,
         create_finalization_ref: bool = True,
+        finalization_subject: str = "Finalize Milestone 32 governance state",
+        simulate_squash_merge: bool = False,
     ) -> dict:
         def git(*args: str) -> str:
             result = subprocess.run(
@@ -139,10 +143,52 @@ class MilestoneGovernanceTests(unittest.TestCase):
         ]
         registry.write_text(json.dumps(final_data, indent=2) + "\n", encoding="utf-8")
         git("add", "docs/MILESTONE_STATE.json")
-        git("commit", "--quiet", "-m", "Finalize Milestone 32 governance state")
+        git("commit", "--quiet", "-m", finalization_subject)
         if create_finalization_ref:
             git("update-ref", f"refs/pull/{state_finalization_pr}/head", "HEAD")
+        if simulate_squash_merge:
+            git("checkout", "--quiet", "--detach", closeout_commit)
+            registry.write_text(json.dumps(final_data, indent=2) + "\n", encoding="utf-8")
+            git("add", "docs/MILESTONE_STATE.json")
+            git("commit", "--quiet", "-m", f"Finalize Milestone 32 (#{state_finalization_pr})")
         return final_data
+
+    def build_selector_repository(self, root: Path, data: dict | None = None) -> dict:
+        def git(*args: str) -> str:
+            result = subprocess.run(
+                ["git", *args],
+                cwd=root,
+                text=True,
+                capture_output=True,
+                check=True,
+            )
+            return result.stdout.strip()
+
+        git("init", "--quiet")
+        git("config", "user.name", "FXD Selector Test")
+        git("config", "user.email", "selector-test@example.invalid")
+        (root / "seed.txt").write_text("selector history seed\n", encoding="utf-8")
+        git("add", "seed.txt")
+        git("commit", "--quiet", "-m", "Selector history seed")
+        seed = git("rev-parse", "HEAD")
+
+        registry_data = self.data() if data is None else copy.deepcopy(data)
+        registry_data["derived_documents"] = []
+        registry_data["historical_snapshot_documents"] = []
+        for milestone in registry_data["milestones"]:
+            if milestone["number"] < 32:
+                milestone["merge_commits"] = [seed]
+
+        scripts = root / "scripts"
+        scripts.mkdir()
+        shutil.copy2(ROOT / "scripts" / "fxd-backlog.mjs", scripts / "fxd-backlog.mjs")
+        shutil.copy2(ROOT / "scripts" / "validate_milestones.py", scripts / "validate_milestones.py")
+        registry = root / "docs" / "MILESTONE_STATE.json"
+        registry.parent.mkdir()
+        registry.write_text(json.dumps(registry_data, indent=2) + "\n", encoding="utf-8")
+        git("add", "scripts", "docs/MILESTONE_STATE.json")
+        git("commit", "--quiet", "-m", "Add selector governance state")
+        return registry_data
 
     def commit_registry(self, root: Path, data: dict, *, subject: str, pull_request: int | None = None) -> None:
         registry = root / "docs" / "MILESTONE_STATE.json"
@@ -526,6 +572,48 @@ class MilestoneGovernanceTests(unittest.TestCase):
             errors = validate_git_history(data, root, root / "docs" / "MILESTONE_STATE.json")
         self.assertTrue(any("no matching local pull-head ref" in error for error in errors), errors)
 
+    def test_fabricated_finalization_pr_commit_subject_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            data = self.build_post_governance_history(
+                root,
+                create_finalization_ref=False,
+                finalization_subject="Finalize Milestone 32 (#61)",
+            )
+            errors = validate_git_history(data, root, root / "docs" / "MILESTONE_STATE.json")
+        self.assertTrue(any("no matching local pull-head ref" in error for error in errors), errors)
+
+    def test_state_finalization_pull_ref_registry_must_match(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            data = self.build_post_governance_history(root)
+            final_head = subprocess.run(
+                ["git", "rev-parse", "HEAD"], cwd=root, text=True, capture_output=True, check=True
+            ).stdout.strip()
+            closeout = subprocess.run(
+                ["git", "rev-parse", "HEAD^"], cwd=root, text=True, capture_output=True, check=True
+            ).stdout.strip()
+            subprocess.run(["git", "checkout", "--quiet", "--detach", closeout], cwd=root, check=True)
+            subprocess.run(
+                ["git", "commit", "--quiet", "--allow-empty", "-m", "Stale finalization candidate"],
+                cwd=root,
+                check=True,
+            )
+            stale = subprocess.run(
+                ["git", "rev-parse", "HEAD"], cwd=root, text=True, capture_output=True, check=True
+            ).stdout.strip()
+            subprocess.run(["git", "update-ref", "refs/pull/61/head", stale], cwd=root, check=True)
+            subprocess.run(["git", "checkout", "--quiet", "--detach", final_head], cwd=root, check=True)
+            errors = validate_git_history(data, root, root / "docs" / "MILESTONE_STATE.json")
+        self.assertTrue(any("no matching local pull-head ref" in error for error in errors), errors)
+
+    def test_state_finalization_pull_ref_is_durable_after_squash_merge(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            data = self.build_post_governance_history(root, simulate_squash_merge=True)
+            errors = validate_git_history(data, root, root / "docs" / "MILESTONE_STATE.json")
+        self.assertEqual([], errors)
+
     def test_completion_requires_distinct_state_finalization_pr(self) -> None:
         for reused_pr in (54, 60):
             with self.subTest(reused_pr=reused_pr), tempfile.TemporaryDirectory() as temp:
@@ -636,6 +724,106 @@ class MilestoneGovernanceTests(unittest.TestCase):
         current["sequence_decisions"] = ["Issue #999 explicitly approved the sequence addition."]
         self.assertEqual([], validate_sequence_transition(current, previous))
 
+    def test_reopening_complete_milestone_requires_sequence_revision_and_new_decision(self) -> None:
+        previous = self.data()
+        current = copy.deepcopy(previous)
+        self.milestone(current, 20)["status"] = "Planned"
+
+        errors = validate_sequence_transition(current, previous)
+        self.assertTrue(any("sequence_revision" in error for error in errors), errors)
+
+        current["sequence_revision"] = previous["sequence_revision"] + 1
+        errors = validate_sequence_transition(current, previous)
+        self.assertTrue(any("newly added approving sequence decision" in error for error in errors), errors)
+
+        previous["sequence_revision"] = 2
+        previous["sequence_decisions"] = ["Issue #900 approved an earlier sequence change."]
+        current = copy.deepcopy(current)
+        current["sequence_revision"] = 3
+        current["sequence_decisions"] = list(previous["sequence_decisions"])
+        errors = validate_sequence_transition(current, previous)
+        self.assertTrue(any("newly added approving sequence decision" in error for error in errors), errors)
+
+        current["sequence_decisions"] = [
+            *previous["sequence_decisions"],
+            "Issue #999 approved a generic sequence change.",
+        ]
+        errors = validate_sequence_transition(current, previous)
+        self.assertTrue(any("identifying the milestone and authority" in error for error in errors), errors)
+
+    def test_approved_completed_milestone_reopening_is_accepted(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            previous = self.build_post_governance_history(root)
+            current = copy.deepcopy(previous)
+            self.milestone(current, 32)["status"] = "Planned"
+            current["sequence_revision"] = previous["sequence_revision"] + 1
+            current["sequence_decisions"] = [
+                *previous["sequence_decisions"],
+                "Issue #999 approved reopening Milestone 32 for governed planning.",
+            ]
+            registry = root / "docs" / "MILESTONE_STATE.json"
+            registry.write_text(json.dumps(current, indent=2) + "\n", encoding="utf-8")
+            subprocess.run(["git", "add", "docs/MILESTONE_STATE.json"], cwd=root, check=True)
+            subprocess.run(
+                ["git", "commit", "--quiet", "-m", "Approve governed Milestone 32 reopening"],
+                cwd=root,
+                check=True,
+            )
+            self.assertEqual([], validate_sequence_transition(current, previous))
+            self.assertEqual([], validate_registry_data(current))
+            self.assertEqual([], validate_sequence_history(current, registry, root))
+
+            invalid_predecessor = copy.deepcopy(current)
+            self.milestone(invalid_predecessor, 32)["predecessor"] = 30
+            errors = [
+                *validate_sequence_transition(invalid_predecessor, previous),
+                *validate_registry_data(invalid_predecessor),
+            ]
+            self.assertTrue(any("predecessor must be 31" in error for error in errors), errors)
+
+    def test_active_milestone_cannot_predeclare_retained_finalization_evidence(self) -> None:
+        previous = self.data()
+        current = copy.deepcopy(previous)
+        milestone = self.milestone(current, 32)
+        milestone.update(
+            {
+                "state_finalization_pr": 61,
+                "closeout_pr": 60,
+                "closeout_merge_commit": "a" * 40,
+                "merge_commits": ["a" * 40],
+                "completion_evidence": "Fabricated retained evidence.",
+                "evidence_results": {profile: ["Fabricated."] for profile in milestone["evidence_profiles"]},
+                "decisions": [f"Closeout PR #60 merged as {'a' * 40}."],
+            }
+        )
+        errors = validate_sequence_transition(current, previous)
+        self.assertTrue(any("only when reopening a previously closed" in error for error in errors), errors)
+
+    def test_reopening_preserves_completion_and_closeout_history(self) -> None:
+        previous = self.data()
+        current = copy.deepcopy(previous)
+        milestone = self.milestone(current, 20)
+        milestone["status"] = "Planned"
+        milestone["completion_evidence"] = None
+        current["sequence_revision"] = previous["sequence_revision"] + 1
+        current["sequence_decisions"] = [
+            "Issue #999 approved reopening Milestone 20 for governed planning."
+        ]
+        errors = validate_sequence_transition(current, previous)
+        self.assertTrue(any("preserve prior completion and closeout history field completion_evidence" in error for error in errors), errors)
+
+    def test_all_closed_dispositions_require_governance_when_reopened(self) -> None:
+        for closed in ("Complete", "Superseded", "Cancelled"):
+            for reopened in ("Planned", "Active", "Blocked", "Waiting", "Paused"):
+                with self.subTest(closed=closed, reopened=reopened):
+                    previous = self.data()
+                    current = copy.deepcopy(previous)
+                    self.milestone(previous, 20)["status"] = closed
+                    self.milestone(current, 20)["status"] = reopened
+                    errors = validate_sequence_transition(current, previous)
+                    self.assertTrue(any("sequence_revision" in error for error in errors), errors)
+
     def test_paused_transition_requires_sequence_revision(self) -> None:
         previous = self.data()
         current = copy.deepcopy(previous)
@@ -721,13 +909,115 @@ class MilestoneGovernanceTests(unittest.TestCase):
         self.assertIsNone(candidate["product_milestone"])
 
     def test_registry_selector_selects_only_active_m32(self) -> None:
-        selected = subprocess.run(
-            ["node", "scripts/fxd-backlog.mjs", "select"],
-            cwd=ROOT,
-            text=True,
-            capture_output=True,
-            check=False,
+        with tempfile.TemporaryDirectory() as temp:
+            context = Path(temp) / "selection.md"
+            selected = subprocess.run(
+                ["node", "scripts/fxd-backlog.mjs", "select", "--context", str(context)],
+                cwd=ROOT,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            selected_context = context.read_text(encoding="utf-8")
+        self.assertEqual(0, selected.returncode, selected.stderr)
+        self.assertIn("Selected Active Milestone 32", selected.stdout)
+        self.assertIn("Issue #57", selected.stdout)
+        self.assertIn("Authoritative issue: #57", selected_context)
+        self.assertIn("Implementation PRs: #54", selected_context)
+
+    def test_registry_selector_rejects_active_milestone_with_blocked_predecessor(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            data = self.data()
+            self.milestone(data, 31)["status"] = "Blocked"
+            self.build_selector_repository(root, data)
+            selected = subprocess.run(
+                ["node", "scripts/fxd-backlog.mjs", "select"],
+                cwd=root,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+        self.assertNotEqual(0, selected.returncode)
+        self.assertIn("Milestone governance validation failed", selected.stderr)
+        self.assertNotIn("Selected Active Milestone", selected.stdout)
+
+    def test_registry_selector_rejects_waiting_and_paused_predecessors(self) -> None:
+        for status in ("Waiting", "Paused"):
+            with self.subTest(status=status), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp)
+                data = self.data()
+                self.milestone(data, 31)["status"] = status
+                self.build_selector_repository(root, data)
+                selected = subprocess.run(
+                    ["node", "scripts/fxd-backlog.mjs", "select"],
+                    cwd=root,
+                    text=True,
+                    capture_output=True,
+                    check=False,
+                )
+            self.assertNotEqual(0, selected.returncode)
+            self.assertIn("Milestone governance validation failed", selected.stderr)
+
+    def test_registry_selector_rejects_malformed_predecessor_and_sequence(self) -> None:
+        mutations = (
+            ("predecessor", lambda data: self.milestone(data, 32).__setitem__("predecessor", 30)),
+            ("sequence", lambda data: self.milestone(data, 32).__setitem__("sequence_position", 33)),
+            ("projection", lambda data: data["product_lane"].__setitem__("active_milestone", 31)),
         )
+        for label, mutate in mutations:
+            with self.subTest(label=label), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp)
+                data = self.data()
+                mutate(data)
+                self.build_selector_repository(root, data)
+                selected = subprocess.run(
+                    ["node", "scripts/fxd-backlog.mjs", "select"],
+                    cwd=root,
+                    text=True,
+                    capture_output=True,
+                    check=False,
+                )
+            self.assertNotEqual(0, selected.returncode)
+            self.assertIn("Milestone governance validation failed", selected.stderr)
+
+    def test_registry_selector_returns_governed_no_selection_for_paused_lane(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            data = self.data()
+            self.milestone(data, 32)["status"] = "Planned"
+            data["product_lane"].update(
+                {
+                    "paused": True,
+                    "active_milestone": None,
+                    "pause_reason": "Approved selector pause.",
+                    "decision": "Issue #999 approved the selector pause.",
+                }
+            )
+            self.build_selector_repository(root, data)
+            selected = subprocess.run(
+                ["node", "scripts/fxd-backlog.mjs", "select"],
+                cwd=root,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+        self.assertNotEqual(0, selected.returncode)
+        self.assertIn("product lane is formally paused", selected.stderr)
+        self.assertNotIn("Selected Active Milestone", selected.stdout)
+
+    def test_registry_selector_does_not_consult_backlog(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            self.build_selector_repository(root)
+            self.assertFalse((root / "BACKLOG.md").exists())
+            selected = subprocess.run(
+                ["node", "scripts/fxd-backlog.mjs", "select"],
+                cwd=root,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
         self.assertEqual(0, selected.returncode, selected.stderr)
         self.assertIn("Selected Active Milestone 32", selected.stdout)
 
@@ -750,7 +1040,19 @@ class MilestoneGovernanceTests(unittest.TestCase):
         pull_evidence = next(step for step in steps if step["name"] == "Fetch pull-request head evidence")
         self.assertIn("refs/pull/", pull_evidence["run"])
         self.assertIn("refs/remotes/pull/", pull_evidence["run"])
+        declared_evidence = next(
+            step for step in steps if step["name"] == "Fetch declared state-finalization pull evidence"
+        )
+        self.assertIn("state_finalization_pr", declared_evidence["run"])
+        self.assertIn("refs/pull/${pull_request}/head", declared_evidence["run"])
         self.assertNotIn("paths", workflow["on"]["pull_request"])
+
+    def test_foreman_validates_governance_before_selection(self) -> None:
+        workflow = (ROOT / ".github" / "workflows" / "fxd-foreman.yml").read_text(encoding="utf-8")
+        validation = workflow.index("name: Validate authoritative milestone governance")
+        selection = workflow.index("name: Select milestone")
+        self.assertLess(validation, selection)
+        self.assertIn("python scripts/validate_milestones.py", workflow[validation:selection])
 
 
 if __name__ == "__main__":

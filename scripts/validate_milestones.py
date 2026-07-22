@@ -24,6 +24,23 @@ LEGAL_STATUSES = {
     "Cancelled",
 }
 BLOCKING_SEQUENCE_STATUSES = {"Blocked", "Waiting", "Paused"}
+CLOSED_SEQUENCE_STATUSES = {"Complete", "Superseded", "Cancelled"}
+REOPENED_SEQUENCE_STATUSES = {"Planned", "Active", "Blocked", "Waiting", "Paused"}
+REOPENING_HISTORY_FIELDS = (
+    "implementation_prs",
+    "merge_commits",
+    "evidence_profiles",
+    "evidence_results",
+    "completion_evidence",
+    "closeout_pr",
+    "closeout_merge_commit",
+    "state_finalization_pr",
+    "decisions",
+    "replacement_milestone",
+    "legacy",
+    "legacy_reconciliation",
+    "historical_gaps",
+)
 AUTHORITY_MARKER = "<!-- FXD-MILESTONE-STATE: docs/MILESTONE_STATE.json -->"
 HISTORICAL_MARKER = "<!-- FXD-HISTORICAL-MILESTONE-SNAPSHOT -->"
 SHA_PATTERN = re.compile(r"^[0-9a-f]{40}$")
@@ -82,6 +99,39 @@ def _nonempty_strings(value: Any) -> bool:
     return isinstance(value, list) and bool(value) and all(isinstance(item, str) and item.strip() for item in value)
 
 
+def _retains_completed_state_evidence(milestone: dict[str, Any]) -> bool:
+    """Recognize a non-Complete record that preserves its earlier completion history."""
+
+    closeout_pr = milestone.get("closeout_pr")
+    closeout_commit = milestone.get("closeout_merge_commit")
+    merges = milestone.get("merge_commits")
+    selected_profiles = milestone.get("evidence_profiles")
+    evidence_results = milestone.get("evidence_results")
+    decisions = milestone.get("decisions")
+    return (
+        _positive_int(milestone.get("state_finalization_pr"))
+        and _positive_int(closeout_pr)
+        and isinstance(closeout_commit, str)
+        and bool(SHA_PATTERN.fullmatch(closeout_commit))
+        and isinstance(merges, list)
+        and closeout_commit in merges
+        and isinstance(milestone.get("completion_evidence"), str)
+        and bool(milestone.get("completion_evidence", "").strip())
+        and isinstance(selected_profiles, list)
+        and all(isinstance(profile, str) for profile in selected_profiles)
+        and isinstance(evidence_results, dict)
+        and set(selected_profiles).issubset(evidence_results)
+        and isinstance(decisions, list)
+        and any(
+            "closeout" in decision.casefold()
+            and f"#{closeout_pr}" in decision
+            and closeout_commit in decision
+            for decision in decisions
+            if isinstance(decision, str)
+        )
+    )
+
+
 def _sequence_projection(data: dict[str, Any]) -> dict[str, Any]:
     """Return only fields whose change alters the governed product sequence."""
 
@@ -100,11 +150,7 @@ def _sequence_projection(data: dict[str, Any]) -> dict[str, Any]:
                 "number": milestone.get("number"),
                 "sequence_position": milestone.get("sequence_position"),
                 "predecessor": milestone.get("predecessor"),
-                "sequence_status": (
-                    milestone.get("status")
-                    if milestone.get("status") in {"Paused", "Superseded", "Cancelled"}
-                    else None
-                ),
+                "sequence_status": milestone.get("status"),
                 "replacement_milestone": milestone.get("replacement_milestone"),
             }
             for milestone in milestones
@@ -113,18 +159,47 @@ def _sequence_projection(data: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _validate_retained_finalization_transition(current: dict[str, Any], previous: dict[str, Any]) -> list[str]:
+    """Allow finalization evidence on non-Complete work only as preserved reopening history."""
+
+    previous_milestones = {
+        milestone.get("number"): milestone
+        for milestone in previous.get("milestones", [])
+        if isinstance(milestone, dict) and _positive_int(milestone.get("number"))
+    }
+    errors: list[str] = []
+    for milestone in current.get("milestones", []):
+        if not isinstance(milestone, dict) or milestone.get("status") == "Complete":
+            continue
+        finalization_pr = milestone.get("state_finalization_pr")
+        if finalization_pr is None:
+            continue
+        prior = previous_milestones.get(milestone.get("number"))
+        if not isinstance(prior, dict) or (
+            prior.get("status") not in CLOSED_SEQUENCE_STATUSES
+            and prior.get("state_finalization_pr") != finalization_pr
+        ):
+            errors.append(
+                f"non-Complete milestone {milestone.get('number')!r} may retain state-finalization PR evidence "
+                "only when reopening a previously closed registry record"
+            )
+    return errors
+
+
 def validate_sequence_transition(current: dict[str, Any], previous: dict[str, Any]) -> list[str]:
     """Require one new revision and newly approving decisions for a sequence change."""
 
+    retention_errors = _validate_retained_finalization_transition(current, previous)
     if _sequence_projection(current) == _sequence_projection(previous):
-        return []
+        return retention_errors
     current_revision = current.get("sequence_revision")
     previous_revision = previous.get("sequence_revision")
-    errors: list[str] = []
+    errors: list[str] = list(retention_errors)
     if not _positive_int(previous_revision) or current_revision != previous_revision + 1:
         errors.append("sequence changes require sequence_revision to increment exactly once from the prior registry")
     previous_decisions = previous.get("sequence_decisions", [])
     current_decisions = current.get("sequence_decisions")
+    additions: list[str] = []
     if not isinstance(previous_decisions, list) or any(
         not isinstance(decision, str) or not decision.strip() for decision in previous_decisions
     ):
@@ -144,6 +219,38 @@ def validate_sequence_transition(current: dict[str, Any], previous: dict[str, An
             for decision in additions
         ):
             errors.append("sequence changes require at least one newly added approving sequence decision")
+
+    previous_milestones = {
+        milestone.get("number"): milestone
+        for milestone in previous.get("milestones", [])
+        if isinstance(milestone, dict) and _positive_int(milestone.get("number"))
+    }
+    for milestone in current.get("milestones", []):
+        if not isinstance(milestone, dict) or not _positive_int(milestone.get("number")):
+            continue
+        number = milestone["number"]
+        prior = previous_milestones.get(number)
+        if not isinstance(prior, dict):
+            continue
+        if prior.get("status") not in CLOSED_SEQUENCE_STATUSES or milestone.get("status") not in REOPENED_SEQUENCE_STATUSES:
+            continue
+        decision_pattern = re.compile(rf"\b(?:Milestone\s*{number}|M{number})\b", re.IGNORECASE)
+        if not any(
+            decision_pattern.search(decision)
+            and re.search(r"\b(?:reopen(?:ed|ing|s)?|reactivat(?:e|ed|es|ing))\b", decision, re.IGNORECASE)
+            and re.search(r"\b(?:approved|approves|authorized|authorizes)\b", decision, re.IGNORECASE)
+            and re.search(r"#\d+\b", decision)
+            for decision in additions
+        ):
+            errors.append(
+                f"reopening milestone {number} from {prior.get('status')} to {milestone.get('status')} requires "
+                "a newly added approving sequence decision identifying the milestone and authority"
+            )
+        for field in REOPENING_HISTORY_FIELDS:
+            if milestone.get(field) != prior.get(field):
+                errors.append(
+                    f"reopening milestone {number} must preserve prior completion and closeout history field {field}"
+                )
     return errors
 
 
@@ -492,9 +599,15 @@ def validate_registry_data(data: dict[str, Any]) -> list[str]:
         state_finalization_pr = milestone.get("state_finalization_pr")
         if state_finalization_pr is not None and not _positive_int(state_finalization_pr):
             errors.append(f"milestone {number!r} state_finalization_pr must be null or a positive integer")
-        if post_governance and status != "Complete" and state_finalization_pr is not None:
+        if (
+            post_governance
+            and status != "Complete"
+            and state_finalization_pr is not None
+            and not _retains_completed_state_evidence(milestone)
+        ):
             errors.append(
-                f"post-governance milestone {number!r} cannot predeclare a future state-finalization PR"
+                f"post-governance milestone {number!r} cannot predeclare a future state-finalization PR or "
+                "discard the completed record that PR previously finalized"
             )
 
         if status == "Active":
@@ -856,12 +969,16 @@ def _state_finalization_registry_evidence(
     current: dict[str, Any],
     repo_root: Path,
     registry_relative: str,
-    milestone_number: int,
     state_finalization_pr: int,
     closeout_commit: str,
     reserved_commits: set[str],
 ) -> tuple[dict[str, Any] | None, str | None]:
-    """Find the open PR-head ref or eventual merged commit that carried finalization."""
+    """Find the exact declared GitHub pull-head ref that carried finalization."""
+
+    if _registry_at_revision(repo_root, "HEAD", registry_relative) != current:
+        return None, None
+    if not _is_ancestor(repo_root, closeout_commit, "HEAD"):
+        return None, None
 
     pull_refs = (
         f"refs/pull/{state_finalization_pr}/head",
@@ -879,41 +996,12 @@ def _state_finalization_registry_evidence(
         commit = target.stdout.strip()
         if target.returncode != 0 or not commit or commit in reserved_commits:
             continue
-        if not _is_ancestor(repo_root, closeout_commit, commit) or not _is_ancestor(repo_root, commit, "HEAD"):
+        if not _is_ancestor(repo_root, closeout_commit, commit):
             continue
         pull_data = _registry_at_revision(repo_root, commit, registry_relative)
         if pull_data == current:
             return pull_data, f"{pull_ref} at {commit}"
 
-    history = subprocess.run(
-        ["git", "log", "--format=%H", "HEAD"],
-        cwd=repo_root,
-        text=True,
-        capture_output=True,
-        check=False,
-    )
-    if history.returncode != 0:
-        return None, None
-    for commit in history.stdout.splitlines():
-        if commit in reserved_commits or not _is_ancestor(repo_root, closeout_commit, commit):
-            continue
-        message = subprocess.run(
-            ["git", "show", "-s", "--format=%B", commit],
-            cwd=repo_root,
-            text=True,
-            capture_output=True,
-            check=False,
-        )
-        if message.returncode != 0 or not commit_message_matches_pr(message.stdout, state_finalization_pr):
-            continue
-        merged_data = _registry_at_revision(repo_root, commit, registry_relative)
-        merged_milestone = _milestone_by_number(merged_data or {}, milestone_number)
-        if (
-            merged_milestone is not None
-            and merged_milestone.get("status") == "Complete"
-            and merged_milestone.get("state_finalization_pr") == state_finalization_pr
-        ):
-            return merged_data, f"PR-number-bearing commit {commit}"
     return None, None
 
 
@@ -1083,7 +1171,6 @@ def validate_git_history(
                         current=data,
                         repo_root=repo_root,
                         registry_relative=registry_relative,
-                        milestone_number=number,
                         state_finalization_pr=state_finalization_pr,
                         closeout_commit=closeout_commit,
                         reserved_commits=set(milestone.get("merge_commits", [])),
@@ -1091,8 +1178,8 @@ def validate_git_history(
                     if finalization_data is None:
                         errors.append(
                             f"post-governance milestone {number!r} expected state-finalization PR "
-                            f"#{state_finalization_pr} evidence, but no matching local pull-head ref or "
-                            "distinct PR-number-bearing merge commit carries the finalization registry"
+                            f"#{state_finalization_pr} evidence, but no matching local pull-head ref carries "
+                            "the exact finalization registry in current HEAD history"
                         )
                     else:
                         errors.extend(validate_state_finalization_delta(finalization_data, closeout_data, number))

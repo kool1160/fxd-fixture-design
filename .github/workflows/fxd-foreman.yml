@@ -48,6 +48,9 @@ jobs:
         with:
           python-version: '3.13'
 
+      - name: Validate authoritative milestone governance
+        run: python scripts/validate_milestones.py
+
       - name: Select milestone
         id: milestone
         shell: bash

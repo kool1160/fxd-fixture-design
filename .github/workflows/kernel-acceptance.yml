@@ -37,6 +37,11 @@
           }
         },
         {
+          "name": "Fetch declared state-finalization pull evidence",
+          "shell": "bash",
+          "run": "set -euo pipefail\nmapfile -t pull_requests < <(python - <<'PY'\nimport json\nfrom pathlib import Path\ndata = json.loads(Path('docs/MILESTONE_STATE.json').read_text(encoding='utf-8'))\nfor milestone in data.get('milestones', []):\n    pull_request = milestone.get('state_finalization_pr')\n    if isinstance(pull_request, int) and pull_request > 0:\n        print(pull_request)\nPY\n)\nfor pull_request in \"${pull_requests[@]}\"; do\n  git fetch --no-tags origin \"+refs/pull/${pull_request}/head:refs/remotes/pull/${pull_request}/head\"\ndone"
+        },
+        {
           "name": "Upgrade packaging tools",
           "run": "python -m pip install --upgrade pip setuptools wheel"
         },

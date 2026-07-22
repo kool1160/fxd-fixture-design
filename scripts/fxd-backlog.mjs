@@ -3,11 +3,10 @@
 // Compatibility entrypoint: milestone selection now comes only from the registry.
 import fs from 'node:fs';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
-const SCHEMA = 'fxd-milestone-state-v1';
-const LEGAL_STATUSES = new Set([
-  'Planned', 'Active', 'Blocked', 'Waiting', 'Paused', 'Complete', 'Superseded', 'Cancelled',
-]);
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 function fail(message) {
   console.error(`FXD milestone registry error: ${message}`);
@@ -46,30 +45,30 @@ function readRegistry(registryPath) {
   } catch (error) {
     fail(`cannot parse ${registryPath}: ${error.message}`);
   }
-  if (registry.schema_version !== SCHEMA) fail(`unknown schema ${JSON.stringify(registry.schema_version)}`);
-  if (!Array.isArray(registry.milestones) || !registry.milestones.length) fail('milestones must be a nonempty array');
-  const numbers = new Set();
-  const positions = new Set();
-  for (const milestone of registry.milestones) {
-    if (!Number.isInteger(milestone.number) || milestone.number < 1) fail('milestone numbers must be positive integers');
-    if (numbers.has(milestone.number)) fail(`duplicate Milestone ${milestone.number}`);
-    numbers.add(milestone.number);
-    if (!Number.isInteger(milestone.sequence_position) || milestone.sequence_position < 1) {
-      fail(`Milestone ${milestone.number} has an invalid sequence position`);
-    }
-    if (positions.has(milestone.sequence_position)) fail(`duplicate sequence position ${milestone.sequence_position}`);
-    positions.add(milestone.sequence_position);
-    if (!LEGAL_STATUSES.has(milestone.status)) fail(`Milestone ${milestone.number} has unknown status ${milestone.status}`);
-  }
-  const active = registry.milestones.filter((milestone) => milestone.status === 'Active');
-  const lane = registry.product_lane;
-  if (!lane || typeof lane.paused !== 'boolean') fail('product_lane.paused must be true or false');
-  if (lane.paused) {
-    if (active.length || lane.active_milestone !== null) fail('paused product lane must have zero Active milestones');
-  } else if (active.length !== 1 || active[0].number !== lane.active_milestone) {
-    fail('unpaused product lane must project exactly one Active milestone');
-  }
   return registry;
+}
+
+function runAuthoritativeValidation(registryPath) {
+  const validator = path.join(repoRoot, 'scripts', 'validate_milestones.py');
+  const candidates = process.platform === 'win32'
+    ? [['py', ['-3']], ['python', []]]
+    : [['python', []], ['python3', []]];
+  for (const [command, prefix] of candidates) {
+    const result = spawnSync(
+      command,
+      [...prefix, validator, '--repo-root', repoRoot, '--registry', registryPath],
+      { cwd: repoRoot, encoding: 'utf8' },
+    );
+    if (result.error?.code === 'ENOENT') continue;
+    if (result.status !== 0) {
+      if (result.stdout?.trim()) console.error(result.stdout.trim());
+      if (result.stderr?.trim()) console.error(result.stderr.trim());
+      fail('authoritative Python governance validation failed; milestone selection did not run');
+    }
+    if (result.stdout?.trim()) console.log(result.stdout.trim());
+    return;
+  }
+  fail('authoritative Python governance validator could not start');
 }
 
 function slugify(value) {
@@ -89,7 +88,8 @@ function writeOutput(name, value) {
 }
 
 const args = parseArgs(process.argv.slice(2));
-const registryPath = path.resolve(args.registry);
+const registryPath = path.resolve(repoRoot, args.registry);
+runAuthoritativeValidation(registryPath);
 const registry = readRegistry(registryPath);
 
 if (args.command === 'validate') {
