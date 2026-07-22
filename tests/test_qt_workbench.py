@@ -532,6 +532,7 @@ class QtWorkbenchTests(unittest.TestCase):
         self.window.weld_intent_length.setValue(20.0)
         self.window.weld_intent_sequence.setValue(1)
         self.window.process_method.setCurrentText("MIG welding")
+        self.assertEqual(self.window.weld_intent_direction.currentText(), "Unknown")
         self.assertEqual(self.window.weld_intent_approach.currentText(), "Unknown")
         self.assertEqual(self.window.weld_intent_torch_width.value(), 0.0)
         self.assertEqual(self.window.weld_intent_torch_height.value(), 0.0)
@@ -540,6 +541,7 @@ class QtWorkbenchTests(unittest.TestCase):
             self.window.assign_selected_annotation()
         warning.assert_not_called()
         evidence = self.window.workflow.geometry_annotations[-1].evidence
+        self.assertFalse(any(item.startswith("weld_direction_mfg=") for item in evidence))
         self.assertFalse(any(item.startswith("weld_approach_direction_mfg=") for item in evidence))
         self.assertFalse(any(item.startswith("torch_envelope_") for item in evidence))
 

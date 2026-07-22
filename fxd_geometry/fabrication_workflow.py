@@ -751,6 +751,8 @@ class ConfirmedWeldIntent:
     torch_envelope_mm: Vec3
     manufacturing_orientation_identity: str
     evidence: tuple[str, ...] = ()
+    weld_direction_manufacturing: Vec3 | None = None
+    weld_direction_source: Vec3 | None = None
 
     def __post_init__(self) -> None:
         if not all((self.identity.strip(), self.weld_side.strip(), self.process.strip(),
@@ -763,6 +765,16 @@ class ConfirmedWeldIntent:
         for vector, label in (
                 (self.approach_direction_manufacturing, "manufacturing torch approach"),
                 (self.approach_direction_source, "source torch approach")):
+            magnitude = math.sqrt(vector.x ** 2 + vector.y ** 2 + vector.z ** 2)
+            if not math.isfinite(magnitude) or magnitude <= 1e-9:
+                raise FixtureBuildError(f"{label} must be a finite non-zero vector")
+        if (self.weld_direction_manufacturing is None) != (self.weld_direction_source is None):
+            raise FixtureBuildError("confirmed weld direction requires both source and manufacturing vectors")
+        for vector, label in (
+                (self.weld_direction_manufacturing, "manufacturing weld direction"),
+                (self.weld_direction_source, "source weld direction")):
+            if vector is None:
+                continue
             magnitude = math.sqrt(vector.x ** 2 + vector.y ** 2 + vector.z ** 2)
             if not math.isfinite(magnitude) or magnitude <= 1e-9:
                 raise FixtureBuildError(f"{label} must be a finite non-zero vector")
@@ -786,10 +798,20 @@ class ConfirmedWeldIntent:
             "torch_envelope_mm": self.torch_envelope_mm.__dict__,
             "manufacturing_orientation_identity": self.manufacturing_orientation_identity,
             "evidence": list(self.evidence),
+            "weld_direction_manufacturing": (
+                self.weld_direction_manufacturing.__dict__
+                if self.weld_direction_manufacturing is not None else None
+            ),
+            "weld_direction_source": (
+                self.weld_direction_source.__dict__
+                if self.weld_direction_source is not None else None
+            ),
         }
 
     @classmethod
     def from_dict(cls, data: dict[str, object]) -> "ConfirmedWeldIntent":
+        manufacturing_direction = data.get("weld_direction_manufacturing")
+        source_direction = data.get("weld_direction_source")
         return cls(
             str(data["identity"]),
             tuple(GeometryReference(**item) for item in data.get("references", ())),
@@ -801,6 +823,8 @@ class ConfirmedWeldIntent:
             Vec3(**data["torch_envelope_mm"]),
             str(data["manufacturing_orientation_identity"]),
             tuple(data.get("evidence", ())),
+            Vec3(**manufacturing_direction) if manufacturing_direction is not None else None,
+            Vec3(**source_direction) if source_direction is not None else None,
         )
 
 
@@ -1561,6 +1585,11 @@ def _confirmed_weld_evidence_complete(requirements: FixtureBuildRequirements) ->
         requirements.confirmed_weld_intent
         and expected > 0
         and len(requirements.confirmed_welds) == expected
+        and all(
+            weld.weld_direction_manufacturing is not None
+            and weld.weld_direction_source is not None
+            for weld in requirements.confirmed_welds
+        )
     )
 
 
@@ -1576,26 +1605,29 @@ def _torch_body_envelope(intent: ConfirmedWeldIntent, translation: Vec3,
                          source_to_manufacturing: tuple[float, ...]) -> Aabb:
     """Manufacturing AABB for the torch swept across the full confirmed seam."""
     direction = _unit_direction(intent.approach_direction_manufacturing, "torch approach direction")
-    seed = Vec3(0.0, 0.0, 1.0) if abs(direction.z) < 0.9 else Vec3(0.0, 1.0, 0.0)
-    width_axis = _unit_direction(_cross(direction, seed), "torch width axis")
-    height_axis = _unit_direction(_cross(direction, width_axis), "torch height axis")
+    if intent.weld_direction_manufacturing is None:
+        raise FixtureBuildError("full-seam torch access requires an explicit manufacturing weld direction")
+    seam_axis = _unit_direction(intent.weld_direction_manufacturing, "weld seam direction")
+    if abs(direction.x * seam_axis.x + direction.y * seam_axis.y + direction.z * seam_axis.z) > 1e-6:
+        raise FixtureBuildError("torch approach and weld seam direction must be perpendicular")
+    height_axis = _unit_direction(_cross(direction, seam_axis), "torch height axis")
     joint = _matrix_apply(source_to_manufacturing, intent.joint_position_source_mm)
     origin = Vec3(joint.x + translation.x, joint.y + translation.y, joint.z + translation.z)
     points: list[Vec3] = []
-    # The governed weld reference supplies the seam centre and length.  Sweep the
-    # torch along the reference-local tangent (perpendicular to approach and the
-    # stable manufacturing seed) instead of sampling only the centre point.
+    # The governed weld reference supplies the seam centre and length while the
+    # engineer supplies its actual manufacturing-frame tangent.  No tangent is
+    # inferred from a global seed or torch approach.
     for seam in (-intent.weld_length_mm * 0.5, intent.weld_length_mm * 0.5):
         for length in (0.0, intent.torch_envelope_mm.z):
             for width in (-intent.torch_envelope_mm.x * 0.5, intent.torch_envelope_mm.x * 0.5):
                 for height in (-intent.torch_envelope_mm.y * 0.5, intent.torch_envelope_mm.y * 0.5):
                     points.append(Vec3(
-                        origin.x + width_axis.x * seam + direction.x * length
-                        + width_axis.x * width + height_axis.x * height,
-                        origin.y + width_axis.y * seam + direction.y * length
-                        + width_axis.y * width + height_axis.y * height,
-                        origin.z + width_axis.z * seam + direction.z * length
-                        + width_axis.z * width + height_axis.z * height,
+                        origin.x + seam_axis.x * seam + direction.x * length
+                        + seam_axis.x * width + height_axis.x * height,
+                        origin.y + seam_axis.y * seam + direction.y * length
+                        + seam_axis.y * width + height_axis.y * height,
+                        origin.z + seam_axis.z * seam + direction.z * length
+                        + seam_axis.z * width + height_axis.z * height,
                     ))
     return Aabb(
         Vec3(*(min(getattr(point, axis) for point in points) for axis in ("x", "y", "z"))),
@@ -1821,6 +1853,23 @@ def generate_multi_station_fixture_build_plan(
             raise FixtureBuildError("confirmed weld approach does not match the accepted manufacturing orientation")
         if any(not _reference_valid(product, reference) for reference in weld.references):
             raise FixtureBuildError("confirmed weld intent contains an invalid immutable source reference")
+        for source_vector, manufacturing_vector, label in (
+                (weld.approach_direction_source, weld.approach_direction_manufacturing,
+                 "torch approach"),
+                (weld.weld_direction_source, weld.weld_direction_manufacturing,
+                 "weld direction")):
+            if source_vector is None or manufacturing_vector is None:
+                continue
+            transformed = _unit_direction(
+                _matrix_apply(multi_station.source_to_manufacturing, source_vector, vector=True),
+                f"transformed {label}",
+            )
+            governed = _unit_direction(manufacturing_vector, f"manufacturing {label}")
+            if any(abs(getattr(transformed, axis) - getattr(governed, axis)) > 1e-7
+                   for axis in ("x", "y", "z")):
+                raise FixtureBuildError(
+                    f"confirmed weld {label} source and manufacturing vectors do not match the accepted orientation"
+                )
     layout = generate_multi_station_layout(product, multi_station)
     manufacturing_bounds = _manufacturing_product_bounds(product, multi_station)
     primary = layout.primary_axis
@@ -2034,15 +2083,15 @@ def generate_multi_station_fixture_build_plan(
         ))
     brace_height = min(30.0, product_height * 0.4 + 6.0)
     brace_bounds = (
-        _oriented_bounds(primary, 4.0, 34.0, 0.0, 28.0, 0.0, brace_height),
-        _oriented_bounds(primary, base_length - 34.0, base_length - 4.0, 0.0, 28.0, 0.0, brace_height),
+        _oriented_bounds(primary, 4.0, 34.0, 0.0, 12.0, 0.0, brace_height),
+        _oriented_bounds(primary, base_length - 34.0, base_length - 4.0, 0.0, 12.0, 0.0, brace_height),
     )
     for index, brace in enumerate(brace_bounds, 1):
         components.append(_component(
             f"m32-end-brace-{index}", f"FXD-M32-00{index + 2}", f"datum rail end brace {index}",
             BuildComponentRole.END_BRACE, brace, reference, parent="m32-backbone", process="laser cut and weld",
             thickness=12.0, rule_ids=("FXD-MFG-001", "FXD-M32-CON"),
-            evidence=("Compact end gusset connects the low rail to the backbone outside both end-station product envelopes.",),
+            evidence=("Compact end gusset meets the datum rail at its secondary face without occupying the rail volume.",),
         ))
     access_obstacles = tuple(
         component.bounds for component in components
@@ -2125,6 +2174,10 @@ def generate_multi_station_fixture_build_plan(
                         f"weld_side={weld.weld_side}",
                         f"weld_length_mm={weld.weld_length_mm:.3f}",
                         "torch_sweep_over_full_weld_length=true",
+                        "weld_direction_manufacturing="
+                        f"({weld.weld_direction_manufacturing.x:.6f},"
+                        f"{weld.weld_direction_manufacturing.y:.6f},"
+                        f"{weld.weld_direction_manufacturing.z:.6f})",
                         f"weld_process={weld.process}",
                         f"weld_sequence={weld.sequence}",
                         f"orientation={weld.manufacturing_orientation_identity}",
@@ -2294,6 +2347,14 @@ def _multi_station_findings(plan: FixtureBuildPlan) -> tuple[FixtureBuildFinding
     braces = [item for item in plan.components if item.role == BuildComponentRole.END_BRACE]
     if len(braces) < 2:
         findings.append(_finding("FXD-M32-CON", "error", "upright datum structure requires end braces", disposition="review_blocker"))
+    if rail is not None:
+        for brace in braces:
+            if _positive_bounds_overlap(rail.bounds, brace.bounds):
+                findings.append(_finding(
+                    "FXD-M32-CON", "error",
+                    "end brace occupies the datum rail volume instead of meeting its boundary",
+                    components=(brace.identity, rail.identity), disposition="authoring_blocker",
+                ))
     component_ids = {item.identity for item in plan.components}
     expected_weld_identities = tuple(item.identity for item in plan.requirements.confirmed_welds)
     for station in layout.stations:

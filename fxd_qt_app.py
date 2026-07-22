@@ -1360,6 +1360,8 @@ class FxdWorkbenchWindow(QMainWindow):
         self.weld_intent_sequence = QSpinBox()
         self.weld_intent_sequence.setRange(0, 999)
         self.weld_intent_sequence.setSpecialValueText("Unknown")
+        self.weld_intent_direction = self._combo(DIRECTION_OPTIONS, wheel_to_parent=True)
+        self.weld_intent_direction.setCurrentText("Unknown")
         self.weld_intent_approach = self._combo(DIRECTION_OPTIONS, wheel_to_parent=True)
         self.weld_intent_approach.setCurrentText("Unknown")
         self.weld_intent_torch_width = QDoubleSpinBox()
@@ -1385,6 +1387,8 @@ class FxdWorkbenchWindow(QMainWindow):
         annotation_layout.addWidget(self.weld_intent_side)
         annotation_layout.addWidget(self.weld_intent_length)
         annotation_layout.addWidget(self.weld_intent_sequence)
+        annotation_layout.addWidget(QLabel("Weld seam direction (manufacturing frame; explicit engineer input):"))
+        annotation_layout.addWidget(self.weld_intent_direction)
         annotation_layout.addWidget(QLabel("Torch approach (manufacturing frame; explicit engineer input):"))
         annotation_layout.addWidget(self.weld_intent_approach)
         annotation_layout.addWidget(QLabel("Torch/body envelope width, height, and approach length (mm):"))
@@ -4213,6 +4217,10 @@ class FxdWorkbenchWindow(QMainWindow):
                     weld_evidence += (
                         f"weld_approach_direction_mfg={self.weld_intent_approach.currentText()}",
                     )
+                if self.weld_intent_direction.currentText() != "Unknown":
+                    weld_evidence += (
+                        f"weld_direction_mfg={self.weld_intent_direction.currentText()}",
+                    )
                 for key, widget in (
                     ("torch_envelope_width_mm", self.weld_intent_torch_width),
                     ("torch_envelope_height_mm", self.weld_intent_torch_height),
@@ -4399,6 +4407,7 @@ class FxdWorkbenchWindow(QMainWindow):
                 if separator:
                     values[key] = value.strip()
             approach_manufacturing = self._direction(values.get("weld_approach_direction_mfg", ""))
+            weld_direction_manufacturing = self._direction(values.get("weld_direction_mfg", ""))
             try:
                 torch = Vec3(
                     float(values["torch_envelope_width_mm"]),
@@ -4408,22 +4417,28 @@ class FxdWorkbenchWindow(QMainWindow):
                 length = float(values["weld_length_mm"])
             except (KeyError, ValueError):
                 continue
-            if (approach_manufacturing is None or not joint.references or not values.get("weld_side")
+            if (approach_manufacturing is None or weld_direction_manufacturing is None
+                    or not joint.references or not values.get("weld_side")
                     or not joint.process or joint.sequence is None
                     or any(value <= 0.0 for value in torch.__dict__.values())):
                 continue
             approach_source = orientation.manufacturing_vector_to_source(approach_manufacturing)
+            weld_direction_source = orientation.manufacturing_vector_to_source(
+                weld_direction_manufacturing
+            )
             confirmed_welds.append(ConfirmedWeldIntent(
                 joint.identity, joint.references, values["weld_side"], length,
                 joint.process, joint.sequence, annotation.position_mm,
                 approach_manufacturing, approach_source, torch, orientation.identity,
                 ("Engineer-confirmed weld and torch evidence from the normal workbench.",),
+                weld_direction_manufacturing, weld_direction_source,
             ))
             weld_evidence.extend((
                 f"joint_reference={joint.identity}", f"weld_side={values['weld_side']}",
                 f"weld_length_mm={length:.3f}", f"weld_process={joint.process}",
                 f"weld_sequence={joint.sequence}",
                 f"approach_direction_mfg={values['weld_approach_direction_mfg']}",
+                f"weld_direction_mfg={values['weld_direction_mfg']}",
                 f"torch_envelope_mm=({torch.x:.3f},{torch.y:.3f},{torch.z:.3f})",
             ))
         return FixtureBuildRequirements(

@@ -72,6 +72,7 @@ class MultiStationFixtureTests(unittest.TestCase):
             Vec3(60.0, 0.0, 12.0), Vec3(0.0, 1.0, 0.0), Vec3(0.0, 1.0, 0.0),
             Vec3(12.0, 12.0, 30.0), orientation.identity,
             ("Synthetic engineer-confirmed torch evidence.",),
+            Vec3(1.0, 0.0, 0.0), Vec3(1.0, 0.0, 0.0),
         ),)
         return FixtureBuildRequirements(
             product.source_sha256, FixturePurpose.FULL_WELD,
@@ -319,6 +320,14 @@ class MultiStationFixtureTests(unittest.TestCase):
                 base_requirements.confirmed_welds[0],
                 approach_direction_manufacturing=operator_source,
                 approach_direction_source=operator_source,
+                weld_direction_manufacturing=(
+                    Vec3(0.0, 1.0, 0.0) if abs(operator_source.x) > 0.5
+                    else Vec3(1.0, 0.0, 0.0)
+                ),
+                weld_direction_source=(
+                    Vec3(0.0, 1.0, 0.0) if abs(operator_source.x) > 0.5
+                    else Vec3(1.0, 0.0, 0.0)
+                ),
             ),))
             station_requirements = replace(
                 self.station_requirements(
@@ -444,6 +453,8 @@ class MultiStationFixtureTests(unittest.TestCase):
             base_weld,
             approach_direction_manufacturing=manufacturing_torch,
             approach_direction_source=orientation.manufacturing_vector_to_source(manufacturing_torch),
+            weld_direction_manufacturing=Vec3(1.0, 0.0, 0.0),
+            weld_direction_source=orientation.manufacturing_vector_to_source(Vec3(1.0, 0.0, 0.0)),
             manufacturing_orientation_identity=orientation.identity,
         )
         requirements = self.build_requirements(welds=(weld,))
@@ -500,6 +511,8 @@ class MultiStationFixtureTests(unittest.TestCase):
             weld,
             approach_direction_manufacturing=Vec3(0.0, 1.0, 0.0),
             approach_direction_source=flipped_operator,
+            weld_direction_manufacturing=Vec3(1.0, 0.0, 0.0),
+            weld_direction_source=flipped.manufacturing_vector_to_source(Vec3(1.0, 0.0, 0.0)),
             manufacturing_orientation_identity=flipped.identity,
         )
         flipped_plan = generate_multi_station_fixture_build_plan(
@@ -522,6 +535,8 @@ class MultiStationFixtureTests(unittest.TestCase):
                     self.build_requirements().confirmed_welds[0],
                     approach_direction_manufacturing=Vec3(0.0, 1.0, 0.0),
                     approach_direction_source=operator,
+                    weld_direction_manufacturing=Vec3(1.0, 0.0, 0.0),
+                    weld_direction_source=orientation.manufacturing_vector_to_source(Vec3(1.0, 0.0, 0.0)),
                     manufacturing_orientation_identity=orientation.identity,
                 )
                 station_requirements = replace(
@@ -616,6 +631,35 @@ class MultiStationFixtureTests(unittest.TestCase):
             long_plan.multi_station_layout.stations[0].weld_access_results[0].evidence,
         )
 
+    def test_weld_access_uses_explicit_seam_tangent_and_missing_tangent_stays_unevaluated(self):
+        weld = self.build_requirements().confirmed_welds[0]
+        along_x = self.plan(count=4)
+        x_envelope = along_x.multi_station_layout.stations[0].weld_access_results[0].torch_envelope
+        along_z_weld = replace(
+            weld,
+            weld_direction_manufacturing=Vec3(0.0, 0.0, 1.0),
+            weld_direction_source=Vec3(0.0, 0.0, 1.0),
+        )
+        along_z = generate_multi_station_fixture_build_plan(
+            self.product, self.concept, self.build_requirements(welds=(along_z_weld,)),
+            self.station_requirements(count=4),
+        )
+        z_envelope = along_z.multi_station_layout.stations[0].weld_access_results[0].torch_envelope
+        self.assertGreater(x_envelope.maximum.x - x_envelope.minimum.x,
+                           z_envelope.maximum.x - z_envelope.minimum.x)
+        self.assertGreater(z_envelope.maximum.z - z_envelope.minimum.z,
+                           x_envelope.maximum.z - x_envelope.minimum.z)
+
+        missing = replace(weld, weld_direction_manufacturing=None, weld_direction_source=None)
+        incomplete = generate_multi_station_fixture_build_plan(
+            self.product, self.concept, self.build_requirements(welds=(missing,)),
+            self.station_requirements(count=4),
+        )
+        self.assertTrue(all(station.weld_access_clear is None
+                            and not station.weld_access_results
+                            for station in incomplete.multi_station_layout.stations))
+        self.assertTrue(validate_fixture_build_plan(self.product, incomplete).review_blocked)
+
     def test_station_plates_share_a_boundary_with_backbone_without_interpenetration(self):
         plan = self.plan(count=4)
         backbone = next(item for item in plan.components if item.identity == "m32-backbone")
@@ -641,6 +685,33 @@ class MultiStationFixtureTests(unittest.TestCase):
         ))
         finding = next(item for item in validate_fixture_build_plan(self.product, invalid).findings
                        if "interpenetrates" in item.message)
+        self.assertEqual(finding.disposition, "authoring_blocker")
+
+    def test_end_braces_meet_datum_rail_boundary_without_interpenetration(self):
+        plan = self.plan(count=4)
+        rail = next(item for item in plan.components if item.role == BuildComponentRole.DATUM_RAIL)
+        braces = tuple(item for item in plan.components if item.role == BuildComponentRole.END_BRACE)
+        self.assertEqual(len(braces), 2)
+        self.assertTrue(all(not (
+            min(brace.bounds.maximum.x, rail.bounds.maximum.x)
+            - max(brace.bounds.minimum.x, rail.bounds.minimum.x) > 1e-7
+            and min(brace.bounds.maximum.y, rail.bounds.maximum.y)
+            - max(brace.bounds.minimum.y, rail.bounds.minimum.y) > 1e-7
+            and min(brace.bounds.maximum.z, rail.bounds.maximum.z)
+            - max(brace.bounds.minimum.z, rail.bounds.minimum.z) > 1e-7
+        ) for brace in braces))
+
+        brace = braces[0]
+        expanded = replace(brace, bounds=Aabb(
+            brace.bounds.minimum,
+            Vec3(brace.bounds.maximum.x, brace.bounds.maximum.y + 1.0,
+                 brace.bounds.maximum.z),
+        ))
+        invalid = replace(plan, components=tuple(
+            expanded if item.identity == brace.identity else item for item in plan.components
+        ))
+        finding = next(item for item in validate_fixture_build_plan(self.product, invalid).findings
+                       if "occupies the datum rail volume" in item.message)
         self.assertEqual(finding.disposition, "authoring_blocker")
 
     def test_multi_station_release_requires_current_accepted_proposal_binding(self):
