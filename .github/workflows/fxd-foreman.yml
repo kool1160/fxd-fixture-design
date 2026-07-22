@@ -101,8 +101,8 @@ jobs:
             exit 1
           fi
           issue_body="$(jq -r '.body // empty' <<<"$issue_json")"
-          if [[ -z "$issue_body" ]]; then
-            echo "authoritative milestone issue #$selected_issue has no body" >&2
+          if [[ ! "$issue_body" =~ [^[:space:]] ]]; then
+            echo "authoritative milestone issue #$selected_issue has no non-whitespace body" >&2
             exit 1
           fi
           {

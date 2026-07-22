@@ -61,6 +61,7 @@ MILESTONE_STATUS_PATTERN = re.compile(
 )
 CURRENT_PATTERN = re.compile(r"\bcurrent\s+(?:product\s+)?milestone\s*(?::|is)?\s*(?:Milestone|M)?\s*(\d+)\b", re.IGNORECASE)
 CURRENT_HEADING_PATTERN = re.compile(r"^(#{1,6})\s+Current\s+(?:product\s+)?milestone\b", re.IGNORECASE)
+CURRENT_LANE_HEADING_PATTERN = re.compile(r"^#{1,6}\s+(?:Current\s+)?Product\s+lane\b", re.IGNORECASE)
 ANY_HEADING_PATTERN = re.compile(r"^(#{1,6})\s+")
 MILESTONE_REFERENCE_PATTERN = re.compile(r"\b(?:Milestone|M)\s*(\d+)\b", re.IGNORECASE)
 PROSE_STATUS_PATTERNS = (
@@ -1050,11 +1051,55 @@ def _line_is_in_current_milestone_section(lines: list[str], index: int) -> bool:
     return False
 
 
+def _finalization_projection_is_bound(
+    lines: list[str],
+    index: int,
+    signature: tuple[str, str, str],
+    known_milestones: set[int],
+) -> bool:
+    """Require every editable projection to identify governed milestone or lane state."""
+
+    category = signature[0]
+    line = lines[index]
+    if category in {"milestone-status", "milestone-prose"}:
+        milestone = MILESTONE_REFERENCE_PATTERN.search(line)
+        return milestone is not None and int(milestone.group(1)) in known_milestones
+    if category == "lane-projection":
+        inline_lane = re.match(
+            r"\s*(?:[-*+]\s+)?(?:Current (?:product )?milestone|Product lane)\b",
+            line,
+            re.IGNORECASE,
+        )
+        if inline_lane:
+            milestone = MILESTONE_REFERENCE_PATTERN.search(line)
+            return milestone is None or int(milestone.group(1)) in known_milestones
+        milestone = MILESTONE_REFERENCE_PATTERN.search(line)
+        return (
+            milestone is not None
+            and int(milestone.group(1)) in known_milestones
+            and _line_is_in_current_milestone_section(lines, index)
+        )
+
+    for previous in range(index - 1, -1, -1):
+        heading = lines[previous]
+        if not ANY_HEADING_PATTERN.match(heading):
+            continue
+        milestone_heading = HEADING_PATTERN.match(heading)
+        if milestone_heading:
+            return int(milestone_heading.group(1)) in known_milestones
+        return bool(
+            CURRENT_HEADING_PATTERN.fullmatch(heading)
+            or CURRENT_LANE_HEADING_PATTERN.fullmatch(heading)
+        )
+    return False
+
+
 def _validate_derived_finalization_content(
     repo_root: Path,
     closeout_commit: str,
     finalization_commit: str,
     relative: str,
+    known_milestones: set[int],
 ) -> list[str]:
     """Allow only in-place edits of exact current-status projection lines."""
 
@@ -1081,6 +1126,15 @@ def _validate_derived_finalization_content(
         reviewed_signature = _finalization_projection_signature(reviewed_line)
         final_signature = _finalization_projection_signature(final_line)
         signatures_match = reviewed_signature is not None and reviewed_signature == final_signature
+        if signatures_match and not (
+            _finalization_projection_is_bound(before, line_number - 1, reviewed_signature, known_milestones)
+            and _finalization_projection_is_bound(after, line_number - 1, final_signature, known_milestones)
+        ):
+            errors.append(
+                f"state-finalization derived document {relative}:{line_number} contains an unbound status projection; "
+                "status edits must identify a known milestone or recognized current milestone/product-lane section"
+            )
+            continue
         if signatures_match and reviewed_signature[0] == "lane-projection":
             inline_projection = bool(
                 re.match(r"\s*(?:[-*+]\s+)?(?:Current (?:product )?milestone|Product lane)\b", reviewed_line, re.IGNORECASE)
@@ -1104,6 +1158,7 @@ def _validate_state_finalization_tree_delta(
     closeout_commit: str,
     finalization_commit: str,
     registry_relative: str,
+    known_milestones: set[int],
 ) -> list[str]:
     """Reject every finalization pull-head tree delta outside the narrow contract allowlist."""
 
@@ -1170,6 +1225,7 @@ def _validate_state_finalization_tree_delta(
                     closeout_commit,
                     finalization_commit,
                     relative,
+                    known_milestones,
                 )
             )
     return errors
@@ -1230,6 +1286,11 @@ def _state_finalization_registry_evidence(
         closeout_commit=closeout_commit,
         finalization_commit=commit,
         registry_relative=registry_relative,
+        known_milestones={
+            milestone["number"]
+            for milestone in current.get("milestones", [])
+            if isinstance(milestone, dict) and isinstance(milestone.get("number"), int)
+        },
     )
     return pull_data, f"{pull_ref} at {commit}", tree_errors
 

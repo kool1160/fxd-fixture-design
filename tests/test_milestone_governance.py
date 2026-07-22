@@ -709,6 +709,22 @@ class MilestoneGovernanceTests(unittest.TestCase):
             errors = validate_git_history(data, root, root / "docs" / "MILESTONE_STATE.json")
         self.assertTrue(any("unrelated derived-document content" in error for error in errors), errors)
 
+    def test_state_finalization_rejects_unbound_derived_status_edit(self) -> None:
+        marker = f"{AUTHORITY_MARKER}\n"
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            data = self.build_post_governance_history(
+                root,
+                closeout_files={
+                    "docs/ROADMAP_QUEUE.md": marker + "## Build metadata\n\n**Status:** Active\n",
+                },
+                finalization_files={
+                    "docs/ROADMAP_QUEUE.md": marker + "## Build metadata\n\n**Status:** Complete\n",
+                },
+            )
+            errors = validate_git_history(data, root, root / "docs" / "MILESTONE_STATE.json")
+        self.assertTrue(any("unbound status projection" in error for error in errors), errors)
+
     def test_state_finalization_pull_head_rejects_unauthorized_tree_operations(self) -> None:
         cases = {
             "new source file": (None, "new_module.py", "print('unauthorized')\n"),
@@ -752,13 +768,13 @@ class MilestoneGovernanceTests(unittest.TestCase):
             data = self.build_post_governance_history(
                 root,
                 closeout_files={
-                    "docs/ROADMAP_QUEUE.md": marker + "**Status:** Active\n",
+                    "docs/ROADMAP_QUEUE.md": marker + "## Milestone 32 - Test\n\n**Status:** Active\n",
                     "docs/project-records/README.md": (
                         marker + "## Current milestone\n\nMilestone 32 - Multi-station weld fixture synthesis.\n"
                     ),
                 },
                 finalization_files={
-                    "docs/ROADMAP_QUEUE.md": marker + "**Status:** Complete\n",
+                    "docs/ROADMAP_QUEUE.md": marker + "## Milestone 32 - Test\n\n**Status:** Complete\n",
                     "docs/project-records/README.md": marker + "## Current milestone\n\nProduct lane is Paused.\n",
                 },
             )
@@ -1242,6 +1258,36 @@ class MilestoneGovernanceTests(unittest.TestCase):
         self.assertIn('"$issue_state" != "OPEN"', issue_step)
         self.assertIn("authoritative milestone issue is not OPEN", issue_step)
         self.assertIn("failed to fetch authoritative milestone issue", issue_step)
+
+    def test_foreman_rejects_whitespace_only_authoritative_issue_body(self) -> None:
+        workflow = (ROOT / ".github" / "workflows" / "fxd-foreman.yml").read_text(encoding="utf-8")
+        issue_validation = workflow.index("name: Load authoritative milestone issue")
+        body_append = workflow.index(">> .fxd/selected-milestone.md", issue_validation)
+        validation_script = workflow[issue_validation:body_append]
+        predicate = '[[ "$issue_body" =~ [^[:space:]] ]]'
+        self.assertIn('if [[ ! "$issue_body" =~ [^[:space:]] ]]; then', validation_script)
+
+        for label, body in {
+            "empty": "",
+            "spaces": "   ",
+            "tabs": "\t\t",
+            "newlines": "\n\n",
+            "mixed whitespace": " \t\n\t ",
+        }.items():
+            with self.subTest(label=label):
+                result = subprocess.run(
+                    ["bash", "-c", f'issue_body="$1"; {predicate}', "bash", body],
+                    capture_output=True,
+                    check=False,
+                )
+                self.assertNotEqual(0, result.returncode)
+
+        meaningful = subprocess.run(
+            ["bash", "-c", f'issue_body="$1"; {predicate}', "bash", "Milestone 32 scope"],
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(0, meaningful.returncode)
 
     def test_foreman_loads_open_issue_before_codex_execution(self) -> None:
         workflow = (ROOT / ".github" / "workflows" / "fxd-foreman.yml").read_text(encoding="utf-8")
