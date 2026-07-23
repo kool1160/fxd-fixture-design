@@ -1,0 +1,774 @@
+{
+  "schema_version": "fxd-fixture-library-synthetic-benchmarks-v1",
+  "research_only": true,
+  "privacy_statement": "Every case is invented for public schema validation and contains no private fixture, path, dimension, screenshot, or supplier-owned CAD.",
+  "cases": [
+    {
+      "schema_version": "fxd-private-benchmark-case-v1",
+      "case_id": "synthetic-benchmark-001-flat-weld-frame",
+      "authority_level": "private_benchmark_reference",
+      "fixture_class": "flat-base weld fixture",
+      "product_material_forms": [
+        "synthetic formed sheet",
+        "synthetic rectangular tube"
+      ],
+      "manufacturing_process": [
+        "manual tack and welding review"
+      ],
+      "production_quantity": {
+        "value": 120,
+        "period": "synthetic annual planning quantity",
+        "confidence": "synthetic"
+      },
+      "source_part_construction": [
+        "invented two-part frame with no real dimensions"
+      ],
+      "build_orientation": "Synthetic broad face down with explicit review-only frame.",
+      "datum_hierarchy": [
+        "three primary support roles",
+        "one relieved lateral locator role",
+        "one longitudinal stop role"
+      ],
+      "degrees_of_freedom": {
+        "constrained": [
+          "required translations and rotations declared by the synthetic datum model"
+        ],
+        "intentionally_floating": [
+          "release direction after clamps open"
+        ]
+      },
+      "supports": [
+        "three replaceable primary support roles"
+      ],
+      "locators": [
+        "one relieved secondary locator role"
+      ],
+      "stops": [
+        "one removable tertiary stop role"
+      ],
+      "clamps": [
+        "two provisional manual clamp roles"
+      ],
+      "force_reaction_mappings": [
+        "each clamp maps to a named support role"
+      ],
+      "base_structural_strategy": [
+        "synthetic connected plate and rail base without capacity claim"
+      ],
+      "loading_sequence": [
+        "open clamps",
+        "load larger synthetic part",
+        "load smaller synthetic part",
+        "seat on supports and locators"
+      ],
+      "clamping_sequence": [
+        "close locator-side clamp",
+        "close opposite support-side clamp"
+      ],
+      "process_sequence": [
+        "review tack access",
+        "review weld access without procedure approval"
+      ],
+      "unloading_sequence": [
+        "open clamps",
+        "remove stop when required",
+        "lift synthetic joined assembly"
+      ],
+      "access_review": [
+        "manual torch envelope",
+        "operator hand envelope",
+        "finished-product lift-out"
+      ],
+      "process_context_asset_ids": [
+        "context-001-torch-head",
+        "context-006-operator-envelope"
+      ],
+      "manufacturability": [
+        "laser-cut plates and standard stock are preferred",
+        "all values remain project-configurable"
+      ],
+      "wear_replaceable_components": [
+        "supports",
+        "locator contact",
+        "stop contact"
+      ],
+      "successful_principles": [
+        "locate before clamp",
+        "clamp into named support",
+        "preserve unload path"
+      ],
+      "compromises": [
+        "provisional clamps prevent exact clearance claims"
+      ],
+      "failure_modes": [
+        "torch access remains provisional",
+        "structural capacity is unassessed"
+      ],
+      "improvements_fxd_should_propose": [
+        "request exact selected clamp geometry",
+        "route weld access to qualified review"
+      ],
+      "human_acceptance_criteria": [
+        "stable and repeatable seating is plausible",
+        "loading and release are practical",
+        "all production claims remain blocked"
+      ],
+      "human_disposition": "synthetic_example_only",
+      "privacy_classification": "synthetic_public",
+      "linked_private_asset_identities": [],
+      "authorship": {
+        "author_identity": "FXD synthetic research corpus",
+        "author_role": "synthetic research author"
+      },
+      "provenance": {
+        "record_identity": "synthetic-benchmark-001-flat-weld-frame",
+        "origin_classification": "synthetic_original",
+        "derivation_note": "Invented from public principles without reproducing a real fixture."
+      },
+      "rights_and_release": {
+        "rights_holder_or_grantor_identity": "FXD synthetic research",
+        "authorship_identity": "FXD synthetic research corpus",
+        "rights_basis": "original_synthetic_work",
+        "permitted_use_scope": [
+          "public research schema and validation example"
+        ],
+        "permitted_asset_scope": [],
+        "permitted_metadata_fields": [
+          "access_review",
+          "authority_level",
+          "authorship",
+          "base_structural_strategy",
+          "build_orientation",
+          "case_id",
+          "clamping_sequence",
+          "clamps",
+          "compromises",
+          "datum_hierarchy",
+          "degrees_of_freedom",
+          "failure_modes",
+          "fixture_class",
+          "force_reaction_mappings",
+          "human_acceptance_criteria",
+          "human_disposition",
+          "improvements_fxd_should_propose",
+          "loading_sequence",
+          "locators",
+          "manufacturability",
+          "manufacturing_process",
+          "privacy_classification",
+          "process_context_asset_ids",
+          "process_sequence",
+          "product_material_forms",
+          "production_quantity",
+          "provenance",
+          "schema_version",
+          "source_part_construction",
+          "stops",
+          "successful_principles",
+          "supports",
+          "unloading_sequence",
+          "wear_replaceable_components"
+        ],
+        "approval_timestamp": "2026-07-23T00:00:00Z",
+        "release_decision_timestamp": "2026-07-23T00:00:00Z",
+        "release_decision_state": "approved",
+        "expiry_timestamp": null,
+        "revocation_state": "not_revoked",
+        "revocation_timestamp": null,
+        "revocation_reason": null,
+        "deletion_disposition": "Remove public synthetic record if rights status changes.",
+        "backup_disposition": "No private asset backups exist for this synthetic record.",
+        "export_permission": true,
+        "public_release_permission": true,
+        "audit_record_identity": "audit-synthetic-benchmark-001-flat-weld-frame",
+        "retention_classification": "public_synthetic",
+        "controlled_storage_required": false,
+        "access_control_assumption": "Public repository contains metadata-only synthetic wording.",
+        "encryption_expectation": "not_required_for_synthetic_public"
+      },
+      "revision": {
+        "revision_id": "r1",
+        "content_sha256": "0ff4b9821dfaf2b7bbc364939da2d7389b8a9a4a292a8fc4cf5b6cacddccc354",
+        "parent_revision_id": null,
+        "author_identity": "FXD synthetic research",
+        "created_at": "2026-07-23T00:00:00Z",
+        "change_reason": "Initial non-authorizing research reference revision.",
+        "source_revision": null,
+        "optimistic_concurrency_token": "e80c09edb739ef711c3c7e5f5639081a79ea6ca3bc1bb7ce89816419c49d7a9f",
+        "publication_state": "published_research",
+        "deprecation_state": "active",
+        "restores_content_from_revision_id": null
+      }
+    },
+    {
+      "schema_version": "fxd-private-benchmark-case-v1",
+      "case_id": "synthetic-benchmark-002-profile-check",
+      "authority_level": "private_benchmark_reference",
+      "fixture_class": "profile-check fixture",
+      "product_material_forms": [
+        "synthetic formed sheet"
+      ],
+      "manufacturing_process": [
+        "manual comparative profile review"
+      ],
+      "production_quantity": {
+        "value": 500,
+        "period": "synthetic annual planning quantity",
+        "confidence": "synthetic"
+      },
+      "source_part_construction": [
+        "invented formed panel with abstract profile regions"
+      ],
+      "build_orientation": "Synthetic inspection orientation independent of forming-machine context.",
+      "datum_hierarchy": [
+        "three support roles outside checked profile",
+        "two orientation roles"
+      ],
+      "degrees_of_freedom": {
+        "constrained": [
+          "stable presentation for review"
+        ],
+        "intentionally_floating": [
+          "no force normal to flexible checked profile"
+        ]
+      },
+      "supports": [
+        "non-marring support roles"
+      ],
+      "locators": [
+        "orientation locator roles outside checked region"
+      ],
+      "stops": [
+        "wrong-way loading stop"
+      ],
+      "clamps": [
+        "no clamp; gravity seating is the synthetic assumption"
+      ],
+      "force_reaction_mappings": [
+        "gravity seating maps to the support roles"
+      ],
+      "base_structural_strategy": [
+        "open synthetic plate frame with replaceable profile references"
+      ],
+      "loading_sequence": [
+        "clean check surfaces",
+        "load without forcing",
+        "seat on supports"
+      ],
+      "clamping_sequence": [
+        "no clamping action"
+      ],
+      "process_sequence": [
+        "compare selected profile regions",
+        "record synthetic disposition"
+      ],
+      "unloading_sequence": [
+        "lift product without crossing check features"
+      ],
+      "access_review": [
+        "operator view and feeler access"
+      ],
+      "process_context_asset_ids": [
+        "context-006-operator-envelope"
+      ],
+      "manufacturability": [
+        "replaceable check segments",
+        "clearly identified non-check support features"
+      ],
+      "wear_replaceable_components": [
+        "profile reference segments"
+      ],
+      "successful_principles": [
+        "separate datum support from checked profile",
+        "avoid forcing flexible product"
+      ],
+      "compromises": [
+        "synthetic example has no approved tolerance or calibration plan"
+      ],
+      "failure_modes": [
+        "operator could apply unmodeled force",
+        "wear could bias comparison"
+      ],
+      "improvements_fxd_should_propose": [
+        "request inspection plan identity",
+        "add calibration and wear review questions"
+      ],
+      "human_acceptance_criteria": [
+        "fixture does not force the profile",
+        "checked regions remain accessible",
+        "metrology approval remains external"
+      ],
+      "human_disposition": "synthetic_example_only",
+      "privacy_classification": "synthetic_public",
+      "linked_private_asset_identities": [],
+      "authorship": {
+        "author_identity": "FXD synthetic research corpus",
+        "author_role": "synthetic research author"
+      },
+      "provenance": {
+        "record_identity": "synthetic-benchmark-002-profile-check",
+        "origin_classification": "synthetic_original",
+        "derivation_note": "Invented public example with no real product geometry or tolerance."
+      },
+      "rights_and_release": {
+        "rights_holder_or_grantor_identity": "FXD synthetic research",
+        "authorship_identity": "FXD synthetic research corpus",
+        "rights_basis": "original_synthetic_work",
+        "permitted_use_scope": [
+          "public research schema and validation example"
+        ],
+        "permitted_asset_scope": [],
+        "permitted_metadata_fields": [
+          "access_review",
+          "authority_level",
+          "authorship",
+          "base_structural_strategy",
+          "build_orientation",
+          "case_id",
+          "clamping_sequence",
+          "clamps",
+          "compromises",
+          "datum_hierarchy",
+          "degrees_of_freedom",
+          "failure_modes",
+          "fixture_class",
+          "force_reaction_mappings",
+          "human_acceptance_criteria",
+          "human_disposition",
+          "improvements_fxd_should_propose",
+          "loading_sequence",
+          "locators",
+          "manufacturability",
+          "manufacturing_process",
+          "privacy_classification",
+          "process_context_asset_ids",
+          "process_sequence",
+          "product_material_forms",
+          "production_quantity",
+          "provenance",
+          "schema_version",
+          "source_part_construction",
+          "stops",
+          "successful_principles",
+          "supports",
+          "unloading_sequence",
+          "wear_replaceable_components"
+        ],
+        "approval_timestamp": "2026-07-23T00:00:00Z",
+        "release_decision_timestamp": "2026-07-23T00:00:00Z",
+        "release_decision_state": "approved",
+        "expiry_timestamp": null,
+        "revocation_state": "not_revoked",
+        "revocation_timestamp": null,
+        "revocation_reason": null,
+        "deletion_disposition": "Remove public synthetic record if rights status changes.",
+        "backup_disposition": "No private asset backups exist for this synthetic record.",
+        "export_permission": true,
+        "public_release_permission": true,
+        "audit_record_identity": "audit-synthetic-benchmark-002-profile-check",
+        "retention_classification": "public_synthetic",
+        "controlled_storage_required": false,
+        "access_control_assumption": "Public repository contains metadata-only synthetic wording.",
+        "encryption_expectation": "not_required_for_synthetic_public"
+      },
+      "revision": {
+        "revision_id": "r1",
+        "content_sha256": "2beb6908ebb2c95ebe5a79e70c06409d361fe3e378381c7d103539feb6547fe1",
+        "parent_revision_id": null,
+        "author_identity": "FXD synthetic research",
+        "created_at": "2026-07-23T00:00:00Z",
+        "change_reason": "Initial non-authorizing research reference revision.",
+        "source_revision": null,
+        "optimistic_concurrency_token": "d262194ecf40ce59c719495edd1ca8d9fdeb3281e72068c887d2dbf788c4e1c3",
+        "publication_state": "published_research",
+        "deprecation_state": "active",
+        "restores_content_from_revision_id": null
+      }
+    },
+    {
+      "schema_version": "fxd-private-benchmark-case-v1",
+      "case_id": "synthetic-benchmark-003-machine-pallet",
+      "authority_level": "private_benchmark_reference",
+      "fixture_class": "machining workholding setup",
+      "product_material_forms": [
+        "synthetic rectangular billet"
+      ],
+      "manufacturing_process": [
+        "synthetic milling access review"
+      ],
+      "production_quantity": {
+        "value": 24,
+        "period": "synthetic batch",
+        "confidence": "synthetic"
+      },
+      "source_part_construction": [
+        "invented prismatic stock with abstract machining regions"
+      ],
+      "build_orientation": "Synthetic machining setup frame on a provisional pallet.",
+      "datum_hierarchy": [
+        "primary support plane",
+        "secondary side locator",
+        "tertiary end stop"
+      ],
+      "degrees_of_freedom": {
+        "constrained": [
+          "six required setup motions"
+        ],
+        "intentionally_floating": []
+      },
+      "supports": [
+        "three support roles"
+      ],
+      "locators": [
+        "two side locator roles"
+      ],
+      "stops": [
+        "one end stop role"
+      ],
+      "clamps": [
+        "two metadata-only commercial clamp roles"
+      ],
+      "force_reaction_mappings": [
+        "each clamp maps to support regions"
+      ],
+      "base_structural_strategy": [
+        "synthetic pallet interface with no supplier dimensions"
+      ],
+      "loading_sequence": [
+        "door-open state",
+        "load stock",
+        "seat and locate"
+      ],
+      "clamping_sequence": [
+        "apply side and hold-down clamp roles"
+      ],
+      "process_sequence": [
+        "review synthetic spindle and tool envelope",
+        "review chip and probe access"
+      ],
+      "unloading_sequence": [
+        "retract tool context",
+        "open clamps",
+        "unload in door-open state"
+      ],
+      "access_review": [
+        "door",
+        "spindle",
+        "tool",
+        "probe",
+        "operator"
+      ],
+      "process_context_asset_ids": [
+        "context-005-machine-envelope",
+        "context-008-inspection-probe"
+      ],
+      "manufacturability": [
+        "prefer standard workholding interfaces",
+        "custom plate only after interface review"
+      ],
+      "wear_replaceable_components": [
+        "support and locator contacts"
+      ],
+      "successful_principles": [
+        "match interfaces before shape",
+        "validate required movement states"
+      ],
+      "compromises": [
+        "machine and clamp geometry are provisional"
+      ],
+      "failure_modes": [
+        "exact collision cannot pass",
+        "cutting reactions are unassessed"
+      ],
+      "improvements_fxd_should_propose": [
+        "request exact private machine and tooling geometry",
+        "block release until process owner review"
+      ],
+      "human_acceptance_criteria": [
+        "setup concept is understandable",
+        "all provisional context remains visible",
+        "no machining or safety approval is claimed"
+      ],
+      "human_disposition": "synthetic_example_only",
+      "privacy_classification": "synthetic_public",
+      "linked_private_asset_identities": [],
+      "authorship": {
+        "author_identity": "FXD synthetic research corpus",
+        "author_role": "synthetic research author"
+      },
+      "provenance": {
+        "record_identity": "synthetic-benchmark-003-machine-pallet",
+        "origin_classification": "synthetic_original",
+        "derivation_note": "Invented public workholding example without machine or supplier data."
+      },
+      "rights_and_release": {
+        "rights_holder_or_grantor_identity": "FXD synthetic research",
+        "authorship_identity": "FXD synthetic research corpus",
+        "rights_basis": "original_synthetic_work",
+        "permitted_use_scope": [
+          "public research schema and validation example"
+        ],
+        "permitted_asset_scope": [],
+        "permitted_metadata_fields": [
+          "access_review",
+          "authority_level",
+          "authorship",
+          "base_structural_strategy",
+          "build_orientation",
+          "case_id",
+          "clamping_sequence",
+          "clamps",
+          "compromises",
+          "datum_hierarchy",
+          "degrees_of_freedom",
+          "failure_modes",
+          "fixture_class",
+          "force_reaction_mappings",
+          "human_acceptance_criteria",
+          "human_disposition",
+          "improvements_fxd_should_propose",
+          "loading_sequence",
+          "locators",
+          "manufacturability",
+          "manufacturing_process",
+          "privacy_classification",
+          "process_context_asset_ids",
+          "process_sequence",
+          "product_material_forms",
+          "production_quantity",
+          "provenance",
+          "schema_version",
+          "source_part_construction",
+          "stops",
+          "successful_principles",
+          "supports",
+          "unloading_sequence",
+          "wear_replaceable_components"
+        ],
+        "approval_timestamp": "2026-07-23T00:00:00Z",
+        "release_decision_timestamp": "2026-07-23T00:00:00Z",
+        "release_decision_state": "approved",
+        "expiry_timestamp": null,
+        "revocation_state": "not_revoked",
+        "revocation_timestamp": null,
+        "revocation_reason": null,
+        "deletion_disposition": "Remove public synthetic record if rights status changes.",
+        "backup_disposition": "No private asset backups exist for this synthetic record.",
+        "export_permission": true,
+        "public_release_permission": true,
+        "audit_record_identity": "audit-synthetic-benchmark-003-machine-pallet",
+        "retention_classification": "public_synthetic",
+        "controlled_storage_required": false,
+        "access_control_assumption": "Public repository contains metadata-only synthetic wording.",
+        "encryption_expectation": "not_required_for_synthetic_public"
+      },
+      "revision": {
+        "revision_id": "r1",
+        "content_sha256": "eecf9f150d07aad74eabb0d463457d874501a5fc87f1f32d89d690e05d076e71",
+        "parent_revision_id": null,
+        "author_identity": "FXD synthetic research",
+        "created_at": "2026-07-23T00:00:00Z",
+        "change_reason": "Initial non-authorizing research reference revision.",
+        "source_revision": null,
+        "optimistic_concurrency_token": "7232897f02a8abf344bea48313b61e959190b5590bbb5bc43b55a818b2ab8185",
+        "publication_state": "published_research",
+        "deprecation_state": "active",
+        "restores_content_from_revision_id": null
+      }
+    },
+    {
+      "schema_version": "fxd-private-benchmark-case-v1",
+      "case_id": "synthetic-benchmark-004-combined-build-check",
+      "authority_level": "private_benchmark_reference",
+      "fixture_class": "combined build-and-check tooling",
+      "product_material_forms": [
+        "synthetic tube",
+        "synthetic machined brackets"
+      ],
+      "manufacturing_process": [
+        "manual assembly",
+        "in-process probe review"
+      ],
+      "production_quantity": {
+        "value": 60,
+        "period": "synthetic monthly planning quantity",
+        "confidence": "synthetic"
+      },
+      "source_part_construction": [
+        "invented three-component assembly"
+      ],
+      "build_orientation": "Synthetic assembly frame with a declared inspection state.",
+      "datum_hierarchy": [
+        "build datum roles",
+        "independent check feature roles"
+      ],
+      "degrees_of_freedom": {
+        "constrained": [
+          "assembly relationship during fastening"
+        ],
+        "intentionally_floating": [
+          "one thermal or tolerance direction"
+        ]
+      },
+      "supports": [
+        "three build support roles"
+      ],
+      "locators": [
+        "build locator roles separate from check features"
+      ],
+      "stops": [
+        "assembly seating stop"
+      ],
+      "clamps": [
+        "two provisional hold-down roles"
+      ],
+      "force_reaction_mappings": [
+        "hold-down roles map to build supports"
+      ],
+      "base_structural_strategy": [
+        "open synthetic base providing assembly and probe access"
+      ],
+      "loading_sequence": [
+        "load base component",
+        "load two brackets",
+        "seat against build roles"
+      ],
+      "clamping_sequence": [
+        "close hold-down roles",
+        "confirm declared inspection state"
+      ],
+      "process_sequence": [
+        "fasten synthetic assembly",
+        "probe independent check features"
+      ],
+      "unloading_sequence": [
+        "retract probe",
+        "open clamps",
+        "remove completed assembly"
+      ],
+      "access_review": [
+        "fastener tool",
+        "probe",
+        "operator hand",
+        "finished assembly"
+      ],
+      "process_context_asset_ids": [
+        "context-006-operator-envelope",
+        "context-008-inspection-probe"
+      ],
+      "manufacturability": [
+        "replaceable probe brackets and check features"
+      ],
+      "wear_replaceable_components": [
+        "build supports",
+        "check inserts"
+      ],
+      "successful_principles": [
+        "separate build and check roles",
+        "keep output and state evidence coherent"
+      ],
+      "compromises": [
+        "in-process check is not independent final inspection"
+      ],
+      "failure_modes": [
+        "clamp state may bias check",
+        "process debris may affect check features"
+      ],
+      "improvements_fxd_should_propose": [
+        "require measurement plan and calibration identity",
+        "compare unclamped verification where appropriate"
+      ],
+      "human_acceptance_criteria": [
+        "build and check roles are visibly distinct",
+        "inspection state is reproducible",
+        "final acceptance authority remains external"
+      ],
+      "human_disposition": "synthetic_example_only",
+      "privacy_classification": "synthetic_public",
+      "linked_private_asset_identities": [],
+      "authorship": {
+        "author_identity": "FXD synthetic research corpus",
+        "author_role": "synthetic research author"
+      },
+      "provenance": {
+        "record_identity": "synthetic-benchmark-004-combined-build-check",
+        "origin_classification": "synthetic_original",
+        "derivation_note": "Invented public example with no private fixture or measurement data."
+      },
+      "rights_and_release": {
+        "rights_holder_or_grantor_identity": "FXD synthetic research",
+        "authorship_identity": "FXD synthetic research corpus",
+        "rights_basis": "original_synthetic_work",
+        "permitted_use_scope": [
+          "public research schema and validation example"
+        ],
+        "permitted_asset_scope": [],
+        "permitted_metadata_fields": [
+          "access_review",
+          "authority_level",
+          "authorship",
+          "base_structural_strategy",
+          "build_orientation",
+          "case_id",
+          "clamping_sequence",
+          "clamps",
+          "compromises",
+          "datum_hierarchy",
+          "degrees_of_freedom",
+          "failure_modes",
+          "fixture_class",
+          "force_reaction_mappings",
+          "human_acceptance_criteria",
+          "human_disposition",
+          "improvements_fxd_should_propose",
+          "loading_sequence",
+          "locators",
+          "manufacturability",
+          "manufacturing_process",
+          "privacy_classification",
+          "process_context_asset_ids",
+          "process_sequence",
+          "product_material_forms",
+          "production_quantity",
+          "provenance",
+          "schema_version",
+          "source_part_construction",
+          "stops",
+          "successful_principles",
+          "supports",
+          "unloading_sequence",
+          "wear_replaceable_components"
+        ],
+        "approval_timestamp": "2026-07-23T00:00:00Z",
+        "release_decision_timestamp": "2026-07-23T00:00:00Z",
+        "release_decision_state": "approved",
+        "expiry_timestamp": null,
+        "revocation_state": "not_revoked",
+        "revocation_timestamp": null,
+        "revocation_reason": null,
+        "deletion_disposition": "Remove public synthetic record if rights status changes.",
+        "backup_disposition": "No private asset backups exist for this synthetic record.",
+        "export_permission": true,
+        "public_release_permission": true,
+        "audit_record_identity": "audit-synthetic-benchmark-004-combined-build-check",
+        "retention_classification": "public_synthetic",
+        "controlled_storage_required": false,
+        "access_control_assumption": "Public repository contains metadata-only synthetic wording.",
+        "encryption_expectation": "not_required_for_synthetic_public"
+      },
+      "revision": {
+        "revision_id": "r1",
+        "content_sha256": "f894c260578e2807612013ef2216a8cb8ed4cb6a8e01ac26e18b41fc8f568672",
+        "parent_revision_id": null,
+        "author_identity": "FXD synthetic research",
+        "created_at": "2026-07-23T00:00:00Z",
+        "change_reason": "Initial non-authorizing research reference revision.",
+        "source_revision": null,
+        "optimistic_concurrency_token": "3ecdbadd64e4f96489b59941032622027aa2ba462897203b8c0f5c0e41b6b44e",
+        "publication_state": "published_research",
+        "deprecation_state": "active",
+        "restores_content_from_revision_id": null
+      }
+    }
+  ]
+}

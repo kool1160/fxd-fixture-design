@@ -1,0 +1,238 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fxd.invalid/research/library_revision_history_v1.schema.json",
+  "title": "FXD library revision history and project pin state v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "histories",
+    "project_pins"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "fxd-library-revision-history-state-v1"
+    },
+    "histories": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/history"
+      },
+      "minItems": 1
+    },
+    "project_pins": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/project_pin"
+      },
+      "minItems": 1
+    }
+  },
+  "$defs": {
+    "history": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "history_id",
+        "subject_id",
+        "current_revision_id",
+        "revisions",
+        "publication_attempts"
+      ],
+      "properties": {
+        "history_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]*$"
+        },
+        "subject_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]*$"
+        },
+        "current_revision_id": {
+          "type": "string",
+          "pattern": "^r[1-9][0-9]*$"
+        },
+        "revisions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/revision_entry"
+          },
+          "minItems": 1
+        },
+        "publication_attempts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/publication_attempt"
+          }
+        }
+      }
+    },
+    "revision_entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "revision",
+        "change_kind",
+        "current_published_successor",
+        "evidence_invalidated",
+        "invalidation_reason"
+      ],
+      "properties": {
+        "revision": {
+          "$ref": "library_revision_v1.schema.json"
+        },
+        "change_kind": {
+          "enum": [
+            "root",
+            "update",
+            "rollback",
+            "relink",
+            "migration"
+          ]
+        },
+        "current_published_successor": {
+          "type": "boolean"
+        },
+        "evidence_invalidated": {
+          "type": "boolean"
+        },
+        "invalidation_reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "publication_attempt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "attempt_id",
+        "proposed_revision_id",
+        "expected_parent_revision_id",
+        "expected_parent_concurrency_token",
+        "decision_timestamp",
+        "disposition"
+      ],
+      "properties": {
+        "attempt_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]*$"
+        },
+        "proposed_revision_id": {
+          "type": "string",
+          "pattern": "^r[2-9][0-9]*$"
+        },
+        "expected_parent_revision_id": {
+          "type": "string",
+          "pattern": "^r[1-9][0-9]*$"
+        },
+        "expected_parent_concurrency_token": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "decision_timestamp": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+        },
+        "disposition": {
+          "enum": [
+            "accepted",
+            "conflict_rejected",
+            "withdrawn"
+          ]
+        }
+      }
+    },
+    "project_pin": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "pin_id",
+        "project_id",
+        "history_id",
+        "subject_id",
+        "pinned_revision_id",
+        "automatic_adoption",
+        "migration"
+      ],
+      "properties": {
+        "pin_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]*$"
+        },
+        "project_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]*$"
+        },
+        "history_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]*$"
+        },
+        "subject_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]*$"
+        },
+        "pinned_revision_id": {
+          "type": "string",
+          "pattern": "^r[1-9][0-9]*$"
+        },
+        "automatic_adoption": {
+          "type": "boolean"
+        },
+        "migration": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/project_migration"
+            }
+          ]
+        }
+      }
+    },
+    "project_migration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "from_revision_id",
+        "to_revision_id",
+        "engineer_decision_id",
+        "decision_timestamp",
+        "silent_adoption",
+        "evidence_invalidated",
+        "invalidation_reason"
+      ],
+      "properties": {
+        "from_revision_id": {
+          "type": "string",
+          "pattern": "^r[1-9][0-9]*$"
+        },
+        "to_revision_id": {
+          "type": "string",
+          "pattern": "^r[1-9][0-9]*$"
+        },
+        "engineer_decision_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "decision_timestamp": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+        },
+        "silent_adoption": {
+          "type": "boolean"
+        },
+        "evidence_invalidated": {
+          "type": "boolean"
+        },
+        "invalidation_reason": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,467 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fxd.invalid/research/private_benchmark_case_v1.schema.json",
+  "title": "FXD private benchmark case v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "case_id",
+    "authority_level",
+    "revision",
+    "fixture_class",
+    "product_material_forms",
+    "manufacturing_process",
+    "production_quantity",
+    "source_part_construction",
+    "build_orientation",
+    "datum_hierarchy",
+    "degrees_of_freedom",
+    "supports",
+    "locators",
+    "stops",
+    "clamps",
+    "force_reaction_mappings",
+    "base_structural_strategy",
+    "loading_sequence",
+    "clamping_sequence",
+    "process_sequence",
+    "unloading_sequence",
+    "access_review",
+    "process_context_asset_ids",
+    "manufacturability",
+    "wear_replaceable_components",
+    "successful_principles",
+    "compromises",
+    "failure_modes",
+    "improvements_fxd_should_propose",
+    "human_acceptance_criteria",
+    "human_disposition",
+    "authorship",
+    "provenance",
+    "privacy_classification",
+    "rights_and_release",
+    "linked_private_asset_identities"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "fxd-private-benchmark-case-v1"
+    },
+    "case_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]*$"
+    },
+    "authority_level": {
+      "const": "private_benchmark_reference"
+    },
+    "revision": {
+      "$ref": "library_revision_v1.schema.json"
+    },
+    "fixture_class": {
+      "type": "string",
+      "minLength": 1
+    },
+    "product_material_forms": {
+      "$ref": "#/$defs/string_array"
+    },
+    "manufacturing_process": {
+      "$ref": "#/$defs/string_array"
+    },
+    "production_quantity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "value",
+        "period",
+        "confidence"
+      ],
+      "properties": {
+        "value": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "period": {
+          "type": "string",
+          "minLength": 1
+        },
+        "confidence": {
+          "enum": [
+            "synthetic",
+            "estimated",
+            "recorded"
+          ]
+        }
+      }
+    },
+    "source_part_construction": {
+      "$ref": "#/$defs/string_array"
+    },
+    "build_orientation": {
+      "type": "string",
+      "minLength": 1
+    },
+    "datum_hierarchy": {
+      "$ref": "#/$defs/string_array"
+    },
+    "degrees_of_freedom": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "constrained",
+        "intentionally_floating"
+      ],
+      "properties": {
+        "constrained": {
+          "$ref": "#/$defs/string_array"
+        },
+        "intentionally_floating": {
+          "$ref": "#/$defs/string_array_allow_empty"
+        }
+      }
+    },
+    "supports": {
+      "$ref": "#/$defs/string_array"
+    },
+    "locators": {
+      "$ref": "#/$defs/string_array"
+    },
+    "stops": {
+      "$ref": "#/$defs/string_array"
+    },
+    "clamps": {
+      "$ref": "#/$defs/string_array"
+    },
+    "force_reaction_mappings": {
+      "$ref": "#/$defs/string_array"
+    },
+    "base_structural_strategy": {
+      "$ref": "#/$defs/string_array"
+    },
+    "loading_sequence": {
+      "$ref": "#/$defs/string_array"
+    },
+    "clamping_sequence": {
+      "$ref": "#/$defs/string_array"
+    },
+    "process_sequence": {
+      "$ref": "#/$defs/string_array"
+    },
+    "unloading_sequence": {
+      "$ref": "#/$defs/string_array"
+    },
+    "access_review": {
+      "$ref": "#/$defs/string_array"
+    },
+    "process_context_asset_ids": {
+      "$ref": "#/$defs/string_array_allow_empty"
+    },
+    "manufacturability": {
+      "$ref": "#/$defs/string_array"
+    },
+    "wear_replaceable_components": {
+      "$ref": "#/$defs/string_array_allow_empty"
+    },
+    "successful_principles": {
+      "$ref": "#/$defs/string_array"
+    },
+    "compromises": {
+      "$ref": "#/$defs/string_array"
+    },
+    "failure_modes": {
+      "$ref": "#/$defs/string_array"
+    },
+    "improvements_fxd_should_propose": {
+      "$ref": "#/$defs/string_array"
+    },
+    "human_acceptance_criteria": {
+      "$ref": "#/$defs/string_array"
+    },
+    "human_disposition": {
+      "enum": [
+        "accepted_reference",
+        "accepted_with_conditions",
+        "rejected_reference",
+        "not_yet_reviewed",
+        "synthetic_example_only"
+      ]
+    },
+    "authorship": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "author_identity",
+        "author_role"
+      ],
+      "properties": {
+        "author_identity": {
+          "type": "string",
+          "minLength": 1
+        },
+        "author_role": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "record_identity",
+        "origin_classification",
+        "derivation_note"
+      ],
+      "properties": {
+        "record_identity": {
+          "type": "string",
+          "minLength": 1
+        },
+        "origin_classification": {
+          "enum": [
+            "synthetic_original",
+            "private_owner_record",
+            "selected_public_release"
+          ]
+        },
+        "derivation_note": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "privacy_classification": {
+      "enum": [
+        "private_local_only",
+        "synthetic_public",
+        "selected_public_release"
+      ]
+    },
+    "rights_and_release": {
+      "$ref": "#/$defs/rights_and_release"
+    },
+    "linked_private_asset_identities": {
+      "$ref": "#/$defs/string_array_allow_empty"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "privacy_classification": {
+            "const": "selected_public_release"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "rights_and_release": {
+            "properties": {
+              "revocation_state": {
+                "const": "not_revoked"
+              },
+              "rights_basis": {
+                "enum": [
+                  "original_synthetic_work",
+                  "owner_authorization",
+                  "contractual_permission",
+                  "employment_or_assignment_rights"
+                ]
+              },
+              "release_decision_state": {
+                "const": "approved"
+              },
+              "export_permission": {
+                "const": true
+              },
+              "public_release_permission": {
+                "const": true
+              },
+              "permitted_metadata_fields": {
+                "minItems": 1
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "privacy_classification": {
+            "const": "private_local_only"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "rights_and_release": {
+            "properties": {
+              "public_release_permission": {
+                "const": false
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "string_array": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "string_array_allow_empty": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
+    },
+    "rights_and_release": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rights_holder_or_grantor_identity",
+        "authorship_identity",
+        "rights_basis",
+        "permitted_use_scope",
+        "permitted_asset_scope",
+        "permitted_metadata_fields",
+        "approval_timestamp",
+        "release_decision_timestamp",
+        "release_decision_state",
+        "expiry_timestamp",
+        "revocation_state",
+        "revocation_timestamp",
+        "revocation_reason",
+        "deletion_disposition",
+        "backup_disposition",
+        "export_permission",
+        "public_release_permission",
+        "audit_record_identity",
+        "retention_classification",
+        "controlled_storage_required",
+        "access_control_assumption",
+        "encryption_expectation"
+      ],
+      "properties": {
+        "rights_holder_or_grantor_identity": {
+          "type": "string",
+          "minLength": 1
+        },
+        "authorship_identity": {
+          "type": "string",
+          "minLength": 1
+        },
+        "rights_basis": {
+          "enum": [
+            "original_synthetic_work",
+            "owner_authorization",
+            "contractual_permission",
+            "employment_or_assignment_rights",
+            "unknown_not_releasable"
+          ]
+        },
+        "permitted_use_scope": {
+          "$ref": "#/$defs/string_array"
+        },
+        "permitted_asset_scope": {
+          "$ref": "#/$defs/string_array_allow_empty"
+        },
+        "permitted_metadata_fields": {
+          "$ref": "#/$defs/string_array_allow_empty"
+        },
+        "approval_timestamp": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+        },
+        "release_decision_timestamp": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+        },
+        "release_decision_state": {
+          "enum": [
+            "approved",
+            "denied",
+            "pending_review",
+            "not_requested"
+          ]
+        },
+        "expiry_timestamp": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+        },
+        "revocation_state": {
+          "enum": [
+            "not_revoked",
+            "revoked",
+            "pending_review"
+          ]
+        },
+        "revocation_timestamp": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+        },
+        "revocation_reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "deletion_disposition": {
+          "type": "string",
+          "minLength": 1
+        },
+        "backup_disposition": {
+          "type": "string",
+          "minLength": 1
+        },
+        "export_permission": {
+          "type": "boolean"
+        },
+        "public_release_permission": {
+          "type": "boolean"
+        },
+        "audit_record_identity": {
+          "type": "string",
+          "minLength": 1
+        },
+        "retention_classification": {
+          "enum": [
+            "public_synthetic",
+            "private_controlled",
+            "delete_on_revocation",
+            "legal_hold"
+          ]
+        },
+        "controlled_storage_required": {
+          "type": "boolean"
+        },
+        "access_control_assumption": {
+          "type": "string",
+          "minLength": 1
+        },
+        "encryption_expectation": {
+          "enum": [
+            "not_required_for_synthetic_public",
+            "encrypted_at_rest_and_in_transit",
+            "controlled_local_encryption_required",
+            "not_yet_defined_blocks_use"
+          ]
+        }
+      }
+    }
+  }
+}

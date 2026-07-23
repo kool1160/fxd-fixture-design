@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fxd.invalid/research/fixture_library_source_v1.schema.json",
+  "title": "FXD fixture library source v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "source_id",
+    "publisher",
+    "title",
+    "canonical_url",
+    "date_accessed",
+    "source_category",
+    "original_fxd_paraphrase",
+    "applicability",
+    "limitations",
+    "reuse_classification",
+    "licensing_note"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "fxd-fixture-library-source-v1"
+    },
+    "source_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "publisher": {
+      "type": "string",
+      "minLength": 1
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1
+    },
+    "canonical_url": {
+      "type": "string",
+      "pattern": "^https://"
+    },
+    "date_accessed": {
+      "type": "string",
+      "pattern": "^20[0-9]{2}-[0-9]{2}-[0-9]{2}$"
+    },
+    "source_category": {
+      "enum": [
+        "official_manufacturer_engineering_page",
+        "official_product_documentation",
+        "official_regulatory_guidance",
+        "official_open_source_project_documentation",
+        "official_standard_metadata",
+        "official_schema_specification"
+      ]
+    },
+    "original_fxd_paraphrase": {
+      "type": "string",
+      "minLength": 20
+    },
+    "applicability": {
+      "type": "string",
+      "minLength": 10
+    },
+    "limitations": {
+      "type": "string",
+      "minLength": 10
+    },
+    "reuse_classification": {
+      "enum": [
+        "metadata_and_original_fxd_paraphrase",
+        "interaction_reference_only",
+        "regulatory_metadata_and_original_fxd_paraphrase",
+        "open_source_documentation_metadata_and_original_fxd_paraphrase",
+        "standards_metadata_only_no_normative_text",
+        "specification_metadata_and_schema_uri"
+      ]
+    },
+    "licensing_note": {
+      "type": "string",
+      "minLength": 20
+    }
+  }
+}

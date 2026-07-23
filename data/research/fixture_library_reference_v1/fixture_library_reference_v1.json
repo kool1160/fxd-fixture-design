@@ -1,0 +1,4424 @@
+{
+  "schema_version": "fxd-fixture-library-reference-corpus-v1",
+  "research_only": true,
+  "authorization_boundary": "This corpus is non-authorizing research and is not imported by production code.",
+  "sources": [
+    {
+      "schema_version": "fxd-fixture-library-source-v1",
+      "source_id": "carr-lane-fixture-design-principles",
+      "publisher": "Carr Lane Manufacturing",
+      "title": "Workpiece Fixture Design Principles",
+      "canonical_url": "https://www.carrlane.com/engineering-resources/fixture-design-principles",
+      "date_accessed": "2026-07-23",
+      "source_category": "official_manufacturer_engineering_page",
+      "original_fxd_paraphrase": "A fixture should establish deliberate locating and clamping roles, avoid redundant location, and make correct loading easier to verify.",
+      "applicability": "Public conceptual basis for datum, locating, clamping, foolproofing, and loading records.",
+      "limitations": "Manufacturer guidance is not a universal shop rule and is not a substitute for project-specific engineering.",
+      "reuse_classification": "metadata_and_original_fxd_paraphrase",
+      "licensing_note": "Only publisher, title, canonical URL, and original FXD paraphrase are reused; no handbook, figures, tables, calculations, or product data are copied."
+    },
+    {
+      "schema_version": "fxd-fixture-library-source-v1",
+      "source_id": "demmeler-welding-tables",
+      "publisher": "DEMMELER Maschinenbau GmbH & Co. KG",
+      "title": "3D welding tables",
+      "canonical_url": "https://www.demmeler.com/products-shop/original-3d-clamping-systems/3d-welding-tables/",
+      "date_accessed": "2026-07-23",
+      "source_category": "official_product_documentation",
+      "original_fxd_paraphrase": "Modular table systems illustrate why a fixture must record its table interface and mounting strategy instead of assuming a universal base standard.",
+      "applicability": "Metadata-only precedent for explicit table-grid interfaces and modular mounting.",
+      "limitations": "No product dimensions, capacity claims, hole patterns, images, catalogs, or CAD are reused.",
+      "reuse_classification": "metadata_and_original_fxd_paraphrase",
+      "licensing_note": "Product-family metadata and original FXD interpretation only; supplier content remains governed by the publisher."
+    },
+    {
+      "schema_version": "fxd-fixture-library-source-v1",
+      "source_id": "destaco-welding-applications",
+      "publisher": "DESTACO",
+      "title": "Welding applications",
+      "canonical_url": "https://www.destaco.com/applications/welding",
+      "date_accessed": "2026-07-23",
+      "source_category": "official_product_documentation",
+      "original_fxd_paraphrase": "Commercial clamps belong in welding-context decisions through explicit motion, contact, mounting, and access interfaces, with exact geometry only when authorized.",
+      "applicability": "Metadata-only support for commercial clamp roles and provisional open/closed envelopes.",
+      "limitations": "No force, cycle, performance, geometry, or suitability claim is imported into FXD.",
+      "reuse_classification": "metadata_and_original_fxd_paraphrase",
+      "licensing_note": "Application-page metadata and original FXD paraphrase only; no catalog, image, specification, or CAD redistribution."
+    },
+    {
+      "schema_version": "fxd-fixture-library-source-v1",
+      "source_id": "fixtureworks-components",
+      "publisher": "Fixtureworks",
+      "title": "Standard fixturing components",
+      "canonical_url": "https://www.fixtureworks.com/store/pc/standard-fixturing-components-v69.htm",
+      "date_accessed": "2026-07-23",
+      "source_category": "official_product_documentation",
+      "original_fxd_paraphrase": "Standard supports, locators, stops, and workholding elements should be modeled by distinct functional roles and replaceable interfaces.",
+      "applicability": "Category precedent for component taxonomy, serviceability, and role separation.",
+      "limitations": "The record does not reproduce exact products, dimensions, materials, claims, images, or CAD.",
+      "reuse_classification": "metadata_and_original_fxd_paraphrase",
+      "licensing_note": "Only category metadata and original FXD interpretation are reused; all supplier content remains excluded."
+    },
+    {
+      "schema_version": "fxd-fixture-library-source-v1",
+      "source_id": "iso-10218-2-2025-metadata",
+      "publisher": "International Organization for Standardization",
+      "title": "ISO 10218-2:2025 - Industrial robot applications and robot cells",
+      "canonical_url": "https://www.iso.org/standard/73934.html",
+      "date_accessed": "2026-07-23",
+      "source_category": "official_standard_metadata",
+      "original_fxd_paraphrase": "Robot application integration has safety responsibilities beyond fixture geometry; any future robot context pack must remain evidence support rather than safety certification.",
+      "applicability": "Standards watch item for optional robot-context validation planning.",
+      "limitations": "No normative content is reproduced, interpreted as law, or implemented.",
+      "reuse_classification": "standards_metadata_only_no_normative_text",
+      "licensing_note": "Citation metadata only. Licensed standards and qualified safety review would be required for future implementation."
+    },
+    {
+      "schema_version": "fxd-fixture-library-source-v1",
+      "source_id": "iso-1101-2017-metadata",
+      "publisher": "International Organization for Standardization",
+      "title": "ISO 1101:2017 - Geometrical tolerancing",
+      "canonical_url": "https://www.iso.org/standard/66777.html",
+      "date_accessed": "2026-07-23",
+      "source_category": "official_standard_metadata",
+      "original_fxd_paraphrase": "Geometrical specification and verification are separate concerns; future inspection-template work needs licensed standards review before asserting conformance.",
+      "applicability": "Standards watch item for inspection and profile-check architecture.",
+      "limitations": "No normative symbols, requirements, examples, or rules are reproduced or implemented.",
+      "reuse_classification": "standards_metadata_only_no_normative_text",
+      "licensing_note": "Citation metadata only. ISO content remains excluded from the research corpus."
+    },
+    {
+      "schema_version": "fxd-fixture-library-source-v1",
+      "source_id": "iso-5459-2024-metadata",
+      "publisher": "International Organization for Standardization",
+      "title": "ISO 5459:2024 - Datums and datum systems",
+      "canonical_url": "https://www.iso.org/standard/87855.html",
+      "date_accessed": "2026-07-23",
+      "source_category": "official_standard_metadata",
+      "original_fxd_paraphrase": "Future datum-related claims require a governed standards position; this record identifies the relevant standard family without importing its normative rules.",
+      "applicability": "Standards watch item for future datum terminology and licensed requirements review.",
+      "limitations": "No normative ISO content is used, reproduced, summarized into rules, or treated as implemented.",
+      "reuse_classification": "standards_metadata_only_no_normative_text",
+      "licensing_note": "Citation metadata only. ISO content is copyrighted and requires separately authorized access and review before implementation."
+    },
+    {
+      "schema_version": "fxd-fixture-library-source-v1",
+      "source_id": "jergens-fixturing-components",
+      "publisher": "Jergens, Inc.",
+      "title": "Fixturing components",
+      "canonical_url": "https://www.jergensinc.com/en/categories/fixturing-components",
+      "date_accessed": "2026-07-23",
+      "source_category": "official_product_documentation",
+      "original_fxd_paraphrase": "Reusable workholding is easier to manage when mounting, locating, support, and replacement duties are represented separately.",
+      "applicability": "Category precedent for typed interfaces and replacement compatibility.",
+      "limitations": "No catalog selection, exact part, dimension, performance statement, or CAD is included.",
+      "reuse_classification": "metadata_and_original_fxd_paraphrase",
+      "licensing_note": "Category metadata and original FXD paraphrase only; vendor-owned content is not redistributed."
+    },
+    {
+      "schema_version": "fxd-fixture-library-source-v1",
+      "source_id": "json-schema-2020-12",
+      "publisher": "JSON Schema",
+      "title": "Draft 2020-12",
+      "canonical_url": "https://json-schema.org/draft/2020-12",
+      "date_accessed": "2026-07-23",
+      "source_category": "official_schema_specification",
+      "original_fxd_paraphrase": "Draft 2020-12 provides a versioned vocabulary for declaring structural constraints and reusable schema definitions for the research artifacts.",
+      "applicability": "Schema dialect used by the eight research schemas.",
+      "limitations": "Schema validity does not prove engineering validity, geometric correctness, or production suitability.",
+      "reuse_classification": "specification_metadata_and_schema_uri",
+      "licensing_note": "Only the public schema URI and specification metadata are referenced; no specification text is copied."
+    },
+    {
+      "schema_version": "fxd-fixture-library-source-v1",
+      "source_id": "occt-application-framework",
+      "publisher": "Open CASCADE Technology",
+      "title": "Application Framework",
+      "canonical_url": "https://dev.opencascade.org/about/application_framework",
+      "date_accessed": "2026-07-23",
+      "source_category": "official_open_source_project_documentation",
+      "original_fxd_paraphrase": "OCAF demonstrates a document-oriented pattern for persistent application data, dependencies, recomputation, and undo without making transient shape objects the sole identity authority.",
+      "applicability": "Architecture precedent for evaluating future persistent identities and revision-aware CAD data.",
+      "limitations": "This package does not select OCAF, change the current project model, or promise stable topology across every edit.",
+      "reuse_classification": "open_source_documentation_metadata_and_original_fxd_paraphrase",
+      "licensing_note": "Official documentation metadata and original FXD paraphrase only; future implementation requires independent license and architecture review."
+    },
+    {
+      "schema_version": "fxd-fixture-library-source-v1",
+      "source_id": "occt-xde-guide",
+      "publisher": "Open CASCADE Technology",
+      "title": "Extended Data Exchange (XDE) user guide",
+      "canonical_url": "https://dev.opencascade.org/doc/overview/html/occt_user_guides__xde.html",
+      "date_accessed": "2026-07-23",
+      "source_category": "official_open_source_project_documentation",
+      "original_fxd_paraphrase": "XDE shows that shapes, assemblies, and attached properties can share one document structure, which is relevant to future neutral asset provenance and assembly identity.",
+      "applicability": "Architecture precedent for multi-asset assembly metadata evaluation.",
+      "limitations": "No runtime adoption, persistence migration, or topology guarantee is authorized here.",
+      "reuse_classification": "open_source_documentation_metadata_and_original_fxd_paraphrase",
+      "licensing_note": "Official documentation metadata and original FXD paraphrase only."
+    },
+    {
+      "schema_version": "fxd-fixture-library-source-v1",
+      "source_id": "osha-machine-guarding",
+      "publisher": "Occupational Safety and Health Administration",
+      "title": "Machine Guarding - Overview",
+      "canonical_url": "https://www.osha.gov/machine-guarding/",
+      "date_accessed": "2026-07-23",
+      "source_category": "official_regulatory_guidance",
+      "original_fxd_paraphrase": "Guarding and hazardous machine motion remain separate safety responsibilities; FXD context assets may expose conflicts but cannot certify safeguards.",
+      "applicability": "Boundary source for guarding, keep-out, service, and operator-envelope records.",
+      "limitations": "No legal conclusion or machine-specific guarding design is created.",
+      "reuse_classification": "regulatory_metadata_and_original_fxd_paraphrase",
+      "licensing_note": "Federal-source metadata and original FXD paraphrase only; current regulations and qualified safety review remain authoritative."
+    },
+    {
+      "schema_version": "fxd-fixture-library-source-v1",
+      "source_id": "osha-robotics-overview",
+      "publisher": "Occupational Safety and Health Administration",
+      "title": "Robotics - Overview",
+      "canonical_url": "https://www.osha.gov/robotics",
+      "date_accessed": "2026-07-23",
+      "source_category": "official_regulatory_guidance",
+      "original_fxd_paraphrase": "Robot context is relevant during normal and non-routine states, including setup and maintenance, so one nominal pose is not complete access evidence.",
+      "applicability": "Boundary source for movement states, maintenance envelopes, and human confirmation.",
+      "limitations": "FXD does not perform robot safety assessment, programming, risk reduction, or compliance certification.",
+      "reuse_classification": "regulatory_metadata_and_original_fxd_paraphrase",
+      "licensing_note": "Federal-source metadata and original FXD paraphrase only."
+    },
+    {
+      "schema_version": "fxd-fixture-library-source-v1",
+      "source_id": "osha-welding-overview",
+      "publisher": "Occupational Safety and Health Administration",
+      "title": "Welding, Cutting, and Brazing - Overview",
+      "canonical_url": "https://www.osha.gov/welding-cutting-brazing",
+      "date_accessed": "2026-07-23",
+      "source_category": "official_regulatory_guidance",
+      "original_fxd_paraphrase": "Welding process context includes hazards and controls beyond geometric torch reach, so access evidence cannot be represented as safety approval.",
+      "applicability": "Boundary source for separating geometric access review from welding safety and procedure approval.",
+      "limitations": "This research does not interpret legal duties, copy regulatory text, or claim compliance.",
+      "reuse_classification": "regulatory_metadata_and_original_fxd_paraphrase",
+      "licensing_note": "Federal-source metadata and original FXD paraphrase only; users must consult current authoritative requirements."
+    },
+    {
+      "schema_version": "fxd-fixture-library-source-v1",
+      "source_id": "robodk-reference-frame",
+      "publisher": "RoboDK",
+      "title": "Reference Frame",
+      "canonical_url": "https://robodk.com/doc/en/Interface-Reference-Frame.html",
+      "date_accessed": "2026-07-23",
+      "source_category": "official_product_documentation",
+      "original_fxd_paraphrase": "A visible hierarchy of reference frames and dependent objects is a useful interaction analogy for positioning process-context assets without flattening their relationships.",
+      "applicability": "Interaction reference for Issues #61 and #62 only.",
+      "limitations": "RoboDK is not a dependency, implementation source, robot-programming target, or product to copy.",
+      "reuse_classification": "interaction_reference_only",
+      "licensing_note": "Only product-documentation metadata and an original high-level interaction observation are recorded; no UI, code, images, or workflow text is copied."
+    },
+    {
+      "schema_version": "fxd-fixture-library-source-v1",
+      "source_id": "strong-hand-modular-table",
+      "publisher": "Strong Hand Tools",
+      "title": "MAX table overview",
+      "canonical_url": "https://www.stronghandtools.com/pages/max-table-overview",
+      "date_accessed": "2026-07-23",
+      "source_category": "official_product_documentation",
+      "original_fxd_paraphrase": "A modular welding base is a project context and interface choice; FXD must retain the chosen mounting evidence without converting one table family into a universal standard.",
+      "applicability": "Product-family precedent for table mounting and reusable fixture placement.",
+      "limitations": "No dimensions, capacities, photographs, marketing claims, catalogs, or CAD are reused.",
+      "reuse_classification": "metadata_and_original_fxd_paraphrase",
+      "licensing_note": "Product-family metadata and original FXD interpretation only."
+    }
+  ],
+  "engineering_principles": [
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "principle-001-source-authority",
+      "name": "Preserve source authority",
+      "record_type": "engineering_principle",
+      "category": "public_engineering_knowledge",
+      "authority_level": "public_engineering_knowledge",
+      "revision": {
+        "revision_id": "r1",
+        "content_sha256": "f0d60688947215b6fcc6ccdae2618bac90bfd9b2effc4e61953af62d285bc1b7",
+        "parent_revision_id": null,
+        "author_identity": "FXD synthetic research",
+        "created_at": "2026-07-23T00:00:00Z",
+        "change_reason": "Initial non-authorizing research reference revision.",
+        "source_revision": null,
+        "optimistic_concurrency_token": "2af9ee85f4ca40be4e3632450abd42d2e0a1e647ed42cac66b779fbc8541e4c8",
+        "publication_state": "published_research",
+        "deprecation_state": "active",
+        "restores_content_from_revision_id": null
+      },
+      "units": "unitless",
+      "privacy_classification": "public",
+      "summary": "Imported product and exact tooling files remain immutable evidence; derived fixture features and annotations live separately.",
+      "source_ids": [
+        "occt-application-framework"
+      ],
+      "applicability": [
+        "all fixture and context asset classes"
+      ],
+      "limitations": [
+        "does not guarantee stable topology after source replacement"
+      ],
+      "supplier_or_author": null,
+      "model_or_internal_number": null,
+      "source_file": null,
+      "provenance": {
+        "record_identity": "principle-001-source-authority",
+        "author_or_grantor": "FXD original research paraphrase",
+        "usage_note": "Public-source metadata and original FXD wording; not component geometry or manufacturing authority."
+      },
+      "storage_policy": "not_applicable",
+      "edit_authority": "not_applicable",
+      "local_coordinate_system": null,
+      "preview_representation": {
+        "kind": "none",
+        "authority": "none",
+        "asset_identity": null,
+        "visible_classification": "knowledge_not_geometry"
+      },
+      "feature_definition": null,
+      "mounting_interfaces": [],
+      "functional_interfaces": [],
+      "contact_points": [],
+      "movement_states": [],
+      "open_closed_states": {
+        "claimed": false,
+        "open_state_id": null,
+        "closed_state_id": null
+      },
+      "keep_out_envelopes": [],
+      "maintenance_envelopes": [],
+      "material_manufacturing_intent": null,
+      "bom_participation": "excluded",
+      "export_participation": {
+        "fixture_component_step": "excluded",
+        "fixture_assembly_step": "excluded",
+        "fixture_dxf": "excluded",
+        "drawings": "excluded",
+        "review_reports": "permitted",
+        "manufacturing_release": "excluded"
+      },
+      "validation_participation": {
+        "visual_review": "permitted",
+        "broad_phase_collision": "excluded",
+        "exact_collision": "excluded",
+        "exact_clearance": "excluded",
+        "access": "excluded",
+        "ai_context": "permitted",
+        "deterministic_validation": "excluded",
+        "manufacturing_release": "excluded"
+      },
+      "configurable_variants": [],
+      "replacement_compatibility": {
+        "replacement_class": null,
+        "placement_compatible": false,
+        "functionally_equivalent": false,
+        "requires_interface_match": false,
+        "requires_revalidation": true,
+        "stale_evidence_after_replacement": true
+      },
+      "missing_link_behavior": "not_applicable",
+      "downstream_dependencies": [],
+      "engineering_details": {},
+      "tags": []
+    },
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "principle-002-locate-before-clamp",
+      "name": "Locate before clamp",
+      "record_type": "engineering_principle",
+      "category": "public_engineering_knowledge",
+      "authority_level": "public_engineering_knowledge",
+      "revision": {
+        "revision_id": "r1",
+        "content_sha256": "42f48bdc3e24ade23eacf91650bfe3b48f879bed4a27db13fb010bd1a59944e4",
+        "parent_revision_id": null,
+        "author_identity": "FXD synthetic research",
+        "created_at": "2026-07-23T00:00:00Z",
+        "change_reason": "Initial non-authorizing research reference revision.",
+        "source_revision": null,
+        "optimistic_concurrency_token": "013db7ef990c8451c8b8e35a30af8f0f5aa35f7afc38eb31fbb00fb756bffaa1",
+        "publication_state": "published_research",
+        "deprecation_state": "active",
+        "restores_content_from_revision_id": null
+      },
+      "units": "unitless",
+      "privacy_classification": "public",
+      "summary": "The product should seat on its intended supports and locators before hold-down force is applied.",
+      "source_ids": [
+        "carr-lane-fixture-design-principles"
+      ],
+      "applicability": [
+        "fixtures that constrain product position"
+      ],
+      "limitations": [
+        "sequence still requires geometry and process-specific review"
+      ],
+      "supplier_or_author": null,
+      "model_or_internal_number": null,
+      "source_file": null,
+      "provenance": {
+        "record_identity": "principle-002-locate-before-clamp",
+        "author_or_grantor": "FXD original research paraphrase",
+        "usage_note": "Public-source metadata and original FXD wording; not component geometry or manufacturing authority."
+      },
+      "storage_policy": "not_applicable",
+      "edit_authority": "not_applicable",
+      "local_coordinate_system": null,
+      "preview_representation": {
+        "kind": "none",
+        "authority": "none",
+        "asset_identity": null,
+        "visible_classification": "knowledge_not_geometry"
+      },
+      "feature_definition": null,
+      "mounting_interfaces": [],
+      "functional_interfaces": [],
+      "contact_points": [],
+      "movement_states": [],
+      "open_closed_states": {
+        "claimed": false,
+        "open_state_id": null,
+        "closed_state_id": null
+      },
+      "keep_out_envelopes": [],
+      "maintenance_envelopes": [],
+      "material_manufacturing_intent": null,
+      "bom_participation": "excluded",
+      "export_participation": {
+        "fixture_component_step": "excluded",
+        "fixture_assembly_step": "excluded",
+        "fixture_dxf": "excluded",
+        "drawings": "excluded",
+        "review_reports": "permitted",
+        "manufacturing_release": "excluded"
+      },
+      "validation_participation": {
+        "visual_review": "permitted",
+        "broad_phase_collision": "excluded",
+        "exact_collision": "excluded",
+        "exact_clearance": "excluded",
+        "access": "excluded",
+        "ai_context": "permitted",
+        "deterministic_validation": "excluded",
+        "manufacturing_release": "excluded"
+      },
+      "configurable_variants": [],
+      "replacement_compatibility": {
+        "replacement_class": null,
+        "placement_compatible": false,
+        "functionally_equivalent": false,
+        "requires_interface_match": false,
+        "requires_revalidation": true,
+        "stale_evidence_after_replacement": true
+      },
+      "missing_link_behavior": "not_applicable",
+      "downstream_dependencies": [],
+      "engineering_details": {},
+      "tags": []
+    },
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "principle-003-explicit-dof",
+      "name": "Make degrees of freedom explicit",
+      "record_type": "engineering_principle",
+      "category": "public_engineering_knowledge",
+      "authority_level": "public_engineering_knowledge",
+      "revision": {
+        "revision_id": "r1",
+        "content_sha256": "5be6f2d48be1bac1d41eb76c40f476a93591bc1e63feb776608a1154cecb2e6c",
+        "parent_revision_id": null,
+        "author_identity": "FXD synthetic research",
+        "created_at": "2026-07-23T00:00:00Z",
+        "change_reason": "Initial non-authorizing research reference revision.",
+        "source_revision": null,
+        "optimistic_concurrency_token": "a280e6db39fe8d73332724a3a1b03100bbb2ac6f57134adcfda55b1508f53c38",
+        "publication_state": "published_research",
+        "deprecation_state": "active",
+        "restores_content_from_revision_id": null
+      },
+      "units": "unitless",
+      "privacy_classification": "public",
+      "summary": "Every locating scheme records controlled, redundant, contradictory, and intentionally floating motion instead of relying on visual plausibility.",
+      "source_ids": [
+        "carr-lane-fixture-design-principles"
+      ],
+      "applicability": [
+        "locating fixtures",
+        "inspection fixtures",
+        "workholding"
+      ],
+      "limitations": [
+        "a declared DOF map still requires deterministic verification"
+      ],
+      "supplier_or_author": null,
+      "model_or_internal_number": null,
+      "source_file": null,
+      "provenance": {
+        "record_identity": "principle-003-explicit-dof",
+        "author_or_grantor": "FXD original research paraphrase",
+        "usage_note": "Public-source metadata and original FXD wording; not component geometry or manufacturing authority."
+      },
+      "storage_policy": "not_applicable",
+      "edit_authority": "not_applicable",
+      "local_coordinate_system": null,
+      "preview_representation": {
+        "kind": "none",
+        "authority": "none",
+        "asset_identity": null,
+        "visible_classification": "knowledge_not_geometry"
+      },
+      "feature_definition": null,
+      "mounting_interfaces": [],
+      "functional_interfaces": [],
+      "contact_points": [],
+      "movement_states": [],
+      "open_closed_states": {
+        "claimed": false,
+        "open_state_id": null,
+        "closed_state_id": null
+      },
+      "keep_out_envelopes": [],
+      "maintenance_envelopes": [],
+      "material_manufacturing_intent": null,
+      "bom_participation": "excluded",
+      "export_participation": {
+        "fixture_component_step": "excluded",
+        "fixture_assembly_step": "excluded",
+        "fixture_dxf": "excluded",
+        "drawings": "excluded",
+        "review_reports": "permitted",
+        "manufacturing_release": "excluded"
+      },
+      "validation_participation": {
+        "visual_review": "permitted",
+        "broad_phase_collision": "excluded",
+        "exact_collision": "excluded",
+        "exact_clearance": "excluded",
+        "access": "excluded",
+        "ai_context": "permitted",
+        "deterministic_validation": "excluded",
+        "manufacturing_release": "excluded"
+      },
+      "configurable_variants": [],
+      "replacement_compatibility": {
+        "replacement_class": null,
+        "placement_compatible": false,
+        "functionally_equivalent": false,
+        "requires_interface_match": false,
+        "requires_revalidation": true,
+        "stale_evidence_after_replacement": true
+      },
+      "missing_link_behavior": "not_applicable",
+      "downstream_dependencies": [],
+      "engineering_details": {},
+      "tags": []
+    },
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "principle-004-clamp-reaction",
+      "name": "Map every clamp reaction",
+      "record_type": "engineering_principle",
+      "category": "public_engineering_knowledge",
+      "authority_level": "public_engineering_knowledge",
+      "revision": {
+        "revision_id": "r1",
+        "content_sha256": "6c6b552077d3986d2427a2596cea700f5ad14265400718bf6d2925c0173148dc",
+        "parent_revision_id": null,
+        "author_identity": "FXD synthetic research",
+        "created_at": "2026-07-23T00:00:00Z",
+        "change_reason": "Initial non-authorizing research reference revision.",
+        "source_revision": null,
+        "optimistic_concurrency_token": "b3e0db5d653b5821fbb15d27cc6cb48ccf7f91d85a5765c84f93d9867a79873a",
+        "publication_state": "published_research",
+        "deprecation_state": "active",
+        "restores_content_from_revision_id": null
+      },
+      "units": "unitless",
+      "privacy_classification": "public",
+      "summary": "Each clamp contact identifies the support or locator region that receives its load and flags unsupported deformation risk.",
+      "source_ids": [
+        "carr-lane-fixture-design-principles",
+        "destaco-welding-applications"
+      ],
+      "applicability": [
+        "clamped fixtures and workholding"
+      ],
+      "limitations": [
+        "does not calculate certified clamp force or structural capacity"
+      ],
+      "supplier_or_author": null,
+      "model_or_internal_number": null,
+      "source_file": null,
+      "provenance": {
+        "record_identity": "principle-004-clamp-reaction",
+        "author_or_grantor": "FXD original research paraphrase",
+        "usage_note": "Public-source metadata and original FXD wording; not component geometry or manufacturing authority."
+      },
+      "storage_policy": "not_applicable",
+      "edit_authority": "not_applicable",
+      "local_coordinate_system": null,
+      "preview_representation": {
+        "kind": "none",
+        "authority": "none",
+        "asset_identity": null,
+        "visible_classification": "knowledge_not_geometry"
+      },
+      "feature_definition": null,
+      "mounting_interfaces": [],
+      "functional_interfaces": [],
+      "contact_points": [],
+      "movement_states": [],
+      "open_closed_states": {
+        "claimed": false,
+        "open_state_id": null,
+        "closed_state_id": null
+      },
+      "keep_out_envelopes": [],
+      "maintenance_envelopes": [],
+      "material_manufacturing_intent": null,
+      "bom_participation": "excluded",
+      "export_participation": {
+        "fixture_component_step": "excluded",
+        "fixture_assembly_step": "excluded",
+        "fixture_dxf": "excluded",
+        "drawings": "excluded",
+        "review_reports": "permitted",
+        "manufacturing_release": "excluded"
+      },
+      "validation_participation": {
+        "visual_review": "permitted",
+        "broad_phase_collision": "excluded",
+        "exact_collision": "excluded",
+        "exact_clearance": "excluded",
+        "access": "excluded",
+        "ai_context": "permitted",
+        "deterministic_validation": "excluded",
+        "manufacturing_release": "excluded"
+      },
+      "configurable_variants": [],
+      "replacement_compatibility": {
+        "replacement_class": null,
+        "placement_compatible": false,
+        "functionally_equivalent": false,
+        "requires_interface_match": false,
+        "requires_revalidation": true,
+        "stale_evidence_after_replacement": true
+      },
+      "missing_link_behavior": "not_applicable",
+      "downstream_dependencies": [],
+      "engineering_details": {},
+      "tags": []
+    },
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "principle-005-role-separation",
+      "name": "Separate support, locate, stop, and clamp roles",
+      "record_type": "engineering_principle",
+      "category": "public_engineering_knowledge",
+      "authority_level": "public_engineering_knowledge",
+      "revision": {
+        "revision_id": "r1",
+        "content_sha256": "44bcc4edc7fd04209a743a6b3127a0c009c54c43767fd42d131960a5c25bc533",
+        "parent_revision_id": null,
+        "author_identity": "FXD synthetic research",
+        "created_at": "2026-07-23T00:00:00Z",
+        "change_reason": "Initial non-authorizing research reference revision.",
+        "source_revision": null,
+        "optimistic_concurrency_token": "86d1b8f7b012f87c87b4ca7e285665d9fe2bc4d17beab9c5565f3fba29bcc51d",
+        "publication_state": "published_research",
+        "deprecation_state": "active",
+        "restores_content_from_revision_id": null
+      },
+      "units": "unitless",
+      "privacy_classification": "public",
+      "summary": "A component may have multiple declared functions, but no function is inferred merely from shape or proximity.",
+      "source_ids": [
+        "fixtureworks-components",
+        "jergens-fixturing-components"
+      ],
+      "applicability": [
+        "all fixture components"
+      ],
+      "limitations": [
+        "combined functions require explicit human review"
+      ],
+      "supplier_or_author": null,
+      "model_or_internal_number": null,
+      "source_file": null,
+      "provenance": {
+        "record_identity": "principle-005-role-separation",
+        "author_or_grantor": "FXD original research paraphrase",
+        "usage_note": "Public-source metadata and original FXD wording; not component geometry or manufacturing authority."
+      },
+      "storage_policy": "not_applicable",
+      "edit_authority": "not_applicable",
+      "local_coordinate_system": null,
+      "preview_representation": {
+        "kind": "none",
+        "authority": "none",
+        "asset_identity": null,
+        "visible_classification": "knowledge_not_geometry"
+      },
+      "feature_definition": null,
+      "mounting_interfaces": [],
+      "functional_interfaces": [],
+      "contact_points": [],
+      "movement_states": [],
+      "open_closed_states": {
+        "claimed": false,
+        "open_state_id": null,
+        "closed_state_id": null
+      },
+      "keep_out_envelopes": [],
+      "maintenance_envelopes": [],
+      "material_manufacturing_intent": null,
+      "bom_participation": "excluded",
+      "export_participation": {
+        "fixture_component_step": "excluded",
+        "fixture_assembly_step": "excluded",
+        "fixture_dxf": "excluded",
+        "drawings": "excluded",
+        "review_reports": "permitted",
+        "manufacturing_release": "excluded"
+      },
+      "validation_participation": {
+        "visual_review": "permitted",
+        "broad_phase_collision": "excluded",
+        "exact_collision": "excluded",
+        "exact_clearance": "excluded",
+        "access": "excluded",
+        "ai_context": "permitted",
+        "deterministic_validation": "excluded",
+        "manufacturing_release": "excluded"
+      },
+      "configurable_variants": [],
+      "replacement_compatibility": {
+        "replacement_class": null,
+        "placement_compatible": false,
+        "functionally_equivalent": false,
+        "requires_interface_match": false,
+        "requires_revalidation": true,
+        "stale_evidence_after_replacement": true
+      },
+      "missing_link_behavior": "not_applicable",
+      "downstream_dependencies": [],
+      "engineering_details": {},
+      "tags": []
+    },
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "principle-006-access-first-class",
+      "name": "Treat access and removal as first-class",
+      "record_type": "engineering_principle",
+      "category": "public_engineering_knowledge",
+      "authority_level": "public_engineering_knowledge",
+      "revision": {
+        "revision_id": "r1",
+        "content_sha256": "70880f4c035baa2bfb1b6ec039b18f0337f194c55283985e6ce673bf16e3db53",
+        "parent_revision_id": null,
+        "author_identity": "FXD synthetic research",
+        "created_at": "2026-07-23T00:00:00Z",
+        "change_reason": "Initial non-authorizing research reference revision.",
+        "source_revision": null,
+        "optimistic_concurrency_token": "f78b3e3d8d47e1ce51c37b345175d9a19b8b6ace69396e373bebb99ed6438b46",
+        "publication_state": "published_research",
+        "deprecation_state": "active",
+        "restores_content_from_revision_id": null
+      },
+      "units": "unitless",
+      "privacy_classification": "public",
+      "summary": "A concept is incomplete until required product, tool, operator, process, service, and unload paths are represented at relevant states.",
+      "source_ids": [
+        "osha-welding-overview",
+        "osha-machine-guarding"
+      ],
+      "applicability": [
+        "all fixture families"
+      ],
+      "limitations": [
+        "geometric access does not establish safety or process approval"
+      ],
+      "supplier_or_author": null,
+      "model_or_internal_number": null,
+      "source_file": null,
+      "provenance": {
+        "record_identity": "principle-006-access-first-class",
+        "author_or_grantor": "FXD original research paraphrase",
+        "usage_note": "Public-source metadata and original FXD wording; not component geometry or manufacturing authority."
+      },
+      "storage_policy": "not_applicable",
+      "edit_authority": "not_applicable",
+      "local_coordinate_system": null,
+      "preview_representation": {
+        "kind": "none",
+        "authority": "none",
+        "asset_identity": null,
+        "visible_classification": "knowledge_not_geometry"
+      },
+      "feature_definition": null,
+      "mounting_interfaces": [],
+      "functional_interfaces": [],
+      "contact_points": [],
+      "movement_states": [],
+      "open_closed_states": {
+        "claimed": false,
+        "open_state_id": null,
+        "closed_state_id": null
+      },
+      "keep_out_envelopes": [],
+      "maintenance_envelopes": [],
+      "material_manufacturing_intent": null,
+      "bom_participation": "excluded",
+      "export_participation": {
+        "fixture_component_step": "excluded",
+        "fixture_assembly_step": "excluded",
+        "fixture_dxf": "excluded",
+        "drawings": "excluded",
+        "review_reports": "permitted",
+        "manufacturing_release": "excluded"
+      },
+      "validation_participation": {
+        "visual_review": "permitted",
+        "broad_phase_collision": "excluded",
+        "exact_collision": "excluded",
+        "exact_clearance": "excluded",
+        "access": "excluded",
+        "ai_context": "permitted",
+        "deterministic_validation": "excluded",
+        "manufacturing_release": "excluded"
+      },
+      "configurable_variants": [],
+      "replacement_compatibility": {
+        "replacement_class": null,
+        "placement_compatible": false,
+        "functionally_equivalent": false,
+        "requires_interface_match": false,
+        "requires_revalidation": true,
+        "stale_evidence_after_replacement": true
+      },
+      "missing_link_behavior": "not_applicable",
+      "downstream_dependencies": [],
+      "engineering_details": {},
+      "tags": []
+    },
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "principle-007-authority-visible",
+      "name": "Keep geometry authority visible",
+      "record_type": "engineering_principle",
+      "category": "public_engineering_knowledge",
+      "authority_level": "public_engineering_knowledge",
+      "revision": {
+        "revision_id": "r1",
+        "content_sha256": "c8a6a5fc1dd3cd86db77810289da7f4db98ec3e483fc116a24a99ea16e4ace1f",
+        "parent_revision_id": null,
+        "author_identity": "FXD synthetic research",
+        "created_at": "2026-07-23T00:00:00Z",
+        "change_reason": "Initial non-authorizing research reference revision.",
+        "source_revision": null,
+        "optimistic_concurrency_token": "500f2bc9eb71a3dd0d4271c57695727bbdebb8f8a563f3ccbc0c05cc860b3e2b",
+        "publication_state": "published_research",
+        "deprecation_state": "active",
+        "restores_content_from_revision_id": null
+      },
+      "units": "unitless",
+      "privacy_classification": "public",
+      "summary": "Exact imported CAD, supplier-authorized CAD, metadata, and provisional envelopes remain visibly and deterministically distinct.",
+      "source_ids": [
+        "destaco-welding-applications"
+      ],
+      "applicability": [
+        "purchased tooling",
+        "process context assets"
+      ],
+      "limitations": [
+        "authority classification cannot be upgraded by appearance"
+      ],
+      "supplier_or_author": null,
+      "model_or_internal_number": null,
+      "source_file": null,
+      "provenance": {
+        "record_identity": "principle-007-authority-visible",
+        "author_or_grantor": "FXD original research paraphrase",
+        "usage_note": "Public-source metadata and original FXD wording; not component geometry or manufacturing authority."
+      },
+      "storage_policy": "not_applicable",
+      "edit_authority": "not_applicable",
+      "local_coordinate_system": null,
+      "preview_representation": {
+        "kind": "none",
+        "authority": "none",
+        "asset_identity": null,
+        "visible_classification": "knowledge_not_geometry"
+      },
+      "feature_definition": null,
+      "mounting_interfaces": [],
+      "functional_interfaces": [],
+      "contact_points": [],
+      "movement_states": [],
+      "open_closed_states": {
+        "claimed": false,
+        "open_state_id": null,
+        "closed_state_id": null
+      },
+      "keep_out_envelopes": [],
+      "maintenance_envelopes": [],
+      "material_manufacturing_intent": null,
+      "bom_participation": "excluded",
+      "export_participation": {
+        "fixture_component_step": "excluded",
+        "fixture_assembly_step": "excluded",
+        "fixture_dxf": "excluded",
+        "drawings": "excluded",
+        "review_reports": "permitted",
+        "manufacturing_release": "excluded"
+      },
+      "validation_participation": {
+        "visual_review": "permitted",
+        "broad_phase_collision": "excluded",
+        "exact_collision": "excluded",
+        "exact_clearance": "excluded",
+        "access": "excluded",
+        "ai_context": "permitted",
+        "deterministic_validation": "excluded",
+        "manufacturing_release": "excluded"
+      },
+      "configurable_variants": [],
+      "replacement_compatibility": {
+        "replacement_class": null,
+        "placement_compatible": false,
+        "functionally_equivalent": false,
+        "requires_interface_match": false,
+        "requires_revalidation": true,
+        "stale_evidence_after_replacement": true
+      },
+      "missing_link_behavior": "not_applicable",
+      "downstream_dependencies": [],
+      "engineering_details": {},
+      "tags": []
+    },
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "principle-008-parametric-traceability",
+      "name": "Trace every parametric feature",
+      "record_type": "engineering_principle",
+      "category": "public_engineering_knowledge",
+      "authority_level": "public_engineering_knowledge",
+      "revision": {
+        "revision_id": "r1",
+        "content_sha256": "ca06a6910ffabef0c8dbdfb030c63c14030dc656c87b958018351c2f087df50b",
+        "parent_revision_id": null,
+        "author_identity": "FXD synthetic research",
+        "created_at": "2026-07-23T00:00:00Z",
+        "change_reason": "Initial non-authorizing research reference revision.",
+        "source_revision": null,
+        "optimistic_concurrency_token": "80044abd3fbcd436822c46e9487e4ea37131561ec333c06f4c63271122980af5",
+        "publication_state": "published_research",
+        "deprecation_state": "active",
+        "restores_content_from_revision_id": null
+      },
+      "units": "unitless",
+      "privacy_classification": "public",
+      "summary": "Generated primitives retain their inputs, parameters, units, rule identities, assumptions, warnings, and edit history.",
+      "source_ids": [
+        "occt-application-framework"
+      ],
+      "applicability": [
+        "FXD parametric components"
+      ],
+      "limitations": [
+        "traceability does not make an unsupported feature editable"
+      ],
+      "supplier_or_author": null,
+      "model_or_internal_number": null,
+      "source_file": null,
+      "provenance": {
+        "record_identity": "principle-008-parametric-traceability",
+        "author_or_grantor": "FXD original research paraphrase",
+        "usage_note": "Public-source metadata and original FXD wording; not component geometry or manufacturing authority."
+      },
+      "storage_policy": "not_applicable",
+      "edit_authority": "not_applicable",
+      "local_coordinate_system": null,
+      "preview_representation": {
+        "kind": "none",
+        "authority": "none",
+        "asset_identity": null,
+        "visible_classification": "knowledge_not_geometry"
+      },
+      "feature_definition": null,
+      "mounting_interfaces": [],
+      "functional_interfaces": [],
+      "contact_points": [],
+      "movement_states": [],
+      "open_closed_states": {
+        "claimed": false,
+        "open_state_id": null,
+        "closed_state_id": null
+      },
+      "keep_out_envelopes": [],
+      "maintenance_envelopes": [],
+      "material_manufacturing_intent": null,
+      "bom_participation": "excluded",
+      "export_participation": {
+        "fixture_component_step": "excluded",
+        "fixture_assembly_step": "excluded",
+        "fixture_dxf": "excluded",
+        "drawings": "excluded",
+        "review_reports": "permitted",
+        "manufacturing_release": "excluded"
+      },
+      "validation_participation": {
+        "visual_review": "permitted",
+        "broad_phase_collision": "excluded",
+        "exact_collision": "excluded",
+        "exact_clearance": "excluded",
+        "access": "excluded",
+        "ai_context": "permitted",
+        "deterministic_validation": "excluded",
+        "manufacturing_release": "excluded"
+      },
+      "configurable_variants": [],
+      "replacement_compatibility": {
+        "replacement_class": null,
+        "placement_compatible": false,
+        "functionally_equivalent": false,
+        "requires_interface_match": false,
+        "requires_revalidation": true,
+        "stale_evidence_after_replacement": true
+      },
+      "missing_link_behavior": "not_applicable",
+      "downstream_dependencies": [],
+      "engineering_details": {},
+      "tags": []
+    },
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "principle-009-shop-preference-not-rule",
+      "name": "Keep shop preferences scoped",
+      "record_type": "engineering_principle",
+      "category": "public_engineering_knowledge",
+      "authority_level": "public_engineering_knowledge",
+      "revision": {
+        "revision_id": "r1",
+        "content_sha256": "f5b68f756593ed3fe25e414e40265900d2a68b543bcef75c98e86e9266549359",
+        "parent_revision_id": null,
+        "author_identity": "FXD synthetic research",
+        "created_at": "2026-07-23T00:00:00Z",
+        "change_reason": "Initial non-authorizing research reference revision.",
+        "source_revision": null,
+        "optimistic_concurrency_token": "43f1e9c330360af4b6d89d35443d2cb28a942787fe4cb91a4fe96032b9421c4e",
+        "publication_state": "published_research",
+        "deprecation_state": "active",
+        "restores_content_from_revision_id": null
+      },
+      "units": "unitless",
+      "privacy_classification": "public",
+      "summary": "Materials, stock sizes, clearances, finishes, and component preferences remain attributed inputs rather than universal engineering rules.",
+      "source_ids": [
+        "fixtureworks-components",
+        "strong-hand-modular-table"
+      ],
+      "applicability": [
+        "shop standard packs"
+      ],
+      "limitations": [
+        "project engineering can override a shop preference only with visible provenance"
+      ],
+      "supplier_or_author": null,
+      "model_or_internal_number": null,
+      "source_file": null,
+      "provenance": {
+        "record_identity": "principle-009-shop-preference-not-rule",
+        "author_or_grantor": "FXD original research paraphrase",
+        "usage_note": "Public-source metadata and original FXD wording; not component geometry or manufacturing authority."
+      },
+      "storage_policy": "not_applicable",
+      "edit_authority": "not_applicable",
+      "local_coordinate_system": null,
+      "preview_representation": {
+        "kind": "none",
+        "authority": "none",
+        "asset_identity": null,
+        "visible_classification": "knowledge_not_geometry"
+      },
+      "feature_definition": null,
+      "mounting_interfaces": [],
+      "functional_interfaces": [],
+      "contact_points": [],
+      "movement_states": [],
+      "open_closed_states": {
+        "claimed": false,
+        "open_state_id": null,
+        "closed_state_id": null
+      },
+      "keep_out_envelopes": [],
+      "maintenance_envelopes": [],
+      "material_manufacturing_intent": null,
+      "bom_participation": "excluded",
+      "export_participation": {
+        "fixture_component_step": "excluded",
+        "fixture_assembly_step": "excluded",
+        "fixture_dxf": "excluded",
+        "drawings": "excluded",
+        "review_reports": "permitted",
+        "manufacturing_release": "excluded"
+      },
+      "validation_participation": {
+        "visual_review": "permitted",
+        "broad_phase_collision": "excluded",
+        "exact_collision": "excluded",
+        "exact_clearance": "excluded",
+        "access": "excluded",
+        "ai_context": "permitted",
+        "deterministic_validation": "excluded",
+        "manufacturing_release": "excluded"
+      },
+      "configurable_variants": [],
+      "replacement_compatibility": {
+        "replacement_class": null,
+        "placement_compatible": false,
+        "functionally_equivalent": false,
+        "requires_interface_match": false,
+        "requires_revalidation": true,
+        "stale_evidence_after_replacement": true
+      },
+      "missing_link_behavior": "not_applicable",
+      "downstream_dependencies": [],
+      "engineering_details": {},
+      "tags": []
+    },
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "principle-010-immutable-revisions",
+      "name": "Use immutable item revisions",
+      "record_type": "engineering_principle",
+      "category": "public_engineering_knowledge",
+      "authority_level": "public_engineering_knowledge",
+      "revision": {
+        "revision_id": "r1",
+        "content_sha256": "b0841d27fa169662ec911a0b2795aaca146054b2fc4ca23337fa7bc3ef9e030b",
+        "parent_revision_id": null,
+        "author_identity": "FXD synthetic research",
+        "created_at": "2026-07-23T00:00:00Z",
+        "change_reason": "Initial non-authorizing research reference revision.",
+        "source_revision": null,
+        "optimistic_concurrency_token": "83cd5356f278786da877656e2612ea8a824bd409b63428a049e70ccc12b2b728",
+        "publication_state": "published_research",
+        "deprecation_state": "active",
+        "restores_content_from_revision_id": null
+      },
+      "units": "unitless",
+      "privacy_classification": "public",
+      "summary": "A changed library definition creates a new revision; existing project placements remain pinned until an explicit migration is accepted.",
+      "source_ids": [
+        "occt-application-framework"
+      ],
+      "applicability": [
+        "all persistent library items"
+      ],
+      "limitations": [
+        "migration compatibility still requires interface and validation checks"
+      ],
+      "supplier_or_author": null,
+      "model_or_internal_number": null,
+      "source_file": null,
+      "provenance": {
+        "record_identity": "principle-010-immutable-revisions",
+        "author_or_grantor": "FXD original research paraphrase",
+        "usage_note": "Public-source metadata and original FXD wording; not component geometry or manufacturing authority."
+      },
+      "storage_policy": "not_applicable",
+      "edit_authority": "not_applicable",
+      "local_coordinate_system": null,
+      "preview_representation": {
+        "kind": "none",
+        "authority": "none",
+        "asset_identity": null,
+        "visible_classification": "knowledge_not_geometry"
+      },
+      "feature_definition": null,
+      "mounting_interfaces": [],
+      "functional_interfaces": [],
+      "contact_points": [],
+      "movement_states": [],
+      "open_closed_states": {
+        "claimed": false,
+        "open_state_id": null,
+        "closed_state_id": null
+      },
+      "keep_out_envelopes": [],
+      "maintenance_envelopes": [],
+      "material_manufacturing_intent": null,
+      "bom_participation": "excluded",
+      "export_participation": {
+        "fixture_component_step": "excluded",
+        "fixture_assembly_step": "excluded",
+        "fixture_dxf": "excluded",
+        "drawings": "excluded",
+        "review_reports": "permitted",
+        "manufacturing_release": "excluded"
+      },
+      "validation_participation": {
+        "visual_review": "permitted",
+        "broad_phase_collision": "excluded",
+        "exact_collision": "excluded",
+        "exact_clearance": "excluded",
+        "access": "excluded",
+        "ai_context": "permitted",
+        "deterministic_validation": "excluded",
+        "manufacturing_release": "excluded"
+      },
+      "configurable_variants": [],
+      "replacement_compatibility": {
+        "replacement_class": null,
+        "placement_compatible": false,
+        "functionally_equivalent": false,
+        "requires_interface_match": false,
+        "requires_revalidation": true,
+        "stale_evidence_after_replacement": true
+      },
+      "missing_link_behavior": "not_applicable",
+      "downstream_dependencies": [],
+      "engineering_details": {},
+      "tags": []
+    },
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "principle-011-interface-before-shape",
+      "name": "Match interfaces before bounding shape",
+      "record_type": "engineering_principle",
+      "category": "public_engineering_knowledge",
+      "authority_level": "public_engineering_knowledge",
+      "revision": {
+        "revision_id": "r1",
+        "content_sha256": "523e5899d98ef2f13baf1a53b4f65108110ca7fc1498073f9730b7418030ebb2",
+        "parent_revision_id": null,
+        "author_identity": "FXD synthetic research",
+        "created_at": "2026-07-23T00:00:00Z",
+        "change_reason": "Initial non-authorizing research reference revision.",
+        "source_revision": null,
+        "optimistic_concurrency_token": "38622e4b7ab73cd6aca7fa9909b7e250c40c44906cffdad716a8fd3258575b15",
+        "publication_state": "published_research",
+        "deprecation_state": "active",
+        "restores_content_from_revision_id": null
+      },
+      "units": "unitless",
+      "privacy_classification": "public",
+      "summary": "Replacement compatibility requires mounting and functional interface equivalence, not a similar preview or envelope.",
+      "source_ids": [
+        "jergens-fixturing-components",
+        "occt-xde-guide"
+      ],
+      "applicability": [
+        "component replacement"
+      ],
+      "limitations": [
+        "matching records do not prove load, tolerance, or process adequacy"
+      ],
+      "supplier_or_author": null,
+      "model_or_internal_number": null,
+      "source_file": null,
+      "provenance": {
+        "record_identity": "principle-011-interface-before-shape",
+        "author_or_grantor": "FXD original research paraphrase",
+        "usage_note": "Public-source metadata and original FXD wording; not component geometry or manufacturing authority."
+      },
+      "storage_policy": "not_applicable",
+      "edit_authority": "not_applicable",
+      "local_coordinate_system": null,
+      "preview_representation": {
+        "kind": "none",
+        "authority": "none",
+        "asset_identity": null,
+        "visible_classification": "knowledge_not_geometry"
+      },
+      "feature_definition": null,
+      "mounting_interfaces": [],
+      "functional_interfaces": [],
+      "contact_points": [],
+      "movement_states": [],
+      "open_closed_states": {
+        "claimed": false,
+        "open_state_id": null,
+        "closed_state_id": null
+      },
+      "keep_out_envelopes": [],
+      "maintenance_envelopes": [],
+      "material_manufacturing_intent": null,
+      "bom_participation": "excluded",
+      "export_participation": {
+        "fixture_component_step": "excluded",
+        "fixture_assembly_step": "excluded",
+        "fixture_dxf": "excluded",
+        "drawings": "excluded",
+        "review_reports": "permitted",
+        "manufacturing_release": "excluded"
+      },
+      "validation_participation": {
+        "visual_review": "permitted",
+        "broad_phase_collision": "excluded",
+        "exact_collision": "excluded",
+        "exact_clearance": "excluded",
+        "access": "excluded",
+        "ai_context": "permitted",
+        "deterministic_validation": "excluded",
+        "manufacturing_release": "excluded"
+      },
+      "configurable_variants": [],
+      "replacement_compatibility": {
+        "replacement_class": null,
+        "placement_compatible": false,
+        "functionally_equivalent": false,
+        "requires_interface_match": false,
+        "requires_revalidation": true,
+        "stale_evidence_after_replacement": true
+      },
+      "missing_link_behavior": "not_applicable",
+      "downstream_dependencies": [],
+      "engineering_details": {},
+      "tags": []
+    },
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "principle-012-state-complete-collision",
+      "name": "Validate all required movement states",
+      "record_type": "engineering_principle",
+      "category": "public_engineering_knowledge",
+      "authority_level": "public_engineering_knowledge",
+      "revision": {
+        "revision_id": "r1",
+        "content_sha256": "7b8b9cce209f2e23df8ea698806bffb3151c552de7c541669ce22a5583c1dce1",
+        "parent_revision_id": null,
+        "author_identity": "FXD synthetic research",
+        "created_at": "2026-07-23T00:00:00Z",
+        "change_reason": "Initial non-authorizing research reference revision.",
+        "source_revision": null,
+        "optimistic_concurrency_token": "5fc414ef5f743e989ac339d08426ac0301cbdf6791fcfc3878d5d6482901a1d2",
+        "publication_state": "published_research",
+        "deprecation_state": "active",
+        "restores_content_from_revision_id": null
+      },
+      "units": "unitless",
+      "privacy_classification": "public",
+      "summary": "Collision and clearance evidence names the open, closed, loading, process, unloading, and service states it actually covers.",
+      "source_ids": [
+        "osha-robotics-overview"
+      ],
+      "applicability": [
+        "moving clamps",
+        "automation",
+        "loading devices"
+      ],
+      "limitations": [
+        "unmodeled states remain missing evidence rather than passes"
+      ],
+      "supplier_or_author": null,
+      "model_or_internal_number": null,
+      "source_file": null,
+      "provenance": {
+        "record_identity": "principle-012-state-complete-collision",
+        "author_or_grantor": "FXD original research paraphrase",
+        "usage_note": "Public-source metadata and original FXD wording; not component geometry or manufacturing authority."
+      },
+      "storage_policy": "not_applicable",
+      "edit_authority": "not_applicable",
+      "local_coordinate_system": null,
+      "preview_representation": {
+        "kind": "none",
+        "authority": "none",
+        "asset_identity": null,
+        "visible_classification": "knowledge_not_geometry"
+      },
+      "feature_definition": null,
+      "mounting_interfaces": [],
+      "functional_interfaces": [],
+      "contact_points": [],
+      "movement_states": [],
+      "open_closed_states": {
+        "claimed": false,
+        "open_state_id": null,
+        "closed_state_id": null
+      },
+      "keep_out_envelopes": [],
+      "maintenance_envelopes": [],
+      "material_manufacturing_intent": null,
+      "bom_participation": "excluded",
+      "export_participation": {
+        "fixture_component_step": "excluded",
+        "fixture_assembly_step": "excluded",
+        "fixture_dxf": "excluded",
+        "drawings": "excluded",
+        "review_reports": "permitted",
+        "manufacturing_release": "excluded"
+      },
+      "validation_participation": {
+        "visual_review": "permitted",
+        "broad_phase_collision": "excluded",
+        "exact_collision": "excluded",
+        "exact_clearance": "excluded",
+        "access": "excluded",
+        "ai_context": "permitted",
+        "deterministic_validation": "excluded",
+        "manufacturing_release": "excluded"
+      },
+      "configurable_variants": [],
+      "replacement_compatibility": {
+        "replacement_class": null,
+        "placement_compatible": false,
+        "functionally_equivalent": false,
+        "requires_interface_match": false,
+        "requires_revalidation": true,
+        "stale_evidence_after_replacement": true
+      },
+      "missing_link_behavior": "not_applicable",
+      "downstream_dependencies": [],
+      "engineering_details": {},
+      "tags": []
+    },
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "principle-013-output-coherence",
+      "name": "Keep outputs coherent",
+      "record_type": "engineering_principle",
+      "category": "public_engineering_knowledge",
+      "authority_level": "public_engineering_knowledge",
+      "revision": {
+        "revision_id": "r1",
+        "content_sha256": "0bdfe66c054a7e9debcef1e42598f4bdea083e95e905e5a1c6e27805434ddc17",
+        "parent_revision_id": null,
+        "author_identity": "FXD synthetic research",
+        "created_at": "2026-07-23T00:00:00Z",
+        "change_reason": "Initial non-authorizing research reference revision.",
+        "source_revision": null,
+        "optimistic_concurrency_token": "e9ff2e879fc409dbc52190fb8e7c47060b8fa7f28eb72e570bd5adde68f2bedb",
+        "publication_state": "published_research",
+        "deprecation_state": "active",
+        "restores_content_from_revision_id": null
+      },
+      "units": "unitless",
+      "privacy_classification": "public",
+      "summary": "STEP, DXF, BOM, drawings, markings, and review reports derive from one pinned revision and expose omissions explicitly.",
+      "source_ids": [
+        "occt-xde-guide"
+      ],
+      "applicability": [
+        "manufacturing output packages"
+      ],
+      "limitations": [
+        "coherence does not authorize production release"
+      ],
+      "supplier_or_author": null,
+      "model_or_internal_number": null,
+      "source_file": null,
+      "provenance": {
+        "record_identity": "principle-013-output-coherence",
+        "author_or_grantor": "FXD original research paraphrase",
+        "usage_note": "Public-source metadata and original FXD wording; not component geometry or manufacturing authority."
+      },
+      "storage_policy": "not_applicable",
+      "edit_authority": "not_applicable",
+      "local_coordinate_system": null,
+      "preview_representation": {
+        "kind": "none",
+        "authority": "none",
+        "asset_identity": null,
+        "visible_classification": "knowledge_not_geometry"
+      },
+      "feature_definition": null,
+      "mounting_interfaces": [],
+      "functional_interfaces": [],
+      "contact_points": [],
+      "movement_states": [],
+      "open_closed_states": {
+        "claimed": false,
+        "open_state_id": null,
+        "closed_state_id": null
+      },
+      "keep_out_envelopes": [],
+      "maintenance_envelopes": [],
+      "material_manufacturing_intent": null,
+      "bom_participation": "excluded",
+      "export_participation": {
+        "fixture_component_step": "excluded",
+        "fixture_assembly_step": "excluded",
+        "fixture_dxf": "excluded",
+        "drawings": "excluded",
+        "review_reports": "permitted",
+        "manufacturing_release": "excluded"
+      },
+      "validation_participation": {
+        "visual_review": "permitted",
+        "broad_phase_collision": "excluded",
+        "exact_collision": "excluded",
+        "exact_clearance": "excluded",
+        "access": "excluded",
+        "ai_context": "permitted",
+        "deterministic_validation": "excluded",
+        "manufacturing_release": "excluded"
+      },
+      "configurable_variants": [],
+      "replacement_compatibility": {
+        "replacement_class": null,
+        "placement_compatible": false,
+        "functionally_equivalent": false,
+        "requires_interface_match": false,
+        "requires_revalidation": true,
+        "stale_evidence_after_replacement": true
+      },
+      "missing_link_behavior": "not_applicable",
+      "downstream_dependencies": [],
+      "engineering_details": {},
+      "tags": []
+    },
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "principle-014-private-local-first",
+      "name": "Keep private geometry local first",
+      "record_type": "engineering_principle",
+      "category": "public_engineering_knowledge",
+      "authority_level": "public_engineering_knowledge",
+      "revision": {
+        "revision_id": "r1",
+        "content_sha256": "85585d6ee464166db83d9f661873e73e49fd7e69db3770818a4c72b0dba11469",
+        "parent_revision_id": null,
+        "author_identity": "FXD synthetic research",
+        "created_at": "2026-07-23T00:00:00Z",
+        "change_reason": "Initial non-authorizing research reference revision.",
+        "source_revision": null,
+        "optimistic_concurrency_token": "2eb4fb3a489e3fa1ef23b865eec13ca97275bc89c41e1c8fb2db2d932b872f8e",
+        "publication_state": "published_research",
+        "deprecation_state": "active",
+        "restores_content_from_revision_id": null
+      },
+      "units": "unitless",
+      "privacy_classification": "public",
+      "summary": "Private fixture, customer, employer, and supplier-controlled assets remain outside the public repository and provider payloads by default.",
+      "source_ids": [
+        "occt-application-framework"
+      ],
+      "applicability": [
+        "private corpus",
+        "private tooling"
+      ],
+      "limitations": [
+        "selected release still requires explicit owner permission and disclosure review"
+      ],
+      "supplier_or_author": null,
+      "model_or_internal_number": null,
+      "source_file": null,
+      "provenance": {
+        "record_identity": "principle-014-private-local-first",
+        "author_or_grantor": "FXD original research paraphrase",
+        "usage_note": "Public-source metadata and original FXD wording; not component geometry or manufacturing authority."
+      },
+      "storage_policy": "not_applicable",
+      "edit_authority": "not_applicable",
+      "local_coordinate_system": null,
+      "preview_representation": {
+        "kind": "none",
+        "authority": "none",
+        "asset_identity": null,
+        "visible_classification": "knowledge_not_geometry"
+      },
+      "feature_definition": null,
+      "mounting_interfaces": [],
+      "functional_interfaces": [],
+      "contact_points": [],
+      "movement_states": [],
+      "open_closed_states": {
+        "claimed": false,
+        "open_state_id": null,
+        "closed_state_id": null
+      },
+      "keep_out_envelopes": [],
+      "maintenance_envelopes": [],
+      "material_manufacturing_intent": null,
+      "bom_participation": "excluded",
+      "export_participation": {
+        "fixture_component_step": "excluded",
+        "fixture_assembly_step": "excluded",
+        "fixture_dxf": "excluded",
+        "drawings": "excluded",
+        "review_reports": "permitted",
+        "manufacturing_release": "excluded"
+      },
+      "validation_participation": {
+        "visual_review": "permitted",
+        "broad_phase_collision": "excluded",
+        "exact_collision": "excluded",
+        "exact_clearance": "excluded",
+        "access": "excluded",
+        "ai_context": "permitted",
+        "deterministic_validation": "excluded",
+        "manufacturing_release": "excluded"
+      },
+      "configurable_variants": [],
+      "replacement_compatibility": {
+        "replacement_class": null,
+        "placement_compatible": false,
+        "functionally_equivalent": false,
+        "requires_interface_match": false,
+        "requires_revalidation": true,
+        "stale_evidence_after_replacement": true
+      },
+      "missing_link_behavior": "not_applicable",
+      "downstream_dependencies": [],
+      "engineering_details": {},
+      "tags": []
+    },
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "principle-015-human-release",
+      "name": "Require human release authority",
+      "record_type": "engineering_principle",
+      "category": "public_engineering_knowledge",
+      "authority_level": "public_engineering_knowledge",
+      "revision": {
+        "revision_id": "r1",
+        "content_sha256": "e711e18968586a59ad1e10017c417025f08ce6343b3884a37f9d65862efcbe3e",
+        "parent_revision_id": null,
+        "author_identity": "FXD synthetic research",
+        "created_at": "2026-07-23T00:00:00Z",
+        "change_reason": "Initial non-authorizing research reference revision.",
+        "source_revision": null,
+        "optimistic_concurrency_token": "05f53fcc9bddfa566a6d27572293251cb86306c71d0fe716f9c9034e07e3c0c0",
+        "publication_state": "published_research",
+        "deprecation_state": "active",
+        "restores_content_from_revision_id": null
+      },
+      "units": "unitless",
+      "privacy_classification": "public",
+      "summary": "Library confidence, deterministic validation, and AI ranking provide evidence but never certify or release a fixture automatically.",
+      "source_ids": [
+        "osha-welding-overview",
+        "osha-machine-guarding"
+      ],
+      "applicability": [
+        "all fixture recommendations and exports"
+      ],
+      "limitations": [
+        "qualified engineering and safety responsibilities remain external approval boundaries"
+      ],
+      "supplier_or_author": null,
+      "model_or_internal_number": null,
+      "source_file": null,
+      "provenance": {
+        "record_identity": "principle-015-human-release",
+        "author_or_grantor": "FXD original research paraphrase",
+        "usage_note": "Public-source metadata and original FXD wording; not component geometry or manufacturing authority."
+      },
+      "storage_policy": "not_applicable",
+      "edit_authority": "not_applicable",
+      "local_coordinate_system": null,
+      "preview_representation": {
+        "kind": "none",
+        "authority": "none",
+        "asset_identity": null,
+        "visible_classification": "knowledge_not_geometry"
+      },
+      "feature_definition": null,
+      "mounting_interfaces": [],
+      "functional_interfaces": [],
+      "contact_points": [],
+      "movement_states": [],
+      "open_closed_states": {
+        "claimed": false,
+        "open_state_id": null,
+        "closed_state_id": null
+      },
+      "keep_out_envelopes": [],
+      "maintenance_envelopes": [],
+      "material_manufacturing_intent": null,
+      "bom_participation": "excluded",
+      "export_participation": {
+        "fixture_component_step": "excluded",
+        "fixture_assembly_step": "excluded",
+        "fixture_dxf": "excluded",
+        "drawings": "excluded",
+        "review_reports": "permitted",
+        "manufacturing_release": "excluded"
+      },
+      "validation_participation": {
+        "visual_review": "permitted",
+        "broad_phase_collision": "excluded",
+        "exact_collision": "excluded",
+        "exact_clearance": "excluded",
+        "access": "excluded",
+        "ai_context": "permitted",
+        "deterministic_validation": "excluded",
+        "manufacturing_release": "excluded"
+      },
+      "configurable_variants": [],
+      "replacement_compatibility": {
+        "replacement_class": null,
+        "placement_compatible": false,
+        "functionally_equivalent": false,
+        "requires_interface_match": false,
+        "requires_revalidation": true,
+        "stale_evidence_after_replacement": true
+      },
+      "missing_link_behavior": "not_applicable",
+      "downstream_dependencies": [],
+      "engineering_details": {},
+      "tags": []
+    }
+  ],
+  "fixture_patterns": [
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "pattern-001-three-two-one-with-float",
+      "name": "3-2-1 with declared float",
+      "record_type": "fixture_pattern",
+      "category": "public_engineering_knowledge",
+      "authority_level": "public_engineering_knowledge",
+      "revision": {
+        "revision_id": "r1",
+        "content_sha256": "83f22f80634ed666ddbbf1a3e5504e5995841a90ce5d0c73efa35d9d35fb73f4",
+        "parent_revision_id": null,
+        "author_identity": "FXD synthetic research",
+        "created_at": "2026-07-23T00:00:00Z",
+        "change_reason": "Initial non-authorizing research reference revision.",
+        "source_revision": null,
+        "optimistic_concurrency_token": "9c45ceddabdb3a7c775eaa7cd42b5ef48a7fe20a6ba577f90e50a22923dbbb7b",
+        "publication_state": "published_research",
+        "deprecation_state": "active",
+        "restores_content_from_revision_id": null
+      },
+      "units": "unitless",
+      "privacy_classification": "public",
+      "summary": "Use independent primary, secondary, and tertiary contacts while recording any direction intentionally left free for loading, tolerance, or thermal response.",
+      "source_ids": [
+        "carr-lane-fixture-design-principles"
+      ],
+      "applicability": [
+        "prismatic and fabricated parts with usable datum opportunities"
+      ],
+      "limitations": [
+        "not a universal contact count or automatic layout"
+      ],
+      "supplier_or_author": null,
+      "model_or_internal_number": null,
+      "source_file": null,
+      "provenance": {
+        "record_identity": "pattern-001-three-two-one-with-float",
+        "author_or_grantor": "FXD original research paraphrase",
+        "usage_note": "Public-source metadata and original FXD wording; not component geometry or manufacturing authority."
+      },
+      "storage_policy": "not_applicable",
+      "edit_authority": "not_applicable",
+      "local_coordinate_system": null,
+      "preview_representation": {
+        "kind": "none",
+        "authority": "none",
+        "asset_identity": null,
+        "visible_classification": "knowledge_not_geometry"
+      },
+      "feature_definition": null,
+      "mounting_interfaces": [],
+      "functional_interfaces": [],
+      "contact_points": [],
+      "movement_states": [],
+      "open_closed_states": {
+        "claimed": false,
+        "open_state_id": null,
+        "closed_state_id": null
+      },
+      "keep_out_envelopes": [],
+      "maintenance_envelopes": [],
+      "material_manufacturing_intent": null,
+      "bom_participation": "excluded",
+      "export_participation": {
+        "fixture_component_step": "excluded",
+        "fixture_assembly_step": "excluded",
+        "fixture_dxf": "excluded",
+        "drawings": "excluded",
+        "review_reports": "permitted",
+        "manufacturing_release": "excluded"
+      },
+      "validation_participation": {
+        "visual_review": "permitted",
+        "broad_phase_collision": "excluded",
+        "exact_collision": "excluded",
+        "exact_clearance": "excluded",
+        "access": "excluded",
+        "ai_context": "permitted",
+        "deterministic_validation": "excluded",
+        "manufacturing_release": "excluded"
+      },
+      "configurable_variants": [],
+      "replacement_compatibility": {
+        "replacement_class": null,
+        "placement_compatible": false,
+        "functionally_equivalent": false,
+        "requires_interface_match": false,
+        "requires_revalidation": true,
+        "stale_evidence_after_replacement": true
+      },
+      "missing_link_behavior": "not_applicable",
+      "downstream_dependencies": [],
+      "engineering_details": {},
+      "tags": []
+    },
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "pattern-002-round-and-relieved-pin",
+      "name": "Round and relieved pin pair",
+      "record_type": "fixture_pattern",
+      "category": "public_engineering_knowledge",
+      "authority_level": "public_engineering_knowledge",
+      "revision": {
+        "revision_id": "r1",
+        "content_sha256": "c8620d6232a707d5c104e65bd2fba4f62e85a94e144a320a9698f801a7532602",
+        "parent_revision_id": null,
+        "author_identity": "FXD synthetic research",
+        "created_at": "2026-07-23T00:00:00Z",
+        "change_reason": "Initial non-authorizing research reference revision.",
+        "source_revision": null,
+        "optimistic_concurrency_token": "db2b0d7938fbd82e6ea5d9df14454299c9b3772e30ebea4f279165765dd3426c",
+        "publication_state": "published_research",
+        "deprecation_state": "active",
+        "restores_content_from_revision_id": null
+      },
+      "units": "unitless",
+      "privacy_classification": "public",
+      "summary": "Use one round locating feature and one relieved or directional feature when two holes should not redundantly lock the same in-plane motion.",
+      "source_ids": [
+        "carr-lane-fixture-design-principles",
+        "jergens-fixturing-components"
+      ],
+      "applicability": [
+        "parts with suitable verified holes"
+      ],
+      "limitations": [
+        "fit, tolerance, wear, and thermal behavior require project evidence"
+      ],
+      "supplier_or_author": null,
+      "model_or_internal_number": null,
+      "source_file": null,
+      "provenance": {
+        "record_identity": "pattern-002-round-and-relieved-pin",
+        "author_or_grantor": "FXD original research paraphrase",
+        "usage_note": "Public-source metadata and original FXD wording; not component geometry or manufacturing authority."
+      },
+      "storage_policy": "not_applicable",
+      "edit_authority": "not_applicable",
+      "local_coordinate_system": null,
+      "preview_representation": {
+        "kind": "none",
+        "authority": "none",
+        "asset_identity": null,
+        "visible_classification": "knowledge_not_geometry"
+      },
+      "feature_definition": null,
+      "mounting_interfaces": [],
+      "functional_interfaces": [],
+      "contact_points": [],
+      "movement_states": [],
+      "open_closed_states": {
+        "claimed": false,
+        "open_state_id": null,
+        "closed_state_id": null
+      },
+      "keep_out_envelopes": [],
+      "maintenance_envelopes": [],
+      "material_manufacturing_intent": null,
+      "bom_participation": "excluded",
+      "export_participation": {
+        "fixture_component_step": "excluded",
+        "fixture_assembly_step": "excluded",
+        "fixture_dxf": "excluded",
+        "drawings": "excluded",
+        "review_reports": "permitted",
+        "manufacturing_release": "excluded"
+      },
+      "validation_participation": {
+        "visual_review": "permitted",
+        "broad_phase_collision": "excluded",
+        "exact_collision": "excluded",
+        "exact_clearance": "excluded",
+        "access": "excluded",
+        "ai_context": "permitted",
+        "deterministic_validation": "excluded",
+        "manufacturing_release": "excluded"
+      },
+      "configurable_variants": [],
+      "replacement_compatibility": {
+        "replacement_class": null,
+        "placement_compatible": false,
+        "functionally_equivalent": false,
+        "requires_interface_match": false,
+        "requires_revalidation": true,
+        "stale_evidence_after_replacement": true
+      },
+      "missing_link_behavior": "not_applicable",
+      "downstream_dependencies": [],
+      "engineering_details": {},
+      "tags": []
+    },
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "pattern-003-clamp-into-support",
+      "name": "Clamp into named support",
+      "record_type": "fixture_pattern",
+      "category": "public_engineering_knowledge",
+      "authority_level": "public_engineering_knowledge",
+      "revision": {
+        "revision_id": "r1",
+        "content_sha256": "56b4dfc657dd0530e136adf93c65491b4ac2056cd5d1982a94e903df373b7f7c",
+        "parent_revision_id": null,
+        "author_identity": "FXD synthetic research",
+        "created_at": "2026-07-23T00:00:00Z",
+        "change_reason": "Initial non-authorizing research reference revision.",
+        "source_revision": null,
+        "optimistic_concurrency_token": "d02b79291e2e2fd6a78f70feda60fdf6fecbb3d3fa22dde731f9cd1e3e3bd8b6",
+        "publication_state": "published_research",
+        "deprecation_state": "active",
+        "restores_content_from_revision_id": null
+      },
+      "units": "unitless",
+      "privacy_classification": "public",
+      "summary": "Place clamp contact so force resolves into a named support or stable locator region rather than bending unsupported material.",
+      "source_ids": [
+        "carr-lane-fixture-design-principles",
+        "destaco-welding-applications"
+      ],
+      "applicability": [
+        "sheet, plate, tube, and fabricated assemblies"
+      ],
+      "limitations": [
+        "does not prove required clamp force"
+      ],
+      "supplier_or_author": null,
+      "model_or_internal_number": null,
+      "source_file": null,
+      "provenance": {
+        "record_identity": "pattern-003-clamp-into-support",
+        "author_or_grantor": "FXD original research paraphrase",
+        "usage_note": "Public-source metadata and original FXD wording; not component geometry or manufacturing authority."
+      },
+      "storage_policy": "not_applicable",
+      "edit_authority": "not_applicable",
+      "local_coordinate_system": null,
+      "preview_representation": {
+        "kind": "none",
+        "authority": "none",
+        "asset_identity": null,
+        "visible_classification": "knowledge_not_geometry"
+      },
+      "feature_definition": null,
+      "mounting_interfaces": [],
+      "functional_interfaces": [],
+      "contact_points": [],
+      "movement_states": [],
+      "open_closed_states": {
+        "claimed": false,
+        "open_state_id": null,
+        "closed_state_id": null
+      },
+      "keep_out_envelopes": [],
+      "maintenance_envelopes": [],
+      "material_manufacturing_intent": null,
+      "bom_participation": "excluded",
+      "export_participation": {
+        "fixture_component_step": "excluded",
+        "fixture_assembly_step": "excluded",
+        "fixture_dxf": "excluded",
+        "drawings": "excluded",
+        "review_reports": "permitted",
+        "manufacturing_release": "excluded"
+      },
+      "validation_participation": {
+        "visual_review": "permitted",
+        "broad_phase_collision": "excluded",
+        "exact_collision": "excluded",
+        "exact_clearance": "excluded",
+        "access": "excluded",
+        "ai_context": "permitted",
+        "deterministic_validation": "excluded",
+        "manufacturing_release": "excluded"
+      },
+      "configurable_variants": [],
+      "replacement_compatibility": {
+        "replacement_class": null,
+        "placement_compatible": false,
+        "functionally_equivalent": false,
+        "requires_interface_match": false,
+        "requires_revalidation": true,
+        "stale_evidence_after_replacement": true
+      },
+      "missing_link_behavior": "not_applicable",
+      "downstream_dependencies": [],
+      "engineering_details": {},
+      "tags": []
+    },
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "pattern-004-replaceable-contact",
+      "name": "Replaceable wear contact",
+      "record_type": "fixture_pattern",
+      "category": "public_engineering_knowledge",
+      "authority_level": "public_engineering_knowledge",
+      "revision": {
+        "revision_id": "r1",
+        "content_sha256": "9df86711764382f31c66787ed43b5a5de5220a8bf6b0e718276f60f23f9bb6d3",
+        "parent_revision_id": null,
+        "author_identity": "FXD synthetic research",
+        "created_at": "2026-07-23T00:00:00Z",
+        "change_reason": "Initial non-authorizing research reference revision.",
+        "source_revision": null,
+        "optimistic_concurrency_token": "1c8dc4b753d80d30ed27a4322bd23994c513b7b5c83db5f310de8325dc4cf2d0",
+        "publication_state": "published_research",
+        "deprecation_state": "active",
+        "restores_content_from_revision_id": null
+      },
+      "units": "unitless",
+      "privacy_classification": "public",
+      "summary": "Make high-wear support, locator, and stop contacts removable without redefining their parent datum and mounting interfaces.",
+      "source_ids": [
+        "fixtureworks-components",
+        "jergens-fixturing-components"
+      ],
+      "applicability": [
+        "repeat-production and abrasive or spatter-prone service"
+      ],
+      "limitations": [
+        "replacement still makes dependent evidence stale"
+      ],
+      "supplier_or_author": null,
+      "model_or_internal_number": null,
+      "source_file": null,
+      "provenance": {
+        "record_identity": "pattern-004-replaceable-contact",
+        "author_or_grantor": "FXD original research paraphrase",
+        "usage_note": "Public-source metadata and original FXD wording; not component geometry or manufacturing authority."
+      },
+      "storage_policy": "not_applicable",
+      "edit_authority": "not_applicable",
+      "local_coordinate_system": null,
+      "preview_representation": {
+        "kind": "none",
+        "authority": "none",
+        "asset_identity": null,
+        "visible_classification": "knowledge_not_geometry"
+      },
+      "feature_definition": null,
+      "mounting_interfaces": [],
+      "functional_interfaces": [],
+      "contact_points": [],
+      "movement_states": [],
+      "open_closed_states": {
+        "claimed": false,
+        "open_state_id": null,
+        "closed_state_id": null
+      },
+      "keep_out_envelopes": [],
+      "maintenance_envelopes": [],
+      "material_manufacturing_intent": null,
+      "bom_participation": "excluded",
+      "export_participation": {
+        "fixture_component_step": "excluded",
+        "fixture_assembly_step": "excluded",
+        "fixture_dxf": "excluded",
+        "drawings": "excluded",
+        "review_reports": "permitted",
+        "manufacturing_release": "excluded"
+      },
+      "validation_participation": {
+        "visual_review": "permitted",
+        "broad_phase_collision": "excluded",
+        "exact_collision": "excluded",
+        "exact_clearance": "excluded",
+        "access": "excluded",
+        "ai_context": "permitted",
+        "deterministic_validation": "excluded",
+        "manufacturing_release": "excluded"
+      },
+      "configurable_variants": [],
+      "replacement_compatibility": {
+        "replacement_class": null,
+        "placement_compatible": false,
+        "functionally_equivalent": false,
+        "requires_interface_match": false,
+        "requires_revalidation": true,
+        "stale_evidence_after_replacement": true
+      },
+      "missing_link_behavior": "not_applicable",
+      "downstream_dependencies": [],
+      "engineering_details": {},
+      "tags": []
+    },
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "pattern-005-continuous-base-discrete-nests",
+      "name": "Continuous base with discrete nests",
+      "record_type": "fixture_pattern",
+      "category": "public_engineering_knowledge",
+      "authority_level": "public_engineering_knowledge",
+      "revision": {
+        "revision_id": "r1",
+        "content_sha256": "e4c4298e1d8d1ba5084f12e2e5ca3248b2e89ecf455115ab70be8475219d5114",
+        "parent_revision_id": null,
+        "author_identity": "FXD synthetic research",
+        "created_at": "2026-07-23T00:00:00Z",
+        "change_reason": "Initial non-authorizing research reference revision.",
+        "source_revision": null,
+        "optimistic_concurrency_token": "cba82ea6b82b40d60518913094f8cf1c7ae4a964f57d1bf8812b9c9fc9845e54",
+        "publication_state": "published_research",
+        "deprecation_state": "active",
+        "restores_content_from_revision_id": null
+      },
+      "units": "unitless",
+      "privacy_classification": "public",
+      "summary": "Connect repeated product-specific stations to one explicit mounted structure while preserving station identities and service access.",
+      "source_ids": [
+        "demmeler-welding-tables",
+        "strong-hand-modular-table"
+      ],
+      "applicability": [
+        "multi-station fixtures"
+      ],
+      "limitations": [
+        "connected geometry does not establish structural adequacy"
+      ],
+      "supplier_or_author": null,
+      "model_or_internal_number": null,
+      "source_file": null,
+      "provenance": {
+        "record_identity": "pattern-005-continuous-base-discrete-nests",
+        "author_or_grantor": "FXD original research paraphrase",
+        "usage_note": "Public-source metadata and original FXD wording; not component geometry or manufacturing authority."
+      },
+      "storage_policy": "not_applicable",
+      "edit_authority": "not_applicable",
+      "local_coordinate_system": null,
+      "preview_representation": {
+        "kind": "none",
+        "authority": "none",
+        "asset_identity": null,
+        "visible_classification": "knowledge_not_geometry"
+      },
+      "feature_definition": null,
+      "mounting_interfaces": [],
+      "functional_interfaces": [],
+      "contact_points": [],
+      "movement_states": [],
+      "open_closed_states": {
+        "claimed": false,
+        "open_state_id": null,
+        "closed_state_id": null
+      },
+      "keep_out_envelopes": [],
+      "maintenance_envelopes": [],
+      "material_manufacturing_intent": null,
+      "bom_participation": "excluded",
+      "export_participation": {
+        "fixture_component_step": "excluded",
+        "fixture_assembly_step": "excluded",
+        "fixture_dxf": "excluded",
+        "drawings": "excluded",
+        "review_reports": "permitted",
+        "manufacturing_release": "excluded"
+      },
+      "validation_participation": {
+        "visual_review": "permitted",
+        "broad_phase_collision": "excluded",
+        "exact_collision": "excluded",
+        "exact_clearance": "excluded",
+        "access": "excluded",
+        "ai_context": "permitted",
+        "deterministic_validation": "excluded",
+        "manufacturing_release": "excluded"
+      },
+      "configurable_variants": [],
+      "replacement_compatibility": {
+        "replacement_class": null,
+        "placement_compatible": false,
+        "functionally_equivalent": false,
+        "requires_interface_match": false,
+        "requires_revalidation": true,
+        "stale_evidence_after_replacement": true
+      },
+      "missing_link_behavior": "not_applicable",
+      "downstream_dependencies": [],
+      "engineering_details": {},
+      "tags": []
+    },
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "pattern-006-tab-slot-riser",
+      "name": "Validated tab-and-slot riser",
+      "record_type": "fixture_pattern",
+      "category": "public_engineering_knowledge",
+      "authority_level": "public_engineering_knowledge",
+      "revision": {
+        "revision_id": "r1",
+        "content_sha256": "6fc8188e7674fead6b30d42c0f3d7f4fc4a814a30c47d34918f2ed24d077e969",
+        "parent_revision_id": null,
+        "author_identity": "FXD synthetic research",
+        "created_at": "2026-07-23T00:00:00Z",
+        "change_reason": "Initial non-authorizing research reference revision.",
+        "source_revision": null,
+        "optimistic_concurrency_token": "ea13b6da245f6529afef410b7212ce772574b1557a2d248aa1506e7fb74a39fd",
+        "publication_state": "published_research",
+        "deprecation_state": "active",
+        "restores_content_from_revision_id": null
+      },
+      "units": "unitless",
+      "privacy_classification": "public",
+      "summary": "A laser-cut riser records engagement, clearance, insertion direction, assembly sequence, weld access, and shop allowance provenance.",
+      "source_ids": [],
+      "applicability": [
+        "laser-cut fabricated fixtures"
+      ],
+      "limitations": [
+        "clearance values are shop inputs, not embedded universal rules"
+      ],
+      "supplier_or_author": null,
+      "model_or_internal_number": null,
+      "source_file": null,
+      "provenance": {
+        "record_identity": "pattern-006-tab-slot-riser",
+        "author_or_grantor": "FXD original research paraphrase",
+        "usage_note": "Public-source metadata and original FXD wording; not component geometry or manufacturing authority."
+      },
+      "storage_policy": "not_applicable",
+      "edit_authority": "not_applicable",
+      "local_coordinate_system": null,
+      "preview_representation": {
+        "kind": "none",
+        "authority": "none",
+        "asset_identity": null,
+        "visible_classification": "knowledge_not_geometry"
+      },
+      "feature_definition": null,
+      "mounting_interfaces": [],
+      "functional_interfaces": [],
+      "contact_points": [],
+      "movement_states": [],
+      "open_closed_states": {
+        "claimed": false,
+        "open_state_id": null,
+        "closed_state_id": null
+      },
+      "keep_out_envelopes": [],
+      "maintenance_envelopes": [],
+      "material_manufacturing_intent": null,
+      "bom_participation": "excluded",
+      "export_participation": {
+        "fixture_component_step": "excluded",
+        "fixture_assembly_step": "excluded",
+        "fixture_dxf": "excluded",
+        "drawings": "excluded",
+        "review_reports": "permitted",
+        "manufacturing_release": "excluded"
+      },
+      "validation_participation": {
+        "visual_review": "permitted",
+        "broad_phase_collision": "excluded",
+        "exact_collision": "excluded",
+        "exact_clearance": "excluded",
+        "access": "excluded",
+        "ai_context": "permitted",
+        "deterministic_validation": "excluded",
+        "manufacturing_release": "excluded"
+      },
+      "configurable_variants": [],
+      "replacement_compatibility": {
+        "replacement_class": null,
+        "placement_compatible": false,
+        "functionally_equivalent": false,
+        "requires_interface_match": false,
+        "requires_revalidation": true,
+        "stale_evidence_after_replacement": true
+      },
+      "missing_link_behavior": "not_applicable",
+      "downstream_dependencies": [],
+      "engineering_details": {
+        "evidence_classification": "original_fxd_engineering_hypothesis_requiring_human_validation",
+        "validation_boundary": "No cited public source establishes a universal tab-and-slot clearance or construction rule."
+      },
+      "tags": []
+    },
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "pattern-007-poka-yoke-asymmetry",
+      "name": "Asymmetric loading cue",
+      "record_type": "fixture_pattern",
+      "category": "public_engineering_knowledge",
+      "authority_level": "public_engineering_knowledge",
+      "revision": {
+        "revision_id": "r1",
+        "content_sha256": "dbd30398d07db168a03a4d97e7876c3c73bab248874c6a2b89af555950fb5ef3",
+        "parent_revision_id": null,
+        "author_identity": "FXD synthetic research",
+        "created_at": "2026-07-23T00:00:00Z",
+        "change_reason": "Initial non-authorizing research reference revision.",
+        "source_revision": null,
+        "optimistic_concurrency_token": "580c735a7126855b0002e18844029a9c54d7ab743dca73e736eddd7ab50f06de",
+        "publication_state": "published_research",
+        "deprecation_state": "active",
+        "restores_content_from_revision_id": null
+      },
+      "units": "unitless",
+      "privacy_classification": "public",
+      "summary": "Use visible, non-damaging asymmetry where reversed, incomplete, or wrong-family loading is reasonably possible.",
+      "source_ids": [
+        "carr-lane-fixture-design-principles"
+      ],
+      "applicability": [
+        "symmetric or similar product variants"
+      ],
+      "limitations": [
+        "human factors and product damage risk require review"
+      ],
+      "supplier_or_author": null,
+      "model_or_internal_number": null,
+      "source_file": null,
+      "provenance": {
+        "record_identity": "pattern-007-poka-yoke-asymmetry",
+        "author_or_grantor": "FXD original research paraphrase",
+        "usage_note": "Public-source metadata and original FXD wording; not component geometry or manufacturing authority."
+      },
+      "storage_policy": "not_applicable",
+      "edit_authority": "not_applicable",
+      "local_coordinate_system": null,
+      "preview_representation": {
+        "kind": "none",
+        "authority": "none",
+        "asset_identity": null,
+        "visible_classification": "knowledge_not_geometry"
+      },
+      "feature_definition": null,
+      "mounting_interfaces": [],
+      "functional_interfaces": [],
+      "contact_points": [],
+      "movement_states": [],
+      "open_closed_states": {
+        "claimed": false,
+        "open_state_id": null,
+        "closed_state_id": null
+      },
+      "keep_out_envelopes": [],
+      "maintenance_envelopes": [],
+      "material_manufacturing_intent": null,
+      "bom_participation": "excluded",
+      "export_participation": {
+        "fixture_component_step": "excluded",
+        "fixture_assembly_step": "excluded",
+        "fixture_dxf": "excluded",
+        "drawings": "excluded",
+        "review_reports": "permitted",
+        "manufacturing_release": "excluded"
+      },
+      "validation_participation": {
+        "visual_review": "permitted",
+        "broad_phase_collision": "excluded",
+        "exact_collision": "excluded",
+        "exact_clearance": "excluded",
+        "access": "excluded",
+        "ai_context": "permitted",
+        "deterministic_validation": "excluded",
+        "manufacturing_release": "excluded"
+      },
+      "configurable_variants": [],
+      "replacement_compatibility": {
+        "replacement_class": null,
+        "placement_compatible": false,
+        "functionally_equivalent": false,
+        "requires_interface_match": false,
+        "requires_revalidation": true,
+        "stale_evidence_after_replacement": true
+      },
+      "missing_link_behavior": "not_applicable",
+      "downstream_dependencies": [],
+      "engineering_details": {},
+      "tags": []
+    },
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "pattern-008-open-process-corridor",
+      "name": "Protected process corridor",
+      "record_type": "fixture_pattern",
+      "category": "public_engineering_knowledge",
+      "authority_level": "public_engineering_knowledge",
+      "revision": {
+        "revision_id": "r1",
+        "content_sha256": "69049a00041b2d4e2b7ea6803dbfdb9570ba21f39c92ae77ca6100fda030dfb6",
+        "parent_revision_id": null,
+        "author_identity": "FXD synthetic research",
+        "created_at": "2026-07-23T00:00:00Z",
+        "change_reason": "Initial non-authorizing research reference revision.",
+        "source_revision": null,
+        "optimistic_concurrency_token": "c31714171e98977b7d02d4669ff3418088d3c62a4bb403c7b0c8ad9311761372",
+        "publication_state": "published_research",
+        "deprecation_state": "active",
+        "restores_content_from_revision_id": null
+      },
+      "units": "unitless",
+      "privacy_classification": "public",
+      "summary": "Reserve explicit tool, weld, inspection, or assembly approach regions through all relevant fixture movement states.",
+      "source_ids": [
+        "osha-welding-overview",
+        "destaco-welding-applications"
+      ],
+      "applicability": [
+        "welding",
+        "inspection",
+        "assembly"
+      ],
+      "limitations": [
+        "envelope clearance alone does not prove process quality"
+      ],
+      "supplier_or_author": null,
+      "model_or_internal_number": null,
+      "source_file": null,
+      "provenance": {
+        "record_identity": "pattern-008-open-process-corridor",
+        "author_or_grantor": "FXD original research paraphrase",
+        "usage_note": "Public-source metadata and original FXD wording; not component geometry or manufacturing authority."
+      },
+      "storage_policy": "not_applicable",
+      "edit_authority": "not_applicable",
+      "local_coordinate_system": null,
+      "preview_representation": {
+        "kind": "none",
+        "authority": "none",
+        "asset_identity": null,
+        "visible_classification": "knowledge_not_geometry"
+      },
+      "feature_definition": null,
+      "mounting_interfaces": [],
+      "functional_interfaces": [],
+      "contact_points": [],
+      "movement_states": [],
+      "open_closed_states": {
+        "claimed": false,
+        "open_state_id": null,
+        "closed_state_id": null
+      },
+      "keep_out_envelopes": [],
+      "maintenance_envelopes": [],
+      "material_manufacturing_intent": null,
+      "bom_participation": "excluded",
+      "export_participation": {
+        "fixture_component_step": "excluded",
+        "fixture_assembly_step": "excluded",
+        "fixture_dxf": "excluded",
+        "drawings": "excluded",
+        "review_reports": "permitted",
+        "manufacturing_release": "excluded"
+      },
+      "validation_participation": {
+        "visual_review": "permitted",
+        "broad_phase_collision": "excluded",
+        "exact_collision": "excluded",
+        "exact_clearance": "excluded",
+        "access": "excluded",
+        "ai_context": "permitted",
+        "deterministic_validation": "excluded",
+        "manufacturing_release": "excluded"
+      },
+      "configurable_variants": [],
+      "replacement_compatibility": {
+        "replacement_class": null,
+        "placement_compatible": false,
+        "functionally_equivalent": false,
+        "requires_interface_match": false,
+        "requires_revalidation": true,
+        "stale_evidence_after_replacement": true
+      },
+      "missing_link_behavior": "not_applicable",
+      "downstream_dependencies": [],
+      "engineering_details": {},
+      "tags": []
+    },
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "pattern-009-lift-out-release",
+      "name": "Lift-out release path",
+      "record_type": "fixture_pattern",
+      "category": "public_engineering_knowledge",
+      "authority_level": "public_engineering_knowledge",
+      "revision": {
+        "revision_id": "r1",
+        "content_sha256": "b4ddcbfd1209defd1f264b636afc5df869ebe74383c1399859456b0c1f703c13",
+        "parent_revision_id": null,
+        "author_identity": "FXD synthetic research",
+        "created_at": "2026-07-23T00:00:00Z",
+        "change_reason": "Initial non-authorizing research reference revision.",
+        "source_revision": null,
+        "optimistic_concurrency_token": "b8adb67f6103d59242e0694e58ce9927ed871087189234cf49fe2369079a2c27",
+        "publication_state": "published_research",
+        "deprecation_state": "active",
+        "restores_content_from_revision_id": null
+      },
+      "units": "unitless",
+      "privacy_classification": "public",
+      "summary": "Define the finished-product release state and path separately from the raw-part loading state to catch post-process trapping.",
+      "source_ids": [
+        "carr-lane-fixture-design-principles"
+      ],
+      "applicability": [
+        "joined assemblies",
+        "closed profiles",
+        "nested products"
+      ],
+      "limitations": [
+        "real path planning may require representative geometry and sampling"
+      ],
+      "supplier_or_author": null,
+      "model_or_internal_number": null,
+      "source_file": null,
+      "provenance": {
+        "record_identity": "pattern-009-lift-out-release",
+        "author_or_grantor": "FXD original research paraphrase",
+        "usage_note": "Public-source metadata and original FXD wording; not component geometry or manufacturing authority."
+      },
+      "storage_policy": "not_applicable",
+      "edit_authority": "not_applicable",
+      "local_coordinate_system": null,
+      "preview_representation": {
+        "kind": "none",
+        "authority": "none",
+        "asset_identity": null,
+        "visible_classification": "knowledge_not_geometry"
+      },
+      "feature_definition": null,
+      "mounting_interfaces": [],
+      "functional_interfaces": [],
+      "contact_points": [],
+      "movement_states": [],
+      "open_closed_states": {
+        "claimed": false,
+        "open_state_id": null,
+        "closed_state_id": null
+      },
+      "keep_out_envelopes": [],
+      "maintenance_envelopes": [],
+      "material_manufacturing_intent": null,
+      "bom_participation": "excluded",
+      "export_participation": {
+        "fixture_component_step": "excluded",
+        "fixture_assembly_step": "excluded",
+        "fixture_dxf": "excluded",
+        "drawings": "excluded",
+        "review_reports": "permitted",
+        "manufacturing_release": "excluded"
+      },
+      "validation_participation": {
+        "visual_review": "permitted",
+        "broad_phase_collision": "excluded",
+        "exact_collision": "excluded",
+        "exact_clearance": "excluded",
+        "access": "excluded",
+        "ai_context": "permitted",
+        "deterministic_validation": "excluded",
+        "manufacturing_release": "excluded"
+      },
+      "configurable_variants": [],
+      "replacement_compatibility": {
+        "replacement_class": null,
+        "placement_compatible": false,
+        "functionally_equivalent": false,
+        "requires_interface_match": false,
+        "requires_revalidation": true,
+        "stale_evidence_after_replacement": true
+      },
+      "missing_link_behavior": "not_applicable",
+      "downstream_dependencies": [],
+      "engineering_details": {},
+      "tags": []
+    },
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "pattern-010-adjustable-then-lockable",
+      "name": "Adjustable then lockable",
+      "record_type": "fixture_pattern",
+      "category": "public_engineering_knowledge",
+      "authority_level": "public_engineering_knowledge",
+      "revision": {
+        "revision_id": "r1",
+        "content_sha256": "8eea76eeef11ad67182de3f24789f6c105484c7183405ddb316a228acff80a26",
+        "parent_revision_id": null,
+        "author_identity": "FXD synthetic research",
+        "created_at": "2026-07-23T00:00:00Z",
+        "change_reason": "Initial non-authorizing research reference revision.",
+        "source_revision": null,
+        "optimistic_concurrency_token": "f40428d395f91ffe1de66a6235add601972d1aec30e8fe712e8e31a36fe8bf43",
+        "publication_state": "published_research",
+        "deprecation_state": "active",
+        "restores_content_from_revision_id": null
+      },
+      "units": "unitless",
+      "privacy_classification": "public",
+      "summary": "Adjustment features expose range, nominal setting, lock method, prove-out status, and revalidation trigger.",
+      "source_ids": [
+        "fixtureworks-components"
+      ],
+      "applicability": [
+        "prototype and family fixtures"
+      ],
+      "limitations": [
+        "adjustability can reduce repeatability and requires explicit acceptance"
+      ],
+      "supplier_or_author": null,
+      "model_or_internal_number": null,
+      "source_file": null,
+      "provenance": {
+        "record_identity": "pattern-010-adjustable-then-lockable",
+        "author_or_grantor": "FXD original research paraphrase",
+        "usage_note": "Public-source metadata and original FXD wording; not component geometry or manufacturing authority."
+      },
+      "storage_policy": "not_applicable",
+      "edit_authority": "not_applicable",
+      "local_coordinate_system": null,
+      "preview_representation": {
+        "kind": "none",
+        "authority": "none",
+        "asset_identity": null,
+        "visible_classification": "knowledge_not_geometry"
+      },
+      "feature_definition": null,
+      "mounting_interfaces": [],
+      "functional_interfaces": [],
+      "contact_points": [],
+      "movement_states": [],
+      "open_closed_states": {
+        "claimed": false,
+        "open_state_id": null,
+        "closed_state_id": null
+      },
+      "keep_out_envelopes": [],
+      "maintenance_envelopes": [],
+      "material_manufacturing_intent": null,
+      "bom_participation": "excluded",
+      "export_participation": {
+        "fixture_component_step": "excluded",
+        "fixture_assembly_step": "excluded",
+        "fixture_dxf": "excluded",
+        "drawings": "excluded",
+        "review_reports": "permitted",
+        "manufacturing_release": "excluded"
+      },
+      "validation_participation": {
+        "visual_review": "permitted",
+        "broad_phase_collision": "excluded",
+        "exact_collision": "excluded",
+        "exact_clearance": "excluded",
+        "access": "excluded",
+        "ai_context": "permitted",
+        "deterministic_validation": "excluded",
+        "manufacturing_release": "excluded"
+      },
+      "configurable_variants": [],
+      "replacement_compatibility": {
+        "replacement_class": null,
+        "placement_compatible": false,
+        "functionally_equivalent": false,
+        "requires_interface_match": false,
+        "requires_revalidation": true,
+        "stale_evidence_after_replacement": true
+      },
+      "missing_link_behavior": "not_applicable",
+      "downstream_dependencies": [],
+      "engineering_details": {},
+      "tags": []
+    },
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "pattern-011-shimmed-datum-block",
+      "name": "Shimmed replaceable datum block",
+      "record_type": "fixture_pattern",
+      "category": "public_engineering_knowledge",
+      "authority_level": "public_engineering_knowledge",
+      "revision": {
+        "revision_id": "r1",
+        "content_sha256": "a23c6da0f7f5742100e5d8e32a4db6e391095e551e5d56ae7705e21ac138ef96",
+        "parent_revision_id": null,
+        "author_identity": "FXD synthetic research",
+        "created_at": "2026-07-23T00:00:00Z",
+        "change_reason": "Initial non-authorizing research reference revision.",
+        "source_revision": null,
+        "optimistic_concurrency_token": "038c3366ceed891c1d24b6bd9648638352e6427babc89f542e73c5d2e3cf103f",
+        "publication_state": "published_research",
+        "deprecation_state": "active",
+        "restores_content_from_revision_id": null
+      },
+      "units": "unitless",
+      "privacy_classification": "public",
+      "summary": "Use a pinned or otherwise repeatable parent mount with recorded shim state so service changes remain measurable and reversible.",
+      "source_ids": [
+        "jergens-fixturing-components"
+      ],
+      "applicability": [
+        "wear adjustment and prove-out"
+      ],
+      "limitations": [
+        "shim values require measured evidence"
+      ],
+      "supplier_or_author": null,
+      "model_or_internal_number": null,
+      "source_file": null,
+      "provenance": {
+        "record_identity": "pattern-011-shimmed-datum-block",
+        "author_or_grantor": "FXD original research paraphrase",
+        "usage_note": "Public-source metadata and original FXD wording; not component geometry or manufacturing authority."
+      },
+      "storage_policy": "not_applicable",
+      "edit_authority": "not_applicable",
+      "local_coordinate_system": null,
+      "preview_representation": {
+        "kind": "none",
+        "authority": "none",
+        "asset_identity": null,
+        "visible_classification": "knowledge_not_geometry"
+      },
+      "feature_definition": null,
+      "mounting_interfaces": [],
+      "functional_interfaces": [],
+      "contact_points": [],
+      "movement_states": [],
+      "open_closed_states": {
+        "claimed": false,
+        "open_state_id": null,
+        "closed_state_id": null
+      },
+      "keep_out_envelopes": [],
+      "maintenance_envelopes": [],
+      "material_manufacturing_intent": null,
+      "bom_participation": "excluded",
+      "export_participation": {
+        "fixture_component_step": "excluded",
+        "fixture_assembly_step": "excluded",
+        "fixture_dxf": "excluded",
+        "drawings": "excluded",
+        "review_reports": "permitted",
+        "manufacturing_release": "excluded"
+      },
+      "validation_participation": {
+        "visual_review": "permitted",
+        "broad_phase_collision": "excluded",
+        "exact_collision": "excluded",
+        "exact_clearance": "excluded",
+        "access": "excluded",
+        "ai_context": "permitted",
+        "deterministic_validation": "excluded",
+        "manufacturing_release": "excluded"
+      },
+      "configurable_variants": [],
+      "replacement_compatibility": {
+        "replacement_class": null,
+        "placement_compatible": false,
+        "functionally_equivalent": false,
+        "requires_interface_match": false,
+        "requires_revalidation": true,
+        "stale_evidence_after_replacement": true
+      },
+      "missing_link_behavior": "not_applicable",
+      "downstream_dependencies": [],
+      "engineering_details": {},
+      "tags": []
+    },
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "pattern-012-modular-station-assembly",
+      "name": "Modular station assembly",
+      "record_type": "fixture_pattern",
+      "category": "public_engineering_knowledge",
+      "authority_level": "public_engineering_knowledge",
+      "revision": {
+        "revision_id": "r1",
+        "content_sha256": "4cc57866d58f10ff3e3ba373a67fc144f234e7c5f87eae1253a91900d7e57a63",
+        "parent_revision_id": null,
+        "author_identity": "FXD synthetic research",
+        "created_at": "2026-07-23T00:00:00Z",
+        "change_reason": "Initial non-authorizing research reference revision.",
+        "source_revision": null,
+        "optimistic_concurrency_token": "5f7eb0c538e822aa3d9e17732af81b2a8b3d13b880ba303356cf33ae59fc5ef9",
+        "publication_state": "published_research",
+        "deprecation_state": "active",
+        "restores_content_from_revision_id": null
+      },
+      "units": "unitless",
+      "privacy_classification": "public",
+      "summary": "Group a validated nest, mounting frame, contacts, and tooling interfaces into a revisioned station module without hiding project-specific dependencies.",
+      "source_ids": [
+        "strong-hand-modular-table",
+        "occt-xde-guide"
+      ],
+      "applicability": [
+        "repeat stations and product families"
+      ],
+      "limitations": [
+        "module reuse does not transfer prior validation automatically"
+      ],
+      "supplier_or_author": null,
+      "model_or_internal_number": null,
+      "source_file": null,
+      "provenance": {
+        "record_identity": "pattern-012-modular-station-assembly",
+        "author_or_grantor": "FXD original research paraphrase",
+        "usage_note": "Public-source metadata and original FXD wording; not component geometry or manufacturing authority."
+      },
+      "storage_policy": "not_applicable",
+      "edit_authority": "not_applicable",
+      "local_coordinate_system": null,
+      "preview_representation": {
+        "kind": "none",
+        "authority": "none",
+        "asset_identity": null,
+        "visible_classification": "knowledge_not_geometry"
+      },
+      "feature_definition": null,
+      "mounting_interfaces": [],
+      "functional_interfaces": [],
+      "contact_points": [],
+      "movement_states": [],
+      "open_closed_states": {
+        "claimed": false,
+        "open_state_id": null,
+        "closed_state_id": null
+      },
+      "keep_out_envelopes": [],
+      "maintenance_envelopes": [],
+      "material_manufacturing_intent": null,
+      "bom_participation": "excluded",
+      "export_participation": {
+        "fixture_component_step": "excluded",
+        "fixture_assembly_step": "excluded",
+        "fixture_dxf": "excluded",
+        "drawings": "excluded",
+        "review_reports": "permitted",
+        "manufacturing_release": "excluded"
+      },
+      "validation_participation": {
+        "visual_review": "permitted",
+        "broad_phase_collision": "excluded",
+        "exact_collision": "excluded",
+        "exact_clearance": "excluded",
+        "access": "excluded",
+        "ai_context": "permitted",
+        "deterministic_validation": "excluded",
+        "manufacturing_release": "excluded"
+      },
+      "configurable_variants": [],
+      "replacement_compatibility": {
+        "replacement_class": null,
+        "placement_compatible": false,
+        "functionally_equivalent": false,
+        "requires_interface_match": false,
+        "requires_revalidation": true,
+        "stale_evidence_after_replacement": true
+      },
+      "missing_link_behavior": "not_applicable",
+      "downstream_dependencies": [],
+      "engineering_details": {},
+      "tags": []
+    },
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "pattern-013-build-and-check-separation",
+      "name": "Build and check role separation",
+      "record_type": "fixture_pattern",
+      "category": "public_engineering_knowledge",
+      "authority_level": "public_engineering_knowledge",
+      "revision": {
+        "revision_id": "r1",
+        "content_sha256": "4015a4b7b045132e665361c4e3ba7e56d1b0a78e2830a120986b3a5967935ff1",
+        "parent_revision_id": null,
+        "author_identity": "FXD synthetic research",
+        "created_at": "2026-07-23T00:00:00Z",
+        "change_reason": "Initial non-authorizing research reference revision.",
+        "source_revision": null,
+        "optimistic_concurrency_token": "e21885c3deb204864b27d372e7efbb7716c975043e964c1c6f94d11767507a78",
+        "publication_state": "published_research",
+        "deprecation_state": "active",
+        "restores_content_from_revision_id": null
+      },
+      "units": "unitless",
+      "privacy_classification": "public",
+      "summary": "Combined tooling declares which contacts establish assembly position and which features provide independent inspection evidence.",
+      "source_ids": [
+        "iso-1101-2017-metadata",
+        "iso-5459-2024-metadata"
+      ],
+      "applicability": [
+        "combined build-and-check tooling"
+      ],
+      "limitations": [
+        "standards requirements are not embedded and inspection independence needs qualified review"
+      ],
+      "supplier_or_author": null,
+      "model_or_internal_number": null,
+      "source_file": null,
+      "provenance": {
+        "record_identity": "pattern-013-build-and-check-separation",
+        "author_or_grantor": "FXD original research paraphrase",
+        "usage_note": "Public-source metadata and original FXD wording; not component geometry or manufacturing authority."
+      },
+      "storage_policy": "not_applicable",
+      "edit_authority": "not_applicable",
+      "local_coordinate_system": null,
+      "preview_representation": {
+        "kind": "none",
+        "authority": "none",
+        "asset_identity": null,
+        "visible_classification": "knowledge_not_geometry"
+      },
+      "feature_definition": null,
+      "mounting_interfaces": [],
+      "functional_interfaces": [],
+      "contact_points": [],
+      "movement_states": [],
+      "open_closed_states": {
+        "claimed": false,
+        "open_state_id": null,
+        "closed_state_id": null
+      },
+      "keep_out_envelopes": [],
+      "maintenance_envelopes": [],
+      "material_manufacturing_intent": null,
+      "bom_participation": "excluded",
+      "export_participation": {
+        "fixture_component_step": "excluded",
+        "fixture_assembly_step": "excluded",
+        "fixture_dxf": "excluded",
+        "drawings": "excluded",
+        "review_reports": "permitted",
+        "manufacturing_release": "excluded"
+      },
+      "validation_participation": {
+        "visual_review": "permitted",
+        "broad_phase_collision": "excluded",
+        "exact_collision": "excluded",
+        "exact_clearance": "excluded",
+        "access": "excluded",
+        "ai_context": "permitted",
+        "deterministic_validation": "excluded",
+        "manufacturing_release": "excluded"
+      },
+      "configurable_variants": [],
+      "replacement_compatibility": {
+        "replacement_class": null,
+        "placement_compatible": false,
+        "functionally_equivalent": false,
+        "requires_interface_match": false,
+        "requires_revalidation": true,
+        "stale_evidence_after_replacement": true
+      },
+      "missing_link_behavior": "not_applicable",
+      "downstream_dependencies": [],
+      "engineering_details": {},
+      "tags": []
+    },
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "pattern-014-machine-envelope-fit",
+      "name": "Machine envelope fit review",
+      "record_type": "fixture_pattern",
+      "category": "public_engineering_knowledge",
+      "authority_level": "public_engineering_knowledge",
+      "revision": {
+        "revision_id": "r1",
+        "content_sha256": "3ba8adf055a8b6b295163a0f7a701afa6da366f37b7ea11c194f10a3e7359d02",
+        "parent_revision_id": null,
+        "author_identity": "FXD synthetic research",
+        "created_at": "2026-07-23T00:00:00Z",
+        "change_reason": "Initial non-authorizing research reference revision.",
+        "source_revision": null,
+        "optimistic_concurrency_token": "9b6b0f496ebc873bd21a022ebd5dbcd196e5c718468eacbe4b9533d412ac9309",
+        "publication_state": "published_research",
+        "deprecation_state": "active",
+        "restores_content_from_revision_id": null
+      },
+      "units": "unitless",
+      "privacy_classification": "public",
+      "summary": "Evaluate workholding against only the machine, pallet, spindle, tool, door, and service states needed for the project question.",
+      "source_ids": [
+        "osha-machine-guarding"
+      ],
+      "applicability": [
+        "machining and workholding setups"
+      ],
+      "limitations": [
+        "does not replace machine simulation, manuals, or safety review"
+      ],
+      "supplier_or_author": null,
+      "model_or_internal_number": null,
+      "source_file": null,
+      "provenance": {
+        "record_identity": "pattern-014-machine-envelope-fit",
+        "author_or_grantor": "FXD original research paraphrase",
+        "usage_note": "Public-source metadata and original FXD wording; not component geometry or manufacturing authority."
+      },
+      "storage_policy": "not_applicable",
+      "edit_authority": "not_applicable",
+      "local_coordinate_system": null,
+      "preview_representation": {
+        "kind": "none",
+        "authority": "none",
+        "asset_identity": null,
+        "visible_classification": "knowledge_not_geometry"
+      },
+      "feature_definition": null,
+      "mounting_interfaces": [],
+      "functional_interfaces": [],
+      "contact_points": [],
+      "movement_states": [],
+      "open_closed_states": {
+        "claimed": false,
+        "open_state_id": null,
+        "closed_state_id": null
+      },
+      "keep_out_envelopes": [],
+      "maintenance_envelopes": [],
+      "material_manufacturing_intent": null,
+      "bom_participation": "excluded",
+      "export_participation": {
+        "fixture_component_step": "excluded",
+        "fixture_assembly_step": "excluded",
+        "fixture_dxf": "excluded",
+        "drawings": "excluded",
+        "review_reports": "permitted",
+        "manufacturing_release": "excluded"
+      },
+      "validation_participation": {
+        "visual_review": "permitted",
+        "broad_phase_collision": "excluded",
+        "exact_collision": "excluded",
+        "exact_clearance": "excluded",
+        "access": "excluded",
+        "ai_context": "permitted",
+        "deterministic_validation": "excluded",
+        "manufacturing_release": "excluded"
+      },
+      "configurable_variants": [],
+      "replacement_compatibility": {
+        "replacement_class": null,
+        "placement_compatible": false,
+        "functionally_equivalent": false,
+        "requires_interface_match": false,
+        "requires_revalidation": true,
+        "stale_evidence_after_replacement": true
+      },
+      "missing_link_behavior": "not_applicable",
+      "downstream_dependencies": [],
+      "engineering_details": {},
+      "tags": []
+    },
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "pattern-015-provisional-to-exact-gate",
+      "name": "Provisional-to-exact gate",
+      "record_type": "fixture_pattern",
+      "category": "public_engineering_knowledge",
+      "authority_level": "public_engineering_knowledge",
+      "revision": {
+        "revision_id": "r1",
+        "content_sha256": "a89942b154f278e2191e3802137e8d261327c3b6df89c12b4271a54347ccdb54",
+        "parent_revision_id": null,
+        "author_identity": "FXD synthetic research",
+        "created_at": "2026-07-23T00:00:00Z",
+        "change_reason": "Initial non-authorizing research reference revision.",
+        "source_revision": null,
+        "optimistic_concurrency_token": "22fcabc17b3ed68b7c89f18e7013f0d972e6c6921039c8dd849542b3650dace2",
+        "publication_state": "published_research",
+        "deprecation_state": "active",
+        "restores_content_from_revision_id": null
+      },
+      "units": "unitless",
+      "privacy_classification": "public",
+      "summary": "A provisional envelope may be replaced by exact authorized geometry only through an explicit authority change, identity link, and stale-evidence transition.",
+      "source_ids": [
+        "destaco-welding-applications",
+        "occt-application-framework"
+      ],
+      "applicability": [
+        "commercial tooling and process-context assets"
+      ],
+      "limitations": [
+        "visual similarity cannot authorize the replacement"
+      ],
+      "supplier_or_author": null,
+      "model_or_internal_number": null,
+      "source_file": null,
+      "provenance": {
+        "record_identity": "pattern-015-provisional-to-exact-gate",
+        "author_or_grantor": "FXD original research paraphrase",
+        "usage_note": "Public-source metadata and original FXD wording; not component geometry or manufacturing authority."
+      },
+      "storage_policy": "not_applicable",
+      "edit_authority": "not_applicable",
+      "local_coordinate_system": null,
+      "preview_representation": {
+        "kind": "none",
+        "authority": "none",
+        "asset_identity": null,
+        "visible_classification": "knowledge_not_geometry"
+      },
+      "feature_definition": null,
+      "mounting_interfaces": [],
+      "functional_interfaces": [],
+      "contact_points": [],
+      "movement_states": [],
+      "open_closed_states": {
+        "claimed": false,
+        "open_state_id": null,
+        "closed_state_id": null
+      },
+      "keep_out_envelopes": [],
+      "maintenance_envelopes": [],
+      "material_manufacturing_intent": null,
+      "bom_participation": "excluded",
+      "export_participation": {
+        "fixture_component_step": "excluded",
+        "fixture_assembly_step": "excluded",
+        "fixture_dxf": "excluded",
+        "drawings": "excluded",
+        "review_reports": "permitted",
+        "manufacturing_release": "excluded"
+      },
+      "validation_participation": {
+        "visual_review": "permitted",
+        "broad_phase_collision": "excluded",
+        "exact_collision": "excluded",
+        "exact_clearance": "excluded",
+        "access": "excluded",
+        "ai_context": "permitted",
+        "deterministic_validation": "excluded",
+        "manufacturing_release": "excluded"
+      },
+      "configurable_variants": [],
+      "replacement_compatibility": {
+        "replacement_class": null,
+        "placement_compatible": false,
+        "functionally_equivalent": false,
+        "requires_interface_match": false,
+        "requires_revalidation": true,
+        "stale_evidence_after_replacement": true
+      },
+      "missing_link_behavior": "not_applicable",
+      "downstream_dependencies": [],
+      "engineering_details": {},
+      "tags": []
+    }
+  ],
+  "process_context_patterns": [
+    {
+      "schema_version": "fxd-process-context-asset-v1",
+      "asset_id": "context-001-torch-head",
+      "name": "Synthetic torch head and approach envelope",
+      "asset_type": "torch_envelope_or_head",
+      "authority_level": "process_context_asset",
+      "revision": {
+        "revision_id": "r1",
+        "content_sha256": "5eb1be940a20795a04c2838c32bac1f6c73029b4dc8519b98b0a889579b2e973",
+        "parent_revision_id": null,
+        "author_identity": "FXD synthetic research",
+        "created_at": "2026-07-23T00:00:00Z",
+        "change_reason": "Initial non-authorizing research reference revision.",
+        "source_revision": null,
+        "optimistic_concurrency_token": "e1edfad44410c13cd0df395df31ec325255a7b81fdfccd0d28d9da04dae99901",
+        "publication_state": "published_research",
+        "deprecation_state": "active",
+        "restores_content_from_revision_id": null
+      },
+      "units": "mm",
+      "geometry_authority": "provisional_review_envelope",
+      "movement_states": [
+        {
+          "state_id": "approach",
+          "description": "Tool approaches a confirmed process region.",
+          "authoritative_for_collision": false,
+          "state_kind": "moving"
+        },
+        {
+          "state_id": "process",
+          "description": "Tool is at a representative process pose.",
+          "authoritative_for_collision": false,
+          "state_kind": "moving"
+        }
+      ],
+      "keep_out_envelopes": [
+        {
+          "envelope_id": "torch-body-review",
+          "state_id": "process",
+          "provisional": true,
+          "geometry": {
+            "kind": "envelope",
+            "units": "mm",
+            "point": null,
+            "axis": null,
+            "normal": null,
+            "bounds_min": [
+              -1,
+              -1,
+              -1
+            ],
+            "bounds_max": [
+              1,
+              1,
+              1
+            ],
+            "radius": null
+          }
+        }
+      ],
+      "maintenance_envelopes": [],
+      "functional_interfaces": [],
+      "required_for_validation_packs": [
+        "manual_weld_access",
+        "robotic_weld_access"
+      ],
+      "validation_limitations": [
+        "provisional geometry cannot establish exact clearance or weld procedure suitability"
+      ],
+      "source_ids": [
+        "osha-welding-overview",
+        "destaco-welding-applications"
+      ],
+      "privacy_classification": "synthetic_public",
+      "frame": {
+        "schema_version": "fxd-owned-coordinate-frame-v1",
+        "frame_id": "torch-tip-frame",
+        "owner_id": "context-001-torch-head",
+        "units": "mm",
+        "origin": [
+          0,
+          0,
+          0
+        ],
+        "axes": {
+          "x": [
+            1,
+            0,
+            0
+          ],
+          "y": [
+            0,
+            1,
+            0
+          ],
+          "z": [
+            0,
+            0,
+            1
+          ]
+        },
+        "handedness": "right_handed",
+        "frame_purpose": "Synthetic process-context placement and review frame."
+      },
+      "deliverable_scope": "reference_context_only",
+      "output_participation": {
+        "fixture_bom": "excluded",
+        "fixture_component_step": "excluded",
+        "fixture_assembly_step": "excluded",
+        "fixture_dxf": "excluded",
+        "fixture_manufacturing_release": "excluded",
+        "separate_equipment_manifest": "excluded"
+      },
+      "delivery_authorization": null,
+      "geometry_source_item_id": null,
+      "collision_authority": "provisional_only",
+      "envelope_authority": "provisional_only",
+      "access_authority": "provisional_only"
+    },
+    {
+      "schema_version": "fxd-process-context-asset-v1",
+      "asset_id": "context-002-robot-wrist",
+      "name": "Synthetic robot wrist context",
+      "asset_type": "robot_cobot_wrist",
+      "authority_level": "process_context_asset",
+      "revision": {
+        "revision_id": "r1",
+        "content_sha256": "664f8492ae7b376ceb49890a375d92cb995b065deedc2eeda412e1b2aeb6fcb2",
+        "parent_revision_id": null,
+        "author_identity": "FXD synthetic research",
+        "created_at": "2026-07-23T00:00:00Z",
+        "change_reason": "Initial non-authorizing research reference revision.",
+        "source_revision": null,
+        "optimistic_concurrency_token": "50927b368324b663326fc217c9351e37eabb6ecd12a462fc6938bf11dc3b434c",
+        "publication_state": "published_research",
+        "deprecation_state": "active",
+        "restores_content_from_revision_id": null
+      },
+      "units": "mm",
+      "geometry_authority": "provisional_review_envelope",
+      "movement_states": [
+        {
+          "state_id": "representative-process-pose",
+          "description": "One review pose only, without kinematic path authority.",
+          "authoritative_for_collision": false,
+          "state_kind": "moving"
+        },
+        {
+          "state_id": "service",
+          "description": "Representative non-routine access state.",
+          "authoritative_for_collision": false,
+          "state_kind": "service"
+        }
+      ],
+      "keep_out_envelopes": [
+        {
+          "envelope_id": "wrist-review-envelope",
+          "state_id": "representative-process-pose",
+          "provisional": true,
+          "geometry": {
+            "kind": "envelope",
+            "units": "mm",
+            "point": null,
+            "axis": null,
+            "normal": null,
+            "bounds_min": [
+              -1,
+              -1,
+              -1
+            ],
+            "bounds_max": [
+              1,
+              1,
+              1
+            ],
+            "radius": null
+          }
+        }
+      ],
+      "maintenance_envelopes": [
+        {
+          "envelope_id": "wrist-service-zone",
+          "state_id": "service",
+          "provisional": true,
+          "geometry": {
+            "kind": "envelope",
+            "units": "mm",
+            "point": null,
+            "axis": null,
+            "normal": null,
+            "bounds_min": [
+              -1,
+              -1,
+              -1
+            ],
+            "bounds_max": [
+              1,
+              1,
+              1
+            ],
+            "radius": null
+          }
+        }
+      ],
+      "functional_interfaces": [],
+      "required_for_validation_packs": [
+        "robotic_weld_access"
+      ],
+      "validation_limitations": [
+        "no kinematics, singularity, path planning, safety, or offline programming authority"
+      ],
+      "source_ids": [
+        "osha-robotics-overview",
+        "iso-10218-2-2025-metadata"
+      ],
+      "privacy_classification": "synthetic_public",
+      "frame": {
+        "schema_version": "fxd-owned-coordinate-frame-v1",
+        "frame_id": "robot-flange-frame",
+        "owner_id": "context-002-robot-wrist",
+        "units": "mm",
+        "origin": [
+          0,
+          0,
+          0
+        ],
+        "axes": {
+          "x": [
+            1,
+            0,
+            0
+          ],
+          "y": [
+            0,
+            1,
+            0
+          ],
+          "z": [
+            0,
+            0,
+            1
+          ]
+        },
+        "handedness": "right_handed",
+        "frame_purpose": "Synthetic process-context placement and review frame."
+      },
+      "deliverable_scope": "reference_context_only",
+      "output_participation": {
+        "fixture_bom": "excluded",
+        "fixture_component_step": "excluded",
+        "fixture_assembly_step": "excluded",
+        "fixture_dxf": "excluded",
+        "fixture_manufacturing_release": "excluded",
+        "separate_equipment_manifest": "excluded"
+      },
+      "delivery_authorization": null,
+      "geometry_source_item_id": null,
+      "collision_authority": "provisional_only",
+      "envelope_authority": "provisional_only",
+      "access_authority": "provisional_only"
+    },
+    {
+      "schema_version": "fxd-process-context-asset-v1",
+      "asset_id": "context-003-table",
+      "name": "Synthetic modular table context",
+      "asset_type": "table",
+      "authority_level": "process_context_asset",
+      "revision": {
+        "revision_id": "r1",
+        "content_sha256": "27c9fa8ec0e75d0f77a21e9aa8bcb3d8d2e82b41b364c33eb7c89083407d0129",
+        "parent_revision_id": null,
+        "author_identity": "FXD synthetic research",
+        "created_at": "2026-07-23T00:00:00Z",
+        "change_reason": "Initial non-authorizing research reference revision.",
+        "source_revision": null,
+        "optimistic_concurrency_token": "0503309f69c8ec4df970a60e355c1c4f5ecd9b6990b328c2a08ab7ab325278cc",
+        "publication_state": "published_research",
+        "deprecation_state": "active",
+        "restores_content_from_revision_id": null
+      },
+      "units": "mm",
+      "geometry_authority": "provisional_review_envelope",
+      "movement_states": [
+        {
+          "state_id": "fixed",
+          "description": "Table is fixed for fixture placement review.",
+          "authoritative_for_collision": false,
+          "state_kind": "fixed"
+        }
+      ],
+      "keep_out_envelopes": [],
+      "maintenance_envelopes": [],
+      "functional_interfaces": [],
+      "required_for_validation_packs": [
+        "table_mounting_review"
+      ],
+      "validation_limitations": [
+        "no universal grid, load rating, or supplier compatibility is inferred"
+      ],
+      "source_ids": [
+        "demmeler-welding-tables",
+        "strong-hand-modular-table"
+      ],
+      "privacy_classification": "synthetic_public",
+      "frame": {
+        "schema_version": "fxd-owned-coordinate-frame-v1",
+        "frame_id": "table-work-frame",
+        "owner_id": "context-003-table",
+        "units": "mm",
+        "origin": [
+          0,
+          0,
+          0
+        ],
+        "axes": {
+          "x": [
+            1,
+            0,
+            0
+          ],
+          "y": [
+            0,
+            1,
+            0
+          ],
+          "z": [
+            0,
+            0,
+            1
+          ]
+        },
+        "handedness": "right_handed",
+        "frame_purpose": "Synthetic process-context placement and review frame."
+      },
+      "deliverable_scope": "reference_context_only",
+      "output_participation": {
+        "fixture_bom": "excluded",
+        "fixture_component_step": "excluded",
+        "fixture_assembly_step": "excluded",
+        "fixture_dxf": "excluded",
+        "fixture_manufacturing_release": "excluded",
+        "separate_equipment_manifest": "excluded"
+      },
+      "delivery_authorization": null,
+      "geometry_source_item_id": null,
+      "collision_authority": "provisional_only",
+      "envelope_authority": "provisional_only",
+      "access_authority": "provisional_only"
+    },
+    {
+      "schema_version": "fxd-process-context-asset-v1",
+      "asset_id": "context-004-positioner",
+      "name": "Synthetic positioner sweep",
+      "asset_type": "positioner",
+      "authority_level": "process_context_asset",
+      "revision": {
+        "revision_id": "r1",
+        "content_sha256": "879e25255cc58269a722b39ae7afd23cc20f0c1d4a258d5961b97548013cae65",
+        "parent_revision_id": null,
+        "author_identity": "FXD synthetic research",
+        "created_at": "2026-07-23T00:00:00Z",
+        "change_reason": "Initial non-authorizing research reference revision.",
+        "source_revision": null,
+        "optimistic_concurrency_token": "409913ee5ad588cd25d0239ac05b6106454c4ec4dd0836eeb5ee06452b709b2b",
+        "publication_state": "published_research",
+        "deprecation_state": "active",
+        "restores_content_from_revision_id": null
+      },
+      "units": "mm",
+      "geometry_authority": "provisional_review_envelope",
+      "movement_states": [
+        {
+          "state_id": "load",
+          "description": "Representative loading orientation.",
+          "authoritative_for_collision": false,
+          "state_kind": "moving"
+        },
+        {
+          "state_id": "process-sweep",
+          "description": "Conservative review sweep without control authority.",
+          "authoritative_for_collision": false,
+          "state_kind": "moving"
+        }
+      ],
+      "keep_out_envelopes": [
+        {
+          "envelope_id": "positioner-sweep",
+          "state_id": "process-sweep",
+          "provisional": true,
+          "geometry": {
+            "kind": "envelope",
+            "units": "mm",
+            "point": null,
+            "axis": null,
+            "normal": null,
+            "bounds_min": [
+              -1,
+              -1,
+              -1
+            ],
+            "bounds_max": [
+              1,
+              1,
+              1
+            ],
+            "radius": null
+          }
+        }
+      ],
+      "maintenance_envelopes": [],
+      "functional_interfaces": [],
+      "required_for_validation_packs": [
+        "positioned_weld_access",
+        "loading_unloading"
+      ],
+      "validation_limitations": [
+        "control limits, payload, dynamics, and safety remain external"
+      ],
+      "source_ids": [
+        "osha-machine-guarding"
+      ],
+      "privacy_classification": "synthetic_public",
+      "frame": {
+        "schema_version": "fxd-owned-coordinate-frame-v1",
+        "frame_id": "positioner-axis-frame",
+        "owner_id": "context-004-positioner",
+        "units": "mm",
+        "origin": [
+          0,
+          0,
+          0
+        ],
+        "axes": {
+          "x": [
+            1,
+            0,
+            0
+          ],
+          "y": [
+            0,
+            1,
+            0
+          ],
+          "z": [
+            0,
+            0,
+            1
+          ]
+        },
+        "handedness": "right_handed",
+        "frame_purpose": "Synthetic process-context placement and review frame."
+      },
+      "deliverable_scope": "reference_context_only",
+      "output_participation": {
+        "fixture_bom": "excluded",
+        "fixture_component_step": "excluded",
+        "fixture_assembly_step": "excluded",
+        "fixture_dxf": "excluded",
+        "fixture_manufacturing_release": "excluded",
+        "separate_equipment_manifest": "excluded"
+      },
+      "delivery_authorization": null,
+      "geometry_source_item_id": null,
+      "collision_authority": "provisional_only",
+      "envelope_authority": "provisional_only",
+      "access_authority": "provisional_only"
+    },
+    {
+      "schema_version": "fxd-process-context-asset-v1",
+      "asset_id": "context-005-machine-envelope",
+      "name": "Synthetic machine workspace",
+      "asset_type": "machine_envelope",
+      "authority_level": "process_context_asset",
+      "revision": {
+        "revision_id": "r1",
+        "content_sha256": "e2536b03762cbe78422ca4518289417cbbb2e96563432fba71d75d1049770991",
+        "parent_revision_id": null,
+        "author_identity": "FXD synthetic research",
+        "created_at": "2026-07-23T00:00:00Z",
+        "change_reason": "Initial non-authorizing research reference revision.",
+        "source_revision": null,
+        "optimistic_concurrency_token": "c0523cbe771a33266827dc0b1da3f13243f674519fff54fd5cfc7eae05500c17",
+        "publication_state": "published_research",
+        "deprecation_state": "active",
+        "restores_content_from_revision_id": null
+      },
+      "units": "mm",
+      "geometry_authority": "provisional_review_envelope",
+      "movement_states": [
+        {
+          "state_id": "load-door-open",
+          "description": "Representative loading state.",
+          "authoritative_for_collision": false,
+          "state_kind": "moving"
+        },
+        {
+          "state_id": "process-door-closed",
+          "description": "Representative process containment state.",
+          "authoritative_for_collision": false,
+          "state_kind": "moving"
+        }
+      ],
+      "keep_out_envelopes": [
+        {
+          "envelope_id": "machine-travel-review",
+          "state_id": "process-door-closed",
+          "provisional": true,
+          "geometry": {
+            "kind": "envelope",
+            "units": "mm",
+            "point": null,
+            "axis": null,
+            "normal": null,
+            "bounds_min": [
+              -1,
+              -1,
+              -1
+            ],
+            "bounds_max": [
+              1,
+              1,
+              1
+            ],
+            "radius": null
+          }
+        }
+      ],
+      "maintenance_envelopes": [],
+      "functional_interfaces": [],
+      "required_for_validation_packs": [
+        "workholding_machine_fit"
+      ],
+      "validation_limitations": [
+        "machine manuals, exact travel, tooling, guarding, and safety requirements remain authoritative"
+      ],
+      "source_ids": [
+        "osha-machine-guarding"
+      ],
+      "privacy_classification": "synthetic_public",
+      "frame": {
+        "schema_version": "fxd-owned-coordinate-frame-v1",
+        "frame_id": "machine-table-frame",
+        "owner_id": "context-005-machine-envelope",
+        "units": "mm",
+        "origin": [
+          0,
+          0,
+          0
+        ],
+        "axes": {
+          "x": [
+            1,
+            0,
+            0
+          ],
+          "y": [
+            0,
+            1,
+            0
+          ],
+          "z": [
+            0,
+            0,
+            1
+          ]
+        },
+        "handedness": "right_handed",
+        "frame_purpose": "Synthetic process-context placement and review frame."
+      },
+      "deliverable_scope": "reference_context_only",
+      "output_participation": {
+        "fixture_bom": "excluded",
+        "fixture_component_step": "excluded",
+        "fixture_assembly_step": "excluded",
+        "fixture_dxf": "excluded",
+        "fixture_manufacturing_release": "excluded",
+        "separate_equipment_manifest": "excluded"
+      },
+      "delivery_authorization": null,
+      "geometry_source_item_id": null,
+      "collision_authority": "provisional_only",
+      "envelope_authority": "provisional_only",
+      "access_authority": "provisional_only"
+    },
+    {
+      "schema_version": "fxd-process-context-asset-v1",
+      "asset_id": "context-006-operator-envelope",
+      "name": "Synthetic operator reach and handling envelope",
+      "asset_type": "operator_body_envelope",
+      "authority_level": "process_context_asset",
+      "revision": {
+        "revision_id": "r1",
+        "content_sha256": "d48a445b0d4a3e5be2d69ae6aa0df2f5b831c9a1660e94b62efcdbca386cc109",
+        "parent_revision_id": null,
+        "author_identity": "FXD synthetic research",
+        "created_at": "2026-07-23T00:00:00Z",
+        "change_reason": "Initial non-authorizing research reference revision.",
+        "source_revision": null,
+        "optimistic_concurrency_token": "6d6caf438b3fdb9c060bf3a040037c03d00c223eb82a9a847bdbe9a1fefd66aa",
+        "publication_state": "published_research",
+        "deprecation_state": "active",
+        "restores_content_from_revision_id": null
+      },
+      "units": "mm",
+      "geometry_authority": "provisional_review_envelope",
+      "movement_states": [
+        {
+          "state_id": "load",
+          "description": "Representative loading reach state.",
+          "authoritative_for_collision": false,
+          "state_kind": "moving"
+        },
+        {
+          "state_id": "unload",
+          "description": "Representative unloading reach state.",
+          "authoritative_for_collision": false,
+          "state_kind": "moving"
+        }
+      ],
+      "keep_out_envelopes": [],
+      "maintenance_envelopes": [],
+      "functional_interfaces": [],
+      "required_for_validation_packs": [
+        "operator_access",
+        "loading_unloading"
+      ],
+      "validation_limitations": [
+        "not an ergonomic, anthropometric, or safety certification"
+      ],
+      "source_ids": [
+        "osha-machine-guarding"
+      ],
+      "privacy_classification": "synthetic_public",
+      "frame": {
+        "schema_version": "fxd-owned-coordinate-frame-v1",
+        "frame_id": "operator-stance-frame",
+        "owner_id": "context-006-operator-envelope",
+        "units": "mm",
+        "origin": [
+          0,
+          0,
+          0
+        ],
+        "axes": {
+          "x": [
+            1,
+            0,
+            0
+          ],
+          "y": [
+            0,
+            1,
+            0
+          ],
+          "z": [
+            0,
+            0,
+            1
+          ]
+        },
+        "handedness": "right_handed",
+        "frame_purpose": "Synthetic process-context placement and review frame."
+      },
+      "deliverable_scope": "reference_context_only",
+      "output_participation": {
+        "fixture_bom": "excluded",
+        "fixture_component_step": "excluded",
+        "fixture_assembly_step": "excluded",
+        "fixture_dxf": "excluded",
+        "fixture_manufacturing_release": "excluded",
+        "separate_equipment_manifest": "excluded"
+      },
+      "delivery_authorization": null,
+      "geometry_source_item_id": null,
+      "collision_authority": "provisional_only",
+      "envelope_authority": "provisional_only",
+      "access_authority": "provisional_only"
+    },
+    {
+      "schema_version": "fxd-process-context-asset-v1",
+      "asset_id": "context-007-guard-service-zone",
+      "name": "Synthetic guarding and service zone",
+      "asset_type": "guarding",
+      "authority_level": "process_context_asset",
+      "revision": {
+        "revision_id": "r1",
+        "content_sha256": "15353385b27412142998204e13651d35e6655552a5515be7c25f16adc77020ce",
+        "parent_revision_id": null,
+        "author_identity": "FXD synthetic research",
+        "created_at": "2026-07-23T00:00:00Z",
+        "change_reason": "Initial non-authorizing research reference revision.",
+        "source_revision": null,
+        "optimistic_concurrency_token": "42d0066b9a3838adbf170074b87ceff4e88ea7bb70edd167100bea17e7ad62c8",
+        "publication_state": "published_research",
+        "deprecation_state": "active",
+        "restores_content_from_revision_id": null
+      },
+      "units": "mm",
+      "geometry_authority": "provisional_review_envelope",
+      "movement_states": [
+        {
+          "state_id": "production",
+          "description": "Representative guarded production state.",
+          "authoritative_for_collision": false,
+          "state_kind": "moving"
+        },
+        {
+          "state_id": "maintenance",
+          "description": "Representative access state requiring human confirmation.",
+          "authoritative_for_collision": false,
+          "state_kind": "moving"
+        }
+      ],
+      "keep_out_envelopes": [
+        {
+          "envelope_id": "guard-boundary",
+          "state_id": "production",
+          "provisional": true,
+          "geometry": {
+            "kind": "envelope",
+            "units": "mm",
+            "point": null,
+            "axis": null,
+            "normal": null,
+            "bounds_min": [
+              -1,
+              -1,
+              -1
+            ],
+            "bounds_max": [
+              1,
+              1,
+              1
+            ],
+            "radius": null
+          }
+        }
+      ],
+      "maintenance_envelopes": [
+        {
+          "envelope_id": "service-clearance",
+          "state_id": "maintenance",
+          "provisional": true,
+          "geometry": {
+            "kind": "envelope",
+            "units": "mm",
+            "point": null,
+            "axis": null,
+            "normal": null,
+            "bounds_min": [
+              -1,
+              -1,
+              -1
+            ],
+            "bounds_max": [
+              1,
+              1,
+              1
+            ],
+            "radius": null
+          }
+        }
+      ],
+      "functional_interfaces": [],
+      "required_for_validation_packs": [
+        "operator_access",
+        "maintenance_access"
+      ],
+      "validation_limitations": [
+        "does not design or certify safeguarding"
+      ],
+      "source_ids": [
+        "osha-machine-guarding",
+        "iso-10218-2-2025-metadata"
+      ],
+      "privacy_classification": "synthetic_public",
+      "frame": {
+        "schema_version": "fxd-owned-coordinate-frame-v1",
+        "frame_id": "guard-frame",
+        "owner_id": "context-007-guard-service-zone",
+        "units": "mm",
+        "origin": [
+          0,
+          0,
+          0
+        ],
+        "axes": {
+          "x": [
+            1,
+            0,
+            0
+          ],
+          "y": [
+            0,
+            1,
+            0
+          ],
+          "z": [
+            0,
+            0,
+            1
+          ]
+        },
+        "handedness": "right_handed",
+        "frame_purpose": "Synthetic process-context placement and review frame."
+      },
+      "deliverable_scope": "reference_context_only",
+      "output_participation": {
+        "fixture_bom": "excluded",
+        "fixture_component_step": "excluded",
+        "fixture_assembly_step": "excluded",
+        "fixture_dxf": "excluded",
+        "fixture_manufacturing_release": "excluded",
+        "separate_equipment_manifest": "excluded"
+      },
+      "delivery_authorization": null,
+      "geometry_source_item_id": null,
+      "collision_authority": "provisional_only",
+      "envelope_authority": "provisional_only",
+      "access_authority": "provisional_only"
+    },
+    {
+      "schema_version": "fxd-process-context-asset-v1",
+      "asset_id": "context-008-inspection-probe",
+      "name": "Synthetic inspection probe and approach",
+      "asset_type": "inspection_probe_or_scanner",
+      "authority_level": "process_context_asset",
+      "revision": {
+        "revision_id": "r1",
+        "content_sha256": "bc3f36db45cd0a4048b44fca35766ea993227f1dc1eb029d313fdba8dcdff64e",
+        "parent_revision_id": null,
+        "author_identity": "FXD synthetic research",
+        "created_at": "2026-07-23T00:00:00Z",
+        "change_reason": "Initial non-authorizing research reference revision.",
+        "source_revision": null,
+        "optimistic_concurrency_token": "6e8fcace79325764bbcc7f581b316f3db8205aad24255e65e1be73a08fff6d29",
+        "publication_state": "published_research",
+        "deprecation_state": "active",
+        "restores_content_from_revision_id": null
+      },
+      "units": "mm",
+      "geometry_authority": "provisional_review_envelope",
+      "movement_states": [
+        {
+          "state_id": "approach",
+          "description": "Representative probe approach state.",
+          "authoritative_for_collision": false,
+          "state_kind": "moving"
+        },
+        {
+          "state_id": "measure",
+          "description": "Representative measurement state.",
+          "authoritative_for_collision": false,
+          "state_kind": "moving"
+        }
+      ],
+      "keep_out_envelopes": [
+        {
+          "envelope_id": "probe-body-review",
+          "state_id": "measure",
+          "provisional": true,
+          "geometry": {
+            "kind": "envelope",
+            "units": "mm",
+            "point": null,
+            "axis": null,
+            "normal": null,
+            "bounds_min": [
+              -1,
+              -1,
+              -1
+            ],
+            "bounds_max": [
+              1,
+              1,
+              1
+            ],
+            "radius": null
+          }
+        }
+      ],
+      "maintenance_envelopes": [],
+      "functional_interfaces": [],
+      "required_for_validation_packs": [
+        "inspection_access"
+      ],
+      "validation_limitations": [
+        "does not establish measurement uncertainty, calibration, or acceptance"
+      ],
+      "source_ids": [
+        "iso-1101-2017-metadata",
+        "iso-5459-2024-metadata"
+      ],
+      "privacy_classification": "synthetic_public",
+      "frame": {
+        "schema_version": "fxd-owned-coordinate-frame-v1",
+        "frame_id": "probe-tip-frame",
+        "owner_id": "context-008-inspection-probe",
+        "units": "mm",
+        "origin": [
+          0,
+          0,
+          0
+        ],
+        "axes": {
+          "x": [
+            1,
+            0,
+            0
+          ],
+          "y": [
+            0,
+            1,
+            0
+          ],
+          "z": [
+            0,
+            0,
+            1
+          ]
+        },
+        "handedness": "right_handed",
+        "frame_purpose": "Synthetic process-context placement and review frame."
+      },
+      "deliverable_scope": "reference_context_only",
+      "output_participation": {
+        "fixture_bom": "excluded",
+        "fixture_component_step": "excluded",
+        "fixture_assembly_step": "excluded",
+        "fixture_dxf": "excluded",
+        "fixture_manufacturing_release": "excluded",
+        "separate_equipment_manifest": "excluded"
+      },
+      "delivery_authorization": null,
+      "geometry_source_item_id": null,
+      "collision_authority": "provisional_only",
+      "envelope_authority": "provisional_only",
+      "access_authority": "provisional_only"
+    }
+  ],
+  "complete_item_examples": [
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "example-parametric-support-pad",
+      "name": "Synthetic parametric support pad",
+      "record_type": "library_component",
+      "category": "fxd_standard_parametric_primitive",
+      "authority_level": "fxd_parametric_component",
+      "supplier_or_author": "FXD synthetic research",
+      "model_or_internal_number": "FXD-RESEARCH-PAD-001",
+      "revision": {
+        "revision_id": "r1",
+        "content_sha256": "70d33130856206563b2a794d5f18f07e0a63e43b9872cccd8d585b28f41cfba9",
+        "parent_revision_id": null,
+        "author_identity": "FXD synthetic research",
+        "created_at": "2026-07-23T00:00:00Z",
+        "change_reason": "Initial non-authorizing research reference revision.",
+        "source_revision": null,
+        "optimistic_concurrency_token": "fa5fbcb07c6624d0dbda202481580fd7d6a2f4824d6dfd4f736d465c00ba6643",
+        "publication_state": "published_research",
+        "deprecation_state": "active",
+        "restores_content_from_revision_id": null
+      },
+      "units": "mm",
+      "source_file": null,
+      "source_ids": [
+        "fixtureworks-components",
+        "jergens-fixturing-components"
+      ],
+      "privacy_classification": "synthetic_public",
+      "storage_policy": "embedded",
+      "edit_authority": "editable_new_revision_only",
+      "local_coordinate_system": {
+        "schema_version": "fxd-owned-coordinate-frame-v1",
+        "frame_id": "pad-local",
+        "owner_id": "example-parametric-support-pad",
+        "units": "mm",
+        "origin": [
+          0,
+          0,
+          0
+        ],
+        "axes": {
+          "x": [
+            1,
+            0,
+            0
+          ],
+          "y": [
+            0,
+            1,
+            0
+          ],
+          "z": [
+            0,
+            0,
+            1
+          ]
+        },
+        "handedness": "right_handed",
+        "frame_purpose": "Parametric component local placement and manufacturing frame."
+      },
+      "preview_representation": {
+        "kind": "parametric_preview",
+        "authority": "exact",
+        "asset_identity": null,
+        "visible_classification": "exact_parametric"
+      },
+      "feature_definition": {
+        "feature_type": "support_pad",
+        "parameters": [
+          "diameter_mm",
+          "height_mm",
+          "mount_hole_class"
+        ]
+      },
+      "mounting_interfaces": [
+        {
+          "schema_version": "fxd-mounting-interface-v1",
+          "interface_id": "pad-base-mount",
+          "interface_type": "face_mount",
+          "frame": {
+            "schema_version": "fxd-owned-coordinate-frame-v1",
+            "frame_id": "pad-base-frame",
+            "owner_id": "pad-base-mount",
+            "units": "mm",
+            "origin": [
+              0,
+              0,
+              0
+            ],
+            "axes": {
+              "x": [
+                1,
+                0,
+                0
+              ],
+              "y": [
+                0,
+                1,
+                0
+              ],
+              "z": [
+                0,
+                0,
+                1
+              ]
+            },
+            "handedness": "right_handed",
+            "frame_purpose": "Base mating surface frame."
+          },
+          "features": [
+            {
+              "feature_id": "base-face",
+              "feature_type": "planar_face",
+              "owning_interface_id": "pad-base-mount",
+              "local_position": [
+                0,
+                0,
+                0
+              ],
+              "axis": [
+                0,
+                0,
+                1
+              ],
+              "dimensions": {
+                "diameter": null,
+                "length": null,
+                "width": null,
+                "height": null,
+                "pitch": null,
+                "units": "mm"
+              },
+              "adjustment_range": null,
+              "tolerance_clearance_intent": {
+                "classification": "shop_defined",
+                "nominal": null,
+                "plus": null,
+                "minus": null,
+                "units": "mm",
+                "human_confirmation_required": true
+              },
+              "mating_role": "surface",
+              "datum_responsibility": "human_confirmation_required",
+              "allowed_replacement_class": "support-pad-same-interface-v1"
+            }
+          ],
+          "fastener_intent": "Shop-selected removable fastener; no universal size asserted.",
+          "mating_authority": "user_authored_reusable_component",
+          "tolerance_clearance_intent": {
+            "classification": "shop_defined",
+            "nominal": null,
+            "plus": null,
+            "minus": null,
+            "units": "mm",
+            "human_confirmation_required": true
+          },
+          "allowed_replacement_classes": [
+            "support-pad-same-interface-v1"
+          ],
+          "replacement_semantics": "placement_candidate_functional_equivalence_unproven"
+        }
+      ],
+      "functional_interfaces": [
+        {
+          "schema_version": "fxd-functional-interface-v1",
+          "interface_id": "pad-support-contact",
+          "interface_type": "support_contact",
+          "role": "primary or auxiliary support as assigned by the project",
+          "frame_id": "pad-local",
+          "direction": [
+            0,
+            0,
+            1
+          ],
+          "geometry": {
+            "kind": "plane",
+            "units": "mm",
+            "point": [
+              0,
+              0,
+              0
+            ],
+            "axis": null,
+            "normal": [
+              0,
+              0,
+              1
+            ],
+            "bounds_min": null,
+            "bounds_max": null,
+            "radius": null
+          },
+          "movement_state": "fixed",
+          "permissible_contact": "human_confirmation_required",
+          "dependent_validation_packs": [
+            "constraint",
+            "clamp_reaction",
+            "clearance"
+          ]
+        }
+      ],
+      "contact_points": [
+        "pad-support-contact"
+      ],
+      "movement_states": [
+        {
+          "state_id": "fixed",
+          "state_kind": "fixed",
+          "description": "The parametric support contact is fixed in its authored revision."
+        }
+      ],
+      "open_closed_states": {
+        "claimed": false,
+        "open_state_id": null,
+        "closed_state_id": null
+      },
+      "keep_out_envelopes": [],
+      "maintenance_envelopes": [
+        "vertical-removal-access"
+      ],
+      "material_manufacturing_intent": {
+        "material": "shop-selected",
+        "process": "machined_or_purchased",
+        "wear_item": true
+      },
+      "bom_participation": "permitted",
+      "export_participation": {
+        "fixture_component_step": "permitted",
+        "fixture_assembly_step": "permitted",
+        "fixture_dxf": "excluded",
+        "drawings": "permitted",
+        "review_reports": "permitted",
+        "manufacturing_release": "human confirmation required"
+      },
+      "validation_participation": {
+        "visual_review": "required",
+        "broad_phase_collision": "required",
+        "exact_collision": "required",
+        "exact_clearance": "required",
+        "access": "permitted",
+        "ai_context": "permitted",
+        "deterministic_validation": "required",
+        "manufacturing_release": "human confirmation required"
+      },
+      "configurable_variants": [],
+      "replacement_compatibility": {
+        "replacement_class": "support-pad-same-interface-v1",
+        "placement_compatible": true,
+        "functionally_equivalent": false,
+        "requires_interface_match": true,
+        "requires_revalidation": true,
+        "stale_evidence_after_replacement": true
+      },
+      "missing_link_behavior": "not_applicable",
+      "downstream_dependencies": [
+        "project placement",
+        "constraint evidence",
+        "BOM"
+      ],
+      "summary": "A complete synthetic example showing how an FXD primitive carries stable mounting, contact, revision, validation, and output contracts.",
+      "applicability": [
+        "synthetic schema demonstration"
+      ],
+      "limitations": [
+        "not a production component or recommended dimension"
+      ],
+      "tags": [
+        "support",
+        "replaceable",
+        "synthetic"
+      ],
+      "provenance": {
+        "record_identity": "example-parametric-support-pad",
+        "author_or_grantor": "FXD synthetic research",
+        "usage_note": "Original synthetic parametric example; no supplier or private asset."
+      },
+      "engineering_details": {}
+    }
+  ],
+  "shop_standard_examples": [
+    {
+      "schema_version": "fxd-shop-standard-pack-v1",
+      "pack_id": "synthetic-shop-pack-001",
+      "revision": {
+        "revision_id": "r1",
+        "content_sha256": "6221ef75c05af5491f73e6b78560fcbe34e420ce58860f21d5e5ddd3c8c5d666",
+        "parent_revision_id": null,
+        "author_identity": "FXD synthetic research",
+        "created_at": "2026-07-23T00:00:00Z",
+        "change_reason": "Initial non-authorizing research reference revision.",
+        "source_revision": null,
+        "optimistic_concurrency_token": "91ac004afb375638d76dd3ab0cfb07110413aee6c04dafa7998037530e2212db",
+        "publication_state": "published_research",
+        "deprecation_state": "active",
+        "restores_content_from_revision_id": null
+      },
+      "authority_level": "shop_standard",
+      "scope": "shop",
+      "precedence_level": 3,
+      "source_records": [
+        "synthetic-owner-input"
+      ],
+      "values": {
+        "available_materials": [
+          "synthetic mild steel option"
+        ],
+        "plate_thicknesses_mm": [
+          6,
+          10,
+          12
+        ],
+        "structural_stock": [
+          "synthetic rectangular tube family"
+        ],
+        "hole_slot_sizes_mm": [
+          9,
+          11
+        ],
+        "fasteners": [
+          "synthetic metric fastener preference"
+        ],
+        "tab_slot_clearances_mm": [
+          0.2
+        ],
+        "process_allowances_mm": [
+          0.15
+        ],
+        "clamp_preferences": [
+          "prefer reusable clamp when access permits"
+        ],
+        "support_locator_styles": [
+          "replaceable contact preferred"
+        ],
+        "finish_conventions": [
+          "finish selected per project"
+        ],
+        "marking_conventions": [
+          "part and revision marking required"
+        ],
+        "reuse_preferences": [
+          "reuse commercial tooling; recut low-cost plates when justified"
+        ],
+        "cost_volume_preferences": [
+          "review custom machining against production quantity"
+        ]
+      },
+      "conflicts": [
+        {
+          "field": "values.plate_thicknesses_mm",
+          "lower_precedence_value": [
+            5,
+            8,
+            10
+          ],
+          "effective_value": [
+            6,
+            10,
+            12
+          ],
+          "resolution": "Shop scope overrides defaults while retaining both provenance records."
+        }
+      ],
+      "effective_provenance": {
+        "values.plate_thicknesses_mm": [
+          "fxd-defaults-v1",
+          "synthetic-shop-pack-001"
+        ]
+      },
+      "human_approval_required": true
+    }
+  ]
+}

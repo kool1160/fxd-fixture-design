@@ -1,0 +1,406 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fxd.invalid/research/functional_interface_v1.schema.json",
+  "title": "FXD typed functional interface v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "interface_id",
+    "interface_type",
+    "role",
+    "frame_id",
+    "direction",
+    "geometry",
+    "movement_state",
+    "permissible_contact",
+    "dependent_validation_packs"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "fxd-functional-interface-v1"
+    },
+    "interface_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "interface_type": {
+      "enum": [
+        "clamp_contact",
+        "locator_contact",
+        "support_contact",
+        "stop_contact",
+        "torch_tip",
+        "robot_tcp",
+        "probe_point",
+        "sensor_field",
+        "load_direction",
+        "unload_direction",
+        "maintenance_access"
+      ]
+    },
+    "role": {
+      "type": "string",
+      "minLength": 1
+    },
+    "frame_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "direction": {
+      "$ref": "#/$defs/vector3"
+    },
+    "geometry": {
+      "$ref": "#/$defs/functional_geometry"
+    },
+    "movement_state": {
+      "type": "string",
+      "minLength": 1
+    },
+    "permissible_contact": {
+      "enum": [
+        "required",
+        "permitted",
+        "forbidden",
+        "not_applicable",
+        "human_confirmation_required"
+      ]
+    },
+    "dependent_validation_packs": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
+    }
+  },
+  "$defs": {
+    "vector3": {
+      "type": "array",
+      "prefixItems": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "number"
+        }
+      ],
+      "items": false,
+      "minItems": 3,
+      "maxItems": 3
+    },
+    "functional_geometry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "units",
+        "point",
+        "axis",
+        "normal",
+        "bounds_min",
+        "bounds_max",
+        "radius"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "point",
+            "line",
+            "axis",
+            "plane",
+            "bounded_region",
+            "contact_patch",
+            "envelope",
+            "tool_center_point",
+            "sensor_field"
+          ]
+        },
+        "units": {
+          "enum": [
+            "mm",
+            "inch"
+          ]
+        },
+        "point": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "items": false,
+          "minItems": 3,
+          "maxItems": 3
+        },
+        "axis": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "items": false,
+          "minItems": 3,
+          "maxItems": 3
+        },
+        "normal": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "items": false,
+          "minItems": 3,
+          "maxItems": 3
+        },
+        "bounds_min": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "items": false,
+          "minItems": 3,
+          "maxItems": 3
+        },
+        "bounds_max": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "items": false,
+          "minItems": 3,
+          "maxItems": 3
+        },
+        "radius": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "exclusiveMinimum": 0
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "point",
+                  "tool_center_point"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "point": {
+                "type": "array"
+              },
+              "axis": {
+                "type": "null"
+              },
+              "normal": {
+                "type": "null"
+              },
+              "bounds_min": {
+                "type": "null"
+              },
+              "bounds_max": {
+                "type": "null"
+              },
+              "radius": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "line",
+                  "axis"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "point": {
+                "type": "array"
+              },
+              "axis": {
+                "type": "array"
+              },
+              "normal": {
+                "type": "null"
+              },
+              "bounds_min": {
+                "type": "null"
+              },
+              "bounds_max": {
+                "type": "null"
+              },
+              "radius": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "plane"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "point": {
+                "type": "array"
+              },
+              "axis": {
+                "type": "null"
+              },
+              "normal": {
+                "type": "array"
+              },
+              "bounds_min": {
+                "type": "null"
+              },
+              "bounds_max": {
+                "type": "null"
+              },
+              "radius": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "bounded_region",
+                  "envelope",
+                  "sensor_field"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "point": {
+                "type": "null"
+              },
+              "axis": {
+                "type": "null"
+              },
+              "normal": {
+                "type": "null"
+              },
+              "bounds_min": {
+                "type": "array"
+              },
+              "bounds_max": {
+                "type": "array"
+              },
+              "radius": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "contact_patch"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "point": {
+                "type": "array"
+              },
+              "axis": {
+                "type": "null"
+              },
+              "normal": {
+                "type": "array"
+              },
+              "bounds_min": {
+                "type": "array"
+              },
+              "bounds_max": {
+                "type": "array"
+              },
+              "radius": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

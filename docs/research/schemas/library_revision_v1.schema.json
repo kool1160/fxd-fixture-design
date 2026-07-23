@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fxd.invalid/research/library_revision_v1.schema.json",
+  "title": "FXD immutable library revision v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "revision_id",
+    "content_sha256",
+    "parent_revision_id",
+    "author_identity",
+    "created_at",
+    "change_reason",
+    "source_revision",
+    "optimistic_concurrency_token",
+    "publication_state",
+    "deprecation_state",
+    "restores_content_from_revision_id"
+  ],
+  "properties": {
+    "revision_id": {
+      "type": "string",
+      "pattern": "^r[1-9][0-9]*$"
+    },
+    "content_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "parent_revision_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^r[1-9][0-9]*$"
+    },
+    "author_identity": {
+      "type": "string",
+      "minLength": 1
+    },
+    "created_at": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+    },
+    "change_reason": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source_revision": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "optimistic_concurrency_token": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "publication_state": {
+      "enum": [
+        "draft",
+        "published_research",
+        "withdrawn"
+      ]
+    },
+    "deprecation_state": {
+      "enum": [
+        "active",
+        "deprecated",
+        "withdrawn",
+        "superseded"
+      ]
+    },
+    "restores_content_from_revision_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^r[1-9][0-9]*$"
+    }
+  }
+}
