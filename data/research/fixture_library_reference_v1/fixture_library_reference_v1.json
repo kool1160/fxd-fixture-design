@@ -1,0 +1,1498 @@
+{
+  "schema_version": "fxd-fixture-library-reference-corpus-v1",
+  "research_only": true,
+  "authorization_boundary": "This corpus is non-authorizing research and is not imported by production code.",
+  "sources": [
+    {
+      "schema_version": "fxd-fixture-library-source-v1",
+      "source_id": "carr-lane-fixture-design-principles",
+      "publisher": "Carr Lane Manufacturing",
+      "title": "Workpiece Fixture Design Principles",
+      "canonical_url": "https://www.carrlane.com/engineering-resources/fixture-design-principles",
+      "date_accessed": "2026-07-23",
+      "source_category": "official_manufacturer_engineering_page",
+      "original_fxd_paraphrase": "A fixture should establish deliberate locating and clamping roles, avoid redundant location, and make correct loading easier to verify.",
+      "applicability": "Public conceptual basis for datum, locating, clamping, foolproofing, and loading records.",
+      "limitations": "Manufacturer guidance is not a universal shop rule and is not a substitute for project-specific engineering.",
+      "reuse_classification": "metadata_and_original_fxd_paraphrase",
+      "licensing_note": "Only publisher, title, canonical URL, and original FXD paraphrase are reused; no handbook, figures, tables, calculations, or product data are copied."
+    },
+    {
+      "schema_version": "fxd-fixture-library-source-v1",
+      "source_id": "demmeler-welding-tables",
+      "publisher": "DEMMELER Maschinenbau GmbH & Co. KG",
+      "title": "3D welding tables",
+      "canonical_url": "https://www.demmeler.com/products-shop/original-3d-clamping-systems/3d-welding-tables/",
+      "date_accessed": "2026-07-23",
+      "source_category": "official_product_documentation",
+      "original_fxd_paraphrase": "Modular table systems illustrate why a fixture must record its table interface and mounting strategy instead of assuming a universal base standard.",
+      "applicability": "Metadata-only precedent for explicit table-grid interfaces and modular mounting.",
+      "limitations": "No product dimensions, capacity claims, hole patterns, images, catalogs, or CAD are reused.",
+      "reuse_classification": "metadata_and_original_fxd_paraphrase",
+      "licensing_note": "Product-family metadata and original FXD interpretation only; supplier content remains governed by the publisher."
+    },
+    {
+      "schema_version": "fxd-fixture-library-source-v1",
+      "source_id": "destaco-welding-applications",
+      "publisher": "DESTACO",
+      "title": "Welding applications",
+      "canonical_url": "https://www.destaco.com/en/applications/welding",
+      "date_accessed": "2026-07-23",
+      "source_category": "official_product_documentation",
+      "original_fxd_paraphrase": "Commercial clamps belong in welding-context decisions through explicit motion, contact, mounting, and access interfaces, with exact geometry only when authorized.",
+      "applicability": "Metadata-only support for commercial clamp roles and provisional open/closed envelopes.",
+      "limitations": "No force, cycle, performance, geometry, or suitability claim is imported into FXD.",
+      "reuse_classification": "metadata_and_original_fxd_paraphrase",
+      "licensing_note": "Application-page metadata and original FXD paraphrase only; no catalog, image, specification, or CAD redistribution."
+    },
+    {
+      "schema_version": "fxd-fixture-library-source-v1",
+      "source_id": "fixtureworks-components",
+      "publisher": "Fixtureworks",
+      "title": "Standard fixturing components",
+      "canonical_url": "https://www.fixtureworks.com/store/pc/standard-fixturing-components-v69.htm",
+      "date_accessed": "2026-07-23",
+      "source_category": "official_product_documentation",
+      "original_fxd_paraphrase": "Standard supports, locators, stops, and workholding elements should be modeled by distinct functional roles and replaceable interfaces.",
+      "applicability": "Category precedent for component taxonomy, serviceability, and role separation.",
+      "limitations": "The record does not reproduce exact products, dimensions, materials, claims, images, or CAD.",
+      "reuse_classification": "metadata_and_original_fxd_paraphrase",
+      "licensing_note": "Only category metadata and original FXD interpretation are reused; all supplier content remains excluded."
+    },
+    {
+      "schema_version": "fxd-fixture-library-source-v1",
+      "source_id": "jergens-fixturing-components",
+      "publisher": "Jergens, Inc.",
+      "title": "Fixturing components",
+      "canonical_url": "https://www.jergensinc.com/en/categories/fixturing-components",
+      "date_accessed": "2026-07-23",
+      "source_category": "official_product_documentation",
+      "original_fxd_paraphrase": "Reusable workholding is easier to manage when mounting, locating, support, and replacement duties are represented separately.",
+      "applicability": "Category precedent for typed interfaces and replacement compatibility.",
+      "limitations": "No catalog selection, exact part, dimension, performance statement, or CAD is included.",
+      "reuse_classification": "metadata_and_original_fxd_paraphrase",
+      "licensing_note": "Category metadata and original FXD paraphrase only; vendor-owned content is not redistributed."
+    },
+    {
+      "schema_version": "fxd-fixture-library-source-v1",
+      "source_id": "strong-hand-modular-table",
+      "publisher": "Strong Hand Tools",
+      "title": "MAX table overview",
+      "canonical_url": "https://www.stronghandtools.com/pages/max-table-overview",
+      "date_accessed": "2026-07-23",
+      "source_category": "official_product_documentation",
+      "original_fxd_paraphrase": "A modular welding base is a project context and interface choice; FXD must retain the chosen mounting evidence without converting one table family into a universal standard.",
+      "applicability": "Product-family precedent for table mounting and reusable fixture placement.",
+      "limitations": "No dimensions, capacities, photographs, marketing claims, catalogs, or CAD are reused.",
+      "reuse_classification": "metadata_and_original_fxd_paraphrase",
+      "licensing_note": "Product-family metadata and original FXD interpretation only."
+    },
+    {
+      "schema_version": "fxd-fixture-library-source-v1",
+      "source_id": "osha-welding-overview",
+      "publisher": "Occupational Safety and Health Administration",
+      "title": "Welding, Cutting, and Brazing - Overview",
+      "canonical_url": "https://www.osha.gov/welding-cutting-brazing",
+      "date_accessed": "2026-07-23",
+      "source_category": "official_regulatory_guidance",
+      "original_fxd_paraphrase": "Welding process context includes hazards and controls beyond geometric torch reach, so access evidence cannot be represented as safety approval.",
+      "applicability": "Boundary source for separating geometric access review from welding safety and procedure approval.",
+      "limitations": "This research does not interpret legal duties, copy regulatory text, or claim compliance.",
+      "reuse_classification": "regulatory_metadata_and_original_fxd_paraphrase",
+      "licensing_note": "Federal-source metadata and original FXD paraphrase only; users must consult current authoritative requirements."
+    },
+    {
+      "schema_version": "fxd-fixture-library-source-v1",
+      "source_id": "osha-machine-guarding",
+      "publisher": "Occupational Safety and Health Administration",
+      "title": "Machine Guarding - Overview",
+      "canonical_url": "https://www.osha.gov/machine-guarding/",
+      "date_accessed": "2026-07-23",
+      "source_category": "official_regulatory_guidance",
+      "original_fxd_paraphrase": "Guarding and hazardous machine motion remain separate safety responsibilities; FXD context assets may expose conflicts but cannot certify safeguards.",
+      "applicability": "Boundary source for guarding, keep-out, service, and operator-envelope records.",
+      "limitations": "No legal conclusion or machine-specific guarding design is created.",
+      "reuse_classification": "regulatory_metadata_and_original_fxd_paraphrase",
+      "licensing_note": "Federal-source metadata and original FXD paraphrase only; current regulations and qualified safety review remain authoritative."
+    },
+    {
+      "schema_version": "fxd-fixture-library-source-v1",
+      "source_id": "osha-robotics-overview",
+      "publisher": "Occupational Safety and Health Administration",
+      "title": "Robotics - Overview",
+      "canonical_url": "https://www.osha.gov/robotics",
+      "date_accessed": "2026-07-23",
+      "source_category": "official_regulatory_guidance",
+      "original_fxd_paraphrase": "Robot context is relevant during normal and non-routine states, including setup and maintenance, so one nominal pose is not complete access evidence.",
+      "applicability": "Boundary source for movement states, maintenance envelopes, and human confirmation.",
+      "limitations": "FXD does not perform robot safety assessment, programming, risk reduction, or compliance certification.",
+      "reuse_classification": "regulatory_metadata_and_original_fxd_paraphrase",
+      "licensing_note": "Federal-source metadata and original FXD paraphrase only."
+    },
+    {
+      "schema_version": "fxd-fixture-library-source-v1",
+      "source_id": "occt-application-framework",
+      "publisher": "Open CASCADE Technology",
+      "title": "Application Framework",
+      "canonical_url": "https://dev.opencascade.org/about/application_framework",
+      "date_accessed": "2026-07-23",
+      "source_category": "official_open_source_project_documentation",
+      "original_fxd_paraphrase": "OCAF demonstrates a document-oriented pattern for persistent application data, dependencies, recomputation, and undo without making transient shape objects the sole identity authority.",
+      "applicability": "Architecture precedent for evaluating future persistent identities and revision-aware CAD data.",
+      "limitations": "This package does not select OCAF, change the current project model, or promise stable topology across every edit.",
+      "reuse_classification": "open_source_documentation_metadata_and_original_fxd_paraphrase",
+      "licensing_note": "Official documentation metadata and original FXD paraphrase only; future implementation requires independent license and architecture review."
+    },
+    {
+      "schema_version": "fxd-fixture-library-source-v1",
+      "source_id": "occt-xde-guide",
+      "publisher": "Open CASCADE Technology",
+      "title": "Extended Data Exchange (XDE) user guide",
+      "canonical_url": "https://dev.opencascade.org/doc/overview/html/occt_user_guides__xde.html",
+      "date_accessed": "2026-07-23",
+      "source_category": "official_open_source_project_documentation",
+      "original_fxd_paraphrase": "XDE shows that shapes, assemblies, and attached properties can share one document structure, which is relevant to future neutral asset provenance and assembly identity.",
+      "applicability": "Architecture precedent for multi-asset assembly metadata evaluation.",
+      "limitations": "No runtime adoption, persistence migration, or topology guarantee is authorized here.",
+      "reuse_classification": "open_source_documentation_metadata_and_original_fxd_paraphrase",
+      "licensing_note": "Official documentation metadata and original FXD paraphrase only."
+    },
+    {
+      "schema_version": "fxd-fixture-library-source-v1",
+      "source_id": "json-schema-2020-12",
+      "publisher": "JSON Schema",
+      "title": "Draft 2020-12",
+      "canonical_url": "https://json-schema.org/draft/2020-12",
+      "date_accessed": "2026-07-23",
+      "source_category": "official_schema_specification",
+      "original_fxd_paraphrase": "Draft 2020-12 provides a versioned vocabulary for declaring structural constraints and reusable schema definitions for the research artifacts.",
+      "applicability": "Schema dialect used by the eight research schemas.",
+      "limitations": "Schema validity does not prove engineering validity, geometric correctness, or production suitability.",
+      "reuse_classification": "specification_metadata_and_schema_uri",
+      "licensing_note": "Only the public schema URI and specification metadata are referenced; no specification text is copied."
+    },
+    {
+      "schema_version": "fxd-fixture-library-source-v1",
+      "source_id": "robodk-reference-frame",
+      "publisher": "RoboDK",
+      "title": "Reference Frame",
+      "canonical_url": "https://robodk.com/doc/en/Interface-Reference-Frame.html",
+      "date_accessed": "2026-07-23",
+      "source_category": "official_product_documentation",
+      "original_fxd_paraphrase": "A visible hierarchy of reference frames and dependent objects is a useful interaction analogy for positioning process-context assets without flattening their relationships.",
+      "applicability": "Interaction reference for Issues #61 and #62 only.",
+      "limitations": "RoboDK is not a dependency, implementation source, robot-programming target, or product to copy.",
+      "reuse_classification": "interaction_reference_only",
+      "licensing_note": "Only product-documentation metadata and an original high-level interaction observation are recorded; no UI, code, images, or workflow text is copied."
+    },
+    {
+      "schema_version": "fxd-fixture-library-source-v1",
+      "source_id": "iso-5459-2024-metadata",
+      "publisher": "International Organization for Standardization",
+      "title": "ISO 5459:2024 - Datums and datum systems",
+      "canonical_url": "https://www.iso.org/standard/87855.html",
+      "date_accessed": "2026-07-23",
+      "source_category": "official_standard_metadata",
+      "original_fxd_paraphrase": "Future datum-related claims require a governed standards position; this record identifies the relevant standard family without importing its normative rules.",
+      "applicability": "Standards watch item for future datum terminology and licensed requirements review.",
+      "limitations": "No normative ISO content is used, reproduced, summarized into rules, or treated as implemented.",
+      "reuse_classification": "standards_metadata_only_no_normative_text",
+      "licensing_note": "Citation metadata only. ISO content is copyrighted and requires separately authorized access and review before implementation."
+    },
+    {
+      "schema_version": "fxd-fixture-library-source-v1",
+      "source_id": "iso-1101-2017-metadata",
+      "publisher": "International Organization for Standardization",
+      "title": "ISO 1101:2017 - Geometrical tolerancing",
+      "canonical_url": "https://www.iso.org/standard/66777.html",
+      "date_accessed": "2026-07-23",
+      "source_category": "official_standard_metadata",
+      "original_fxd_paraphrase": "Geometrical specification and verification are separate concerns; future inspection-template work needs licensed standards review before asserting conformance.",
+      "applicability": "Standards watch item for inspection and profile-check architecture.",
+      "limitations": "No normative symbols, requirements, examples, or rules are reproduced or implemented.",
+      "reuse_classification": "standards_metadata_only_no_normative_text",
+      "licensing_note": "Citation metadata only. ISO content remains excluded from the research corpus."
+    },
+    {
+      "schema_version": "fxd-fixture-library-source-v1",
+      "source_id": "iso-10218-2-2025-metadata",
+      "publisher": "International Organization for Standardization",
+      "title": "ISO 10218-2:2025 - Industrial robot applications and robot cells",
+      "canonical_url": "https://www.iso.org/standard/73934.html",
+      "date_accessed": "2026-07-23",
+      "source_category": "official_standard_metadata",
+      "original_fxd_paraphrase": "Robot application integration has safety responsibilities beyond fixture geometry; any future robot context pack must remain evidence support rather than safety certification.",
+      "applicability": "Standards watch item for optional robot-context validation planning.",
+      "limitations": "No normative content is reproduced, interpreted as law, or implemented.",
+      "reuse_classification": "standards_metadata_only_no_normative_text",
+      "licensing_note": "Citation metadata only. Licensed standards and qualified safety review would be required for future implementation."
+    }
+  ],
+  "engineering_principles": [
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "principle-001-source-authority",
+      "name": "Preserve source authority",
+      "record_type": "engineering_principle",
+      "category": "public_engineering_knowledge",
+      "authority_level": "public_engineering_knowledge",
+      "revision": "1",
+      "units": "unitless",
+      "privacy_classification": "public",
+      "summary": "Imported product and exact tooling files remain immutable evidence; derived fixture features and annotations live separately.",
+      "source_ids": [
+        "occt-application-framework"
+      ],
+      "applicability": [
+        "all fixture and context asset classes"
+      ],
+      "limitations": [
+        "does not guarantee stable topology after source replacement"
+      ]
+    },
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "principle-002-locate-before-clamp",
+      "name": "Locate before clamp",
+      "record_type": "engineering_principle",
+      "category": "public_engineering_knowledge",
+      "authority_level": "public_engineering_knowledge",
+      "revision": "1",
+      "units": "unitless",
+      "privacy_classification": "public",
+      "summary": "The product should seat on its intended supports and locators before hold-down force is applied.",
+      "source_ids": [
+        "carr-lane-fixture-design-principles"
+      ],
+      "applicability": [
+        "fixtures that constrain product position"
+      ],
+      "limitations": [
+        "sequence still requires geometry and process-specific review"
+      ]
+    },
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "principle-003-explicit-dof",
+      "name": "Make degrees of freedom explicit",
+      "record_type": "engineering_principle",
+      "category": "public_engineering_knowledge",
+      "authority_level": "public_engineering_knowledge",
+      "revision": "1",
+      "units": "unitless",
+      "privacy_classification": "public",
+      "summary": "Every locating scheme records controlled, redundant, contradictory, and intentionally floating motion instead of relying on visual plausibility.",
+      "source_ids": [
+        "carr-lane-fixture-design-principles"
+      ],
+      "applicability": [
+        "locating fixtures",
+        "inspection fixtures",
+        "workholding"
+      ],
+      "limitations": [
+        "a declared DOF map still requires deterministic verification"
+      ]
+    },
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "principle-004-clamp-reaction",
+      "name": "Map every clamp reaction",
+      "record_type": "engineering_principle",
+      "category": "public_engineering_knowledge",
+      "authority_level": "public_engineering_knowledge",
+      "revision": "1",
+      "units": "unitless",
+      "privacy_classification": "public",
+      "summary": "Each clamp contact identifies the support or locator region that receives its load and flags unsupported deformation risk.",
+      "source_ids": [
+        "carr-lane-fixture-design-principles",
+        "destaco-welding-applications"
+      ],
+      "applicability": [
+        "clamped fixtures and workholding"
+      ],
+      "limitations": [
+        "does not calculate certified clamp force or structural capacity"
+      ]
+    },
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "principle-005-role-separation",
+      "name": "Separate support, locate, stop, and clamp roles",
+      "record_type": "engineering_principle",
+      "category": "public_engineering_knowledge",
+      "authority_level": "public_engineering_knowledge",
+      "revision": "1",
+      "units": "unitless",
+      "privacy_classification": "public",
+      "summary": "A component may have multiple declared functions, but no function is inferred merely from shape or proximity.",
+      "source_ids": [
+        "fixtureworks-components",
+        "jergens-fixturing-components"
+      ],
+      "applicability": [
+        "all fixture components"
+      ],
+      "limitations": [
+        "combined functions require explicit human review"
+      ]
+    },
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "principle-006-access-first-class",
+      "name": "Treat access and removal as first-class",
+      "record_type": "engineering_principle",
+      "category": "public_engineering_knowledge",
+      "authority_level": "public_engineering_knowledge",
+      "revision": "1",
+      "units": "unitless",
+      "privacy_classification": "public",
+      "summary": "A concept is incomplete until required product, tool, operator, process, service, and unload paths are represented at relevant states.",
+      "source_ids": [
+        "osha-welding-overview",
+        "osha-machine-guarding"
+      ],
+      "applicability": [
+        "all fixture families"
+      ],
+      "limitations": [
+        "geometric access does not establish safety or process approval"
+      ]
+    },
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "principle-007-authority-visible",
+      "name": "Keep geometry authority visible",
+      "record_type": "engineering_principle",
+      "category": "public_engineering_knowledge",
+      "authority_level": "public_engineering_knowledge",
+      "revision": "1",
+      "units": "unitless",
+      "privacy_classification": "public",
+      "summary": "Exact imported CAD, supplier-authorized CAD, metadata, and provisional envelopes remain visibly and deterministically distinct.",
+      "source_ids": [
+        "destaco-welding-applications"
+      ],
+      "applicability": [
+        "purchased tooling",
+        "process context assets"
+      ],
+      "limitations": [
+        "authority classification cannot be upgraded by appearance"
+      ]
+    },
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "principle-008-parametric-traceability",
+      "name": "Trace every parametric feature",
+      "record_type": "engineering_principle",
+      "category": "public_engineering_knowledge",
+      "authority_level": "public_engineering_knowledge",
+      "revision": "1",
+      "units": "unitless",
+      "privacy_classification": "public",
+      "summary": "Generated primitives retain their inputs, parameters, units, rule identities, assumptions, warnings, and edit history.",
+      "source_ids": [
+        "occt-application-framework"
+      ],
+      "applicability": [
+        "FXD parametric components"
+      ],
+      "limitations": [
+        "traceability does not make an unsupported feature editable"
+      ]
+    },
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "principle-009-shop-preference-not-rule",
+      "name": "Keep shop preferences scoped",
+      "record_type": "engineering_principle",
+      "category": "public_engineering_knowledge",
+      "authority_level": "public_engineering_knowledge",
+      "revision": "1",
+      "units": "unitless",
+      "privacy_classification": "public",
+      "summary": "Materials, stock sizes, clearances, finishes, and component preferences remain attributed inputs rather than universal engineering rules.",
+      "source_ids": [
+        "fixtureworks-components",
+        "strong-hand-modular-table"
+      ],
+      "applicability": [
+        "shop standard packs"
+      ],
+      "limitations": [
+        "project engineering can override a shop preference only with visible provenance"
+      ]
+    },
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "principle-010-immutable-revisions",
+      "name": "Use immutable item revisions",
+      "record_type": "engineering_principle",
+      "category": "public_engineering_knowledge",
+      "authority_level": "public_engineering_knowledge",
+      "revision": "1",
+      "units": "unitless",
+      "privacy_classification": "public",
+      "summary": "A changed library definition creates a new revision; existing project placements remain pinned until an explicit migration is accepted.",
+      "source_ids": [
+        "occt-application-framework"
+      ],
+      "applicability": [
+        "all persistent library items"
+      ],
+      "limitations": [
+        "migration compatibility still requires interface and validation checks"
+      ]
+    },
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "principle-011-interface-before-shape",
+      "name": "Match interfaces before bounding shape",
+      "record_type": "engineering_principle",
+      "category": "public_engineering_knowledge",
+      "authority_level": "public_engineering_knowledge",
+      "revision": "1",
+      "units": "unitless",
+      "privacy_classification": "public",
+      "summary": "Replacement compatibility requires mounting and functional interface equivalence, not a similar preview or envelope.",
+      "source_ids": [
+        "jergens-fixturing-components",
+        "occt-xde-guide"
+      ],
+      "applicability": [
+        "component replacement"
+      ],
+      "limitations": [
+        "matching records do not prove load, tolerance, or process adequacy"
+      ]
+    },
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "principle-012-state-complete-collision",
+      "name": "Validate all required movement states",
+      "record_type": "engineering_principle",
+      "category": "public_engineering_knowledge",
+      "authority_level": "public_engineering_knowledge",
+      "revision": "1",
+      "units": "unitless",
+      "privacy_classification": "public",
+      "summary": "Collision and clearance evidence names the open, closed, loading, process, unloading, and service states it actually covers.",
+      "source_ids": [
+        "osha-robotics-overview"
+      ],
+      "applicability": [
+        "moving clamps",
+        "automation",
+        "loading devices"
+      ],
+      "limitations": [
+        "unmodeled states remain missing evidence rather than passes"
+      ]
+    },
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "principle-013-output-coherence",
+      "name": "Keep outputs coherent",
+      "record_type": "engineering_principle",
+      "category": "public_engineering_knowledge",
+      "authority_level": "public_engineering_knowledge",
+      "revision": "1",
+      "units": "unitless",
+      "privacy_classification": "public",
+      "summary": "STEP, DXF, BOM, drawings, markings, and review reports derive from one pinned revision and expose omissions explicitly.",
+      "source_ids": [
+        "occt-xde-guide"
+      ],
+      "applicability": [
+        "manufacturing output packages"
+      ],
+      "limitations": [
+        "coherence does not authorize production release"
+      ]
+    },
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "principle-014-private-local-first",
+      "name": "Keep private geometry local first",
+      "record_type": "engineering_principle",
+      "category": "public_engineering_knowledge",
+      "authority_level": "public_engineering_knowledge",
+      "revision": "1",
+      "units": "unitless",
+      "privacy_classification": "public",
+      "summary": "Private fixture, customer, employer, and supplier-controlled assets remain outside the public repository and provider payloads by default.",
+      "source_ids": [
+        "occt-application-framework"
+      ],
+      "applicability": [
+        "private corpus",
+        "private tooling"
+      ],
+      "limitations": [
+        "selected release still requires explicit owner permission and disclosure review"
+      ]
+    },
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "principle-015-human-release",
+      "name": "Require human release authority",
+      "record_type": "engineering_principle",
+      "category": "public_engineering_knowledge",
+      "authority_level": "public_engineering_knowledge",
+      "revision": "1",
+      "units": "unitless",
+      "privacy_classification": "public",
+      "summary": "Library confidence, deterministic validation, and AI ranking provide evidence but never certify or release a fixture automatically.",
+      "source_ids": [
+        "osha-welding-overview",
+        "osha-machine-guarding"
+      ],
+      "applicability": [
+        "all fixture recommendations and exports"
+      ],
+      "limitations": [
+        "qualified engineering and safety responsibilities remain external approval boundaries"
+      ]
+    }
+  ],
+  "fixture_patterns": [
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "pattern-001-three-two-one-with-float",
+      "name": "3-2-1 with declared float",
+      "record_type": "fixture_pattern",
+      "category": "public_engineering_knowledge",
+      "authority_level": "public_engineering_knowledge",
+      "revision": "1",
+      "units": "unitless",
+      "privacy_classification": "public",
+      "summary": "Use independent primary, secondary, and tertiary contacts while recording any direction intentionally left free for loading, tolerance, or thermal response.",
+      "source_ids": [
+        "carr-lane-fixture-design-principles"
+      ],
+      "applicability": [
+        "prismatic and fabricated parts with usable datum opportunities"
+      ],
+      "limitations": [
+        "not a universal contact count or automatic layout"
+      ]
+    },
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "pattern-002-round-and-relieved-pin",
+      "name": "Round and relieved pin pair",
+      "record_type": "fixture_pattern",
+      "category": "public_engineering_knowledge",
+      "authority_level": "public_engineering_knowledge",
+      "revision": "1",
+      "units": "unitless",
+      "privacy_classification": "public",
+      "summary": "Use one round locating feature and one relieved or directional feature when two holes should not redundantly lock the same in-plane motion.",
+      "source_ids": [
+        "carr-lane-fixture-design-principles",
+        "jergens-fixturing-components"
+      ],
+      "applicability": [
+        "parts with suitable verified holes"
+      ],
+      "limitations": [
+        "fit, tolerance, wear, and thermal behavior require project evidence"
+      ]
+    },
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "pattern-003-clamp-into-support",
+      "name": "Clamp into named support",
+      "record_type": "fixture_pattern",
+      "category": "public_engineering_knowledge",
+      "authority_level": "public_engineering_knowledge",
+      "revision": "1",
+      "units": "unitless",
+      "privacy_classification": "public",
+      "summary": "Place clamp contact so force resolves into a named support or stable locator region rather than bending unsupported material.",
+      "source_ids": [
+        "carr-lane-fixture-design-principles",
+        "destaco-welding-applications"
+      ],
+      "applicability": [
+        "sheet, plate, tube, and fabricated assemblies"
+      ],
+      "limitations": [
+        "does not prove required clamp force"
+      ]
+    },
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "pattern-004-replaceable-contact",
+      "name": "Replaceable wear contact",
+      "record_type": "fixture_pattern",
+      "category": "public_engineering_knowledge",
+      "authority_level": "public_engineering_knowledge",
+      "revision": "1",
+      "units": "unitless",
+      "privacy_classification": "public",
+      "summary": "Make high-wear support, locator, and stop contacts removable without redefining their parent datum and mounting interfaces.",
+      "source_ids": [
+        "fixtureworks-components",
+        "jergens-fixturing-components"
+      ],
+      "applicability": [
+        "repeat-production and abrasive or spatter-prone service"
+      ],
+      "limitations": [
+        "replacement still makes dependent evidence stale"
+      ]
+    },
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "pattern-005-continuous-base-discrete-nests",
+      "name": "Continuous base with discrete nests",
+      "record_type": "fixture_pattern",
+      "category": "public_engineering_knowledge",
+      "authority_level": "public_engineering_knowledge",
+      "revision": "1",
+      "units": "unitless",
+      "privacy_classification": "public",
+      "summary": "Connect repeated product-specific stations to one explicit mounted structure while preserving station identities and service access.",
+      "source_ids": [
+        "demmeler-welding-tables",
+        "strong-hand-modular-table"
+      ],
+      "applicability": [
+        "multi-station fixtures"
+      ],
+      "limitations": [
+        "connected geometry does not establish structural adequacy"
+      ]
+    },
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "pattern-006-tab-slot-riser",
+      "name": "Validated tab-and-slot riser",
+      "record_type": "fixture_pattern",
+      "category": "public_engineering_knowledge",
+      "authority_level": "public_engineering_knowledge",
+      "revision": "1",
+      "units": "unitless",
+      "privacy_classification": "public",
+      "summary": "A laser-cut riser records engagement, clearance, insertion direction, assembly sequence, weld access, and shop allowance provenance.",
+      "source_ids": [
+        "json-schema-2020-12"
+      ],
+      "applicability": [
+        "laser-cut fabricated fixtures"
+      ],
+      "limitations": [
+        "clearance values are shop inputs, not embedded universal rules"
+      ]
+    },
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "pattern-007-poka-yoke-asymmetry",
+      "name": "Asymmetric loading cue",
+      "record_type": "fixture_pattern",
+      "category": "public_engineering_knowledge",
+      "authority_level": "public_engineering_knowledge",
+      "revision": "1",
+      "units": "unitless",
+      "privacy_classification": "public",
+      "summary": "Use visible, non-damaging asymmetry where reversed, incomplete, or wrong-family loading is reasonably possible.",
+      "source_ids": [
+        "carr-lane-fixture-design-principles"
+      ],
+      "applicability": [
+        "symmetric or similar product variants"
+      ],
+      "limitations": [
+        "human factors and product damage risk require review"
+      ]
+    },
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "pattern-008-open-process-corridor",
+      "name": "Protected process corridor",
+      "record_type": "fixture_pattern",
+      "category": "public_engineering_knowledge",
+      "authority_level": "public_engineering_knowledge",
+      "revision": "1",
+      "units": "unitless",
+      "privacy_classification": "public",
+      "summary": "Reserve explicit tool, weld, inspection, or assembly approach regions through all relevant fixture movement states.",
+      "source_ids": [
+        "osha-welding-overview",
+        "destaco-welding-applications"
+      ],
+      "applicability": [
+        "welding",
+        "inspection",
+        "assembly"
+      ],
+      "limitations": [
+        "envelope clearance alone does not prove process quality"
+      ]
+    },
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "pattern-009-lift-out-release",
+      "name": "Lift-out release path",
+      "record_type": "fixture_pattern",
+      "category": "public_engineering_knowledge",
+      "authority_level": "public_engineering_knowledge",
+      "revision": "1",
+      "units": "unitless",
+      "privacy_classification": "public",
+      "summary": "Define the finished-product release state and path separately from the raw-part loading state to catch post-process trapping.",
+      "source_ids": [
+        "carr-lane-fixture-design-principles"
+      ],
+      "applicability": [
+        "joined assemblies",
+        "closed profiles",
+        "nested products"
+      ],
+      "limitations": [
+        "real path planning may require representative geometry and sampling"
+      ]
+    },
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "pattern-010-adjustable-then-lockable",
+      "name": "Adjustable then lockable",
+      "record_type": "fixture_pattern",
+      "category": "public_engineering_knowledge",
+      "authority_level": "public_engineering_knowledge",
+      "revision": "1",
+      "units": "unitless",
+      "privacy_classification": "public",
+      "summary": "Adjustment features expose range, nominal setting, lock method, prove-out status, and revalidation trigger.",
+      "source_ids": [
+        "fixtureworks-components"
+      ],
+      "applicability": [
+        "prototype and family fixtures"
+      ],
+      "limitations": [
+        "adjustability can reduce repeatability and requires explicit acceptance"
+      ]
+    },
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "pattern-011-shimmed-datum-block",
+      "name": "Shimmed replaceable datum block",
+      "record_type": "fixture_pattern",
+      "category": "public_engineering_knowledge",
+      "authority_level": "public_engineering_knowledge",
+      "revision": "1",
+      "units": "unitless",
+      "privacy_classification": "public",
+      "summary": "Use a pinned or otherwise repeatable parent mount with recorded shim state so service changes remain measurable and reversible.",
+      "source_ids": [
+        "jergens-fixturing-components"
+      ],
+      "applicability": [
+        "wear adjustment and prove-out"
+      ],
+      "limitations": [
+        "shim values require measured evidence"
+      ]
+    },
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "pattern-012-modular-station-assembly",
+      "name": "Modular station assembly",
+      "record_type": "fixture_pattern",
+      "category": "public_engineering_knowledge",
+      "authority_level": "public_engineering_knowledge",
+      "revision": "1",
+      "units": "unitless",
+      "privacy_classification": "public",
+      "summary": "Group a validated nest, mounting frame, contacts, and tooling interfaces into a revisioned station module without hiding project-specific dependencies.",
+      "source_ids": [
+        "strong-hand-modular-table",
+        "occt-xde-guide"
+      ],
+      "applicability": [
+        "repeat stations and product families"
+      ],
+      "limitations": [
+        "module reuse does not transfer prior validation automatically"
+      ]
+    },
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "pattern-013-build-and-check-separation",
+      "name": "Build and check role separation",
+      "record_type": "fixture_pattern",
+      "category": "public_engineering_knowledge",
+      "authority_level": "public_engineering_knowledge",
+      "revision": "1",
+      "units": "unitless",
+      "privacy_classification": "public",
+      "summary": "Combined tooling declares which contacts establish assembly position and which features provide independent inspection evidence.",
+      "source_ids": [
+        "iso-1101-2017-metadata",
+        "iso-5459-2024-metadata"
+      ],
+      "applicability": [
+        "combined build-and-check tooling"
+      ],
+      "limitations": [
+        "standards requirements are not embedded and inspection independence needs qualified review"
+      ]
+    },
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "pattern-014-machine-envelope-fit",
+      "name": "Machine envelope fit review",
+      "record_type": "fixture_pattern",
+      "category": "public_engineering_knowledge",
+      "authority_level": "public_engineering_knowledge",
+      "revision": "1",
+      "units": "unitless",
+      "privacy_classification": "public",
+      "summary": "Evaluate workholding against only the machine, pallet, spindle, tool, door, and service states needed for the project question.",
+      "source_ids": [
+        "osha-machine-guarding"
+      ],
+      "applicability": [
+        "machining and workholding setups"
+      ],
+      "limitations": [
+        "does not replace machine simulation, manuals, or safety review"
+      ]
+    },
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "pattern-015-provisional-to-exact-gate",
+      "name": "Provisional-to-exact gate",
+      "record_type": "fixture_pattern",
+      "category": "public_engineering_knowledge",
+      "authority_level": "public_engineering_knowledge",
+      "revision": "1",
+      "units": "unitless",
+      "privacy_classification": "public",
+      "summary": "A provisional envelope may be replaced by exact authorized geometry only through an explicit authority change, identity link, and stale-evidence transition.",
+      "source_ids": [
+        "destaco-welding-applications",
+        "occt-application-framework"
+      ],
+      "applicability": [
+        "commercial tooling and process-context assets"
+      ],
+      "limitations": [
+        "visual similarity cannot authorize the replacement"
+      ]
+    }
+  ],
+  "process_context_patterns": [
+    {
+      "schema_version": "fxd-process-context-asset-v1",
+      "asset_id": "context-001-torch-head",
+      "name": "Synthetic torch head and approach envelope",
+      "asset_type": "torch_envelope_or_head",
+      "authority_level": "process_context_asset",
+      "revision": "1",
+      "units": "mm",
+      "geometry_authority": "provisional_review_envelope",
+      "frame_id": "torch-tip-frame",
+      "movement_states": [
+        {
+          "state_id": "approach",
+          "description": "Tool approaches a confirmed process region.",
+          "authoritative_for_collision": false
+        },
+        {
+          "state_id": "process",
+          "description": "Tool is at a representative process pose.",
+          "authoritative_for_collision": false
+        }
+      ],
+      "keep_out_envelopes": [
+        {
+          "envelope_id": "torch-body-review",
+          "representation": "synthetic swept review region",
+          "state_id": "process",
+          "provisional": true
+        }
+      ],
+      "maintenance_envelopes": [],
+      "functional_interfaces": [],
+      "required_for_validation_packs": [
+        "manual_weld_access",
+        "robotic_weld_access"
+      ],
+      "validation_limitations": [
+        "provisional geometry cannot establish exact clearance or weld procedure suitability"
+      ],
+      "source_ids": [
+        "osha-welding-overview",
+        "destaco-welding-applications"
+      ],
+      "privacy_classification": "synthetic_public"
+    },
+    {
+      "schema_version": "fxd-process-context-asset-v1",
+      "asset_id": "context-002-robot-wrist",
+      "name": "Synthetic robot wrist context",
+      "asset_type": "robot_cobot_wrist",
+      "authority_level": "process_context_asset",
+      "revision": "1",
+      "units": "mm",
+      "geometry_authority": "provisional_review_envelope",
+      "frame_id": "robot-flange-frame",
+      "movement_states": [
+        {
+          "state_id": "representative-process-pose",
+          "description": "One review pose only, without kinematic path authority.",
+          "authoritative_for_collision": false
+        },
+        {
+          "state_id": "service",
+          "description": "Representative non-routine access state.",
+          "authoritative_for_collision": false
+        }
+      ],
+      "keep_out_envelopes": [
+        {
+          "envelope_id": "wrist-review-envelope",
+          "representation": "synthetic wrist region",
+          "state_id": "representative-process-pose",
+          "provisional": true
+        }
+      ],
+      "maintenance_envelopes": [
+        {
+          "envelope_id": "wrist-service-zone",
+          "representation": "human-confirmed service region",
+          "state_id": "service",
+          "provisional": true
+        }
+      ],
+      "functional_interfaces": [],
+      "required_for_validation_packs": [
+        "robotic_weld_access"
+      ],
+      "validation_limitations": [
+        "no kinematics, singularity, path planning, safety, or offline programming authority"
+      ],
+      "source_ids": [
+        "osha-robotics-overview",
+        "iso-10218-2-2025-metadata"
+      ],
+      "privacy_classification": "synthetic_public"
+    },
+    {
+      "schema_version": "fxd-process-context-asset-v1",
+      "asset_id": "context-003-table",
+      "name": "Synthetic modular table context",
+      "asset_type": "table",
+      "authority_level": "process_context_asset",
+      "revision": "1",
+      "units": "mm",
+      "geometry_authority": "provisional_review_envelope",
+      "frame_id": "table-work-frame",
+      "movement_states": [
+        {
+          "state_id": "fixed",
+          "description": "Table is fixed for fixture placement review.",
+          "authoritative_for_collision": false
+        }
+      ],
+      "keep_out_envelopes": [],
+      "maintenance_envelopes": [],
+      "functional_interfaces": [],
+      "required_for_validation_packs": [
+        "table_mounting_review"
+      ],
+      "validation_limitations": [
+        "no universal grid, load rating, or supplier compatibility is inferred"
+      ],
+      "source_ids": [
+        "demmeler-welding-tables",
+        "strong-hand-modular-table"
+      ],
+      "privacy_classification": "synthetic_public"
+    },
+    {
+      "schema_version": "fxd-process-context-asset-v1",
+      "asset_id": "context-004-positioner",
+      "name": "Synthetic positioner sweep",
+      "asset_type": "positioner",
+      "authority_level": "process_context_asset",
+      "revision": "1",
+      "units": "mm",
+      "geometry_authority": "provisional_review_envelope",
+      "frame_id": "positioner-axis-frame",
+      "movement_states": [
+        {
+          "state_id": "load",
+          "description": "Representative loading orientation.",
+          "authoritative_for_collision": false
+        },
+        {
+          "state_id": "process-sweep",
+          "description": "Conservative review sweep without control authority.",
+          "authoritative_for_collision": false
+        }
+      ],
+      "keep_out_envelopes": [
+        {
+          "envelope_id": "positioner-sweep",
+          "representation": "synthetic rotational sweep",
+          "state_id": "process-sweep",
+          "provisional": true
+        }
+      ],
+      "maintenance_envelopes": [],
+      "functional_interfaces": [],
+      "required_for_validation_packs": [
+        "positioned_weld_access",
+        "loading_unloading"
+      ],
+      "validation_limitations": [
+        "control limits, payload, dynamics, and safety remain external"
+      ],
+      "source_ids": [
+        "osha-machine-guarding"
+      ],
+      "privacy_classification": "synthetic_public"
+    },
+    {
+      "schema_version": "fxd-process-context-asset-v1",
+      "asset_id": "context-005-machine-envelope",
+      "name": "Synthetic machine workspace",
+      "asset_type": "machine_envelope",
+      "authority_level": "process_context_asset",
+      "revision": "1",
+      "units": "mm",
+      "geometry_authority": "provisional_review_envelope",
+      "frame_id": "machine-table-frame",
+      "movement_states": [
+        {
+          "state_id": "load-door-open",
+          "description": "Representative loading state.",
+          "authoritative_for_collision": false
+        },
+        {
+          "state_id": "process-door-closed",
+          "description": "Representative process containment state.",
+          "authoritative_for_collision": false
+        }
+      ],
+      "keep_out_envelopes": [
+        {
+          "envelope_id": "machine-travel-review",
+          "representation": "synthetic machine travel region",
+          "state_id": "process-door-closed",
+          "provisional": true
+        }
+      ],
+      "maintenance_envelopes": [],
+      "functional_interfaces": [],
+      "required_for_validation_packs": [
+        "workholding_machine_fit"
+      ],
+      "validation_limitations": [
+        "machine manuals, exact travel, tooling, guarding, and safety requirements remain authoritative"
+      ],
+      "source_ids": [
+        "osha-machine-guarding"
+      ],
+      "privacy_classification": "synthetic_public"
+    },
+    {
+      "schema_version": "fxd-process-context-asset-v1",
+      "asset_id": "context-006-operator-envelope",
+      "name": "Synthetic operator reach and handling envelope",
+      "asset_type": "operator_body_envelope",
+      "authority_level": "process_context_asset",
+      "revision": "1",
+      "units": "mm",
+      "geometry_authority": "provisional_review_envelope",
+      "frame_id": "operator-stance-frame",
+      "movement_states": [
+        {
+          "state_id": "load",
+          "description": "Representative loading reach state.",
+          "authoritative_for_collision": false
+        },
+        {
+          "state_id": "unload",
+          "description": "Representative unloading reach state.",
+          "authoritative_for_collision": false
+        }
+      ],
+      "keep_out_envelopes": [],
+      "maintenance_envelopes": [],
+      "functional_interfaces": [],
+      "required_for_validation_packs": [
+        "operator_access",
+        "loading_unloading"
+      ],
+      "validation_limitations": [
+        "not an ergonomic, anthropometric, or safety certification"
+      ],
+      "source_ids": [
+        "osha-machine-guarding"
+      ],
+      "privacy_classification": "synthetic_public"
+    },
+    {
+      "schema_version": "fxd-process-context-asset-v1",
+      "asset_id": "context-007-guard-service-zone",
+      "name": "Synthetic guarding and service zone",
+      "asset_type": "guarding",
+      "authority_level": "process_context_asset",
+      "revision": "1",
+      "units": "mm",
+      "geometry_authority": "provisional_review_envelope",
+      "frame_id": "guard-frame",
+      "movement_states": [
+        {
+          "state_id": "production",
+          "description": "Representative guarded production state.",
+          "authoritative_for_collision": false
+        },
+        {
+          "state_id": "maintenance",
+          "description": "Representative access state requiring human confirmation.",
+          "authoritative_for_collision": false
+        }
+      ],
+      "keep_out_envelopes": [
+        {
+          "envelope_id": "guard-boundary",
+          "representation": "synthetic restricted region",
+          "state_id": "production",
+          "provisional": true
+        }
+      ],
+      "maintenance_envelopes": [
+        {
+          "envelope_id": "service-clearance",
+          "representation": "synthetic service region",
+          "state_id": "maintenance",
+          "provisional": true
+        }
+      ],
+      "functional_interfaces": [],
+      "required_for_validation_packs": [
+        "operator_access",
+        "maintenance_access"
+      ],
+      "validation_limitations": [
+        "does not design or certify safeguarding"
+      ],
+      "source_ids": [
+        "osha-machine-guarding",
+        "iso-10218-2-2025-metadata"
+      ],
+      "privacy_classification": "synthetic_public"
+    },
+    {
+      "schema_version": "fxd-process-context-asset-v1",
+      "asset_id": "context-008-inspection-probe",
+      "name": "Synthetic inspection probe and approach",
+      "asset_type": "inspection_probe_or_scanner",
+      "authority_level": "process_context_asset",
+      "revision": "1",
+      "units": "mm",
+      "geometry_authority": "provisional_review_envelope",
+      "frame_id": "probe-tip-frame",
+      "movement_states": [
+        {
+          "state_id": "approach",
+          "description": "Representative probe approach state.",
+          "authoritative_for_collision": false
+        },
+        {
+          "state_id": "measure",
+          "description": "Representative measurement state.",
+          "authoritative_for_collision": false
+        }
+      ],
+      "keep_out_envelopes": [
+        {
+          "envelope_id": "probe-body-review",
+          "representation": "synthetic probe clearance region",
+          "state_id": "measure",
+          "provisional": true
+        }
+      ],
+      "maintenance_envelopes": [],
+      "functional_interfaces": [],
+      "required_for_validation_packs": [
+        "inspection_access"
+      ],
+      "validation_limitations": [
+        "does not establish measurement uncertainty, calibration, or acceptance"
+      ],
+      "source_ids": [
+        "iso-1101-2017-metadata",
+        "iso-5459-2024-metadata"
+      ],
+      "privacy_classification": "synthetic_public"
+    }
+  ],
+  "complete_item_examples": [
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "example-parametric-support-pad",
+      "name": "Synthetic parametric support pad",
+      "record_type": "library_component",
+      "category": "fxd_standard_parametric_primitive",
+      "authority_level": "fxd_parametric_component",
+      "supplier_or_author": "FXD synthetic research",
+      "model_or_internal_number": "FXD-RESEARCH-PAD-001",
+      "revision": "1",
+      "units": "mm",
+      "source_file": null,
+      "source_ids": [
+        "fixtureworks-components",
+        "jergens-fixturing-components"
+      ],
+      "privacy_classification": "synthetic_public",
+      "storage_policy": "embedded",
+      "edit_authority": "editable_new_revision_only",
+      "local_coordinate_system": {
+        "frame_id": "pad-local",
+        "origin_mm": [
+          0,
+          0,
+          0
+        ],
+        "axis_convention": "+Z is support direction"
+      },
+      "preview_representation": {
+        "kind": "parametric_preview",
+        "authority": "exact",
+        "asset_identity": null
+      },
+      "feature_definition": {
+        "feature_type": "support_pad",
+        "parameters": [
+          "diameter_mm",
+          "height_mm",
+          "mount_hole_class"
+        ]
+      },
+      "mounting_interfaces": [
+        {
+          "schema_version": "fxd-mounting-interface-v1",
+          "interface_id": "pad-base-mount",
+          "interface_type": "face_mount",
+          "frame_id": "pad-local",
+          "origin_mm": [
+            0,
+            0,
+            0
+          ],
+          "axes": {
+            "x": [
+              1,
+              0,
+              0
+            ],
+            "y": [
+              0,
+              1,
+              0
+            ],
+            "z": [
+              0,
+              0,
+              1
+            ]
+          },
+          "feature_identities": [
+            "base-face",
+            "mount-axis"
+          ],
+          "fastener_intent": "Shop-selected removable fastener; no universal size asserted.",
+          "mating_authority": "user_authored_reusable_component",
+          "tolerance_clearance_intent": {
+            "classification": "shop_defined",
+            "nominal_mm": null,
+            "plus_mm": null,
+            "minus_mm": null,
+            "human_confirmation_required": true
+          },
+          "allowed_replacement_classes": [
+            "support-pad-same-interface-v1"
+          ]
+        }
+      ],
+      "functional_interfaces": [
+        {
+          "schema_version": "fxd-functional-interface-v1",
+          "interface_id": "pad-support-contact",
+          "interface_type": "support_contact",
+          "role": "primary or auxiliary support as assigned by the project",
+          "frame_id": "pad-local",
+          "direction": [
+            0,
+            0,
+            1
+          ],
+          "geometry": {
+            "kind": "plane",
+            "values": [
+              0,
+              0,
+              1,
+              0
+            ],
+            "units": "mm"
+          },
+          "movement_state": "fixed",
+          "permissible_contact": "human_confirmation_required",
+          "dependent_validation_packs": [
+            "constraint",
+            "clamp_reaction",
+            "clearance"
+          ]
+        }
+      ],
+      "contact_points": [
+        "pad-support-contact"
+      ],
+      "movement_states": [
+        "fixed"
+      ],
+      "open_closed_states": [],
+      "keep_out_envelopes": [],
+      "maintenance_envelopes": [
+        "vertical-removal-access"
+      ],
+      "material_manufacturing_intent": {
+        "material": "shop-selected",
+        "process": "machined_or_purchased",
+        "wear_item": true
+      },
+      "bom_participation": "permitted",
+      "export_participation": {
+        "STEP": "permitted",
+        "DXF": "excluded",
+        "drawings": "permitted"
+      },
+      "validation_participation": {
+        "broad_phase_collision": "required",
+        "exact_collision": "required",
+        "constraint": "required"
+      },
+      "configurable_variants": [],
+      "replacement_compatibility": {
+        "class": "support-pad-same-interface-v1",
+        "requires_functional_interface_match": true
+      },
+      "revision_history": [
+        {
+          "revision": "1",
+          "created": "2026-07-23",
+          "reason": "Synthetic research example."
+        }
+      ],
+      "deprecation_state": "active",
+      "missing_link_behavior": "not_applicable",
+      "downstream_dependencies": [
+        "project placement",
+        "constraint evidence",
+        "BOM"
+      ],
+      "summary": "A complete synthetic example showing how an FXD primitive carries stable mounting, contact, revision, validation, and output contracts.",
+      "applicability": [
+        "synthetic schema demonstration"
+      ],
+      "limitations": [
+        "not a production component or recommended dimension"
+      ],
+      "tags": [
+        "support",
+        "replaceable",
+        "synthetic"
+      ]
+    }
+  ],
+  "shop_standard_examples": [
+    {
+      "schema_version": "fxd-shop-standard-pack-v1",
+      "pack_id": "synthetic-shop-pack-001",
+      "revision": "1",
+      "authority_level": "shop_standard",
+      "scope": "shop",
+      "precedence_level": 3,
+      "source_records": [
+        "synthetic-owner-input"
+      ],
+      "values": {
+        "available_materials": [
+          "synthetic mild steel option"
+        ],
+        "plate_thicknesses_mm": [
+          6,
+          10,
+          12
+        ],
+        "structural_stock": [
+          "synthetic rectangular tube family"
+        ],
+        "hole_slot_sizes_mm": [
+          9,
+          11
+        ],
+        "fasteners": [
+          "synthetic metric fastener preference"
+        ],
+        "tab_slot_clearances_mm": [
+          0.2
+        ],
+        "process_allowances_mm": [
+          0.15
+        ],
+        "clamp_preferences": [
+          "prefer reusable clamp when access permits"
+        ],
+        "support_locator_styles": [
+          "replaceable contact preferred"
+        ],
+        "finish_conventions": [
+          "finish selected per project"
+        ],
+        "marking_conventions": [
+          "part and revision marking required"
+        ],
+        "reuse_preferences": [
+          "reuse commercial tooling; recut low-cost plates when justified"
+        ],
+        "cost_volume_preferences": [
+          "review custom machining against production quantity"
+        ]
+      },
+      "conflicts": [
+        {
+          "field": "values.plate_thicknesses_mm",
+          "lower_precedence_value": [
+            5,
+            8,
+            10
+          ],
+          "effective_value": [
+            6,
+            10,
+            12
+          ],
+          "resolution": "Shop scope overrides defaults while retaining both provenance records."
+        }
+      ],
+      "effective_provenance": {
+        "values.plate_thicknesses_mm": [
+          "fxd-defaults-v1",
+          "synthetic-shop-pack-001"
+        ]
+      },
+      "human_approval_required": true
+    }
+  ]
+}

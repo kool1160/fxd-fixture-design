@@ -1,0 +1,184 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fxd.invalid/research/process_context_asset_v1.schema.json",
+  "title": "FXD process context asset v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "asset_id",
+    "name",
+    "asset_type",
+    "authority_level",
+    "revision",
+    "units",
+    "geometry_authority",
+    "frame_id",
+    "movement_states",
+    "keep_out_envelopes",
+    "maintenance_envelopes",
+    "functional_interfaces",
+    "required_for_validation_packs",
+    "validation_limitations",
+    "source_ids",
+    "privacy_classification"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "fxd-process-context-asset-v1"
+    },
+    "asset_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]*$"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "asset_type": {
+      "enum": [
+        "torch_envelope_or_head",
+        "robot_cobot_wrist",
+        "reach_envelope",
+        "table",
+        "positioner",
+        "pallet",
+        "vise",
+        "machine_envelope",
+        "spindle_tool_envelope",
+        "operator_body_envelope",
+        "guarding",
+        "keep_out_zone",
+        "maintenance_service_zone",
+        "inspection_probe_or_scanner"
+      ]
+    },
+    "authority_level": {
+      "const": "process_context_asset"
+    },
+    "revision": {
+      "type": "string",
+      "minLength": 1
+    },
+    "units": {
+      "enum": [
+        "mm",
+        "inch",
+        "unitless"
+      ]
+    },
+    "geometry_authority": {
+      "enum": [
+        "exact_private_imported_cad",
+        "supplier_authorized_exact_cad",
+        "provisional_review_envelope",
+        "metadata_only"
+      ]
+    },
+    "frame_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "movement_states": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "state_id",
+          "description",
+          "authoritative_for_collision"
+        ],
+        "properties": {
+          "state_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1
+          },
+          "authoritative_for_collision": {
+            "type": "boolean"
+          }
+        }
+      },
+      "minItems": 1
+    },
+    "keep_out_envelopes": {
+      "$ref": "#/$defs/envelope_array"
+    },
+    "maintenance_envelopes": {
+      "$ref": "#/$defs/envelope_array"
+    },
+    "functional_interfaces": {
+      "type": "array",
+      "items": {
+        "$ref": "functional_interface_v1.schema.json"
+      }
+    },
+    "required_for_validation_packs": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
+    },
+    "validation_limitations": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "source_ids": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
+    },
+    "privacy_classification": {
+      "enum": [
+        "public",
+        "synthetic_public",
+        "private_local",
+        "supplier_restricted"
+      ]
+    }
+  },
+  "$defs": {
+    "envelope_array": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "envelope_id",
+          "representation",
+          "state_id",
+          "provisional"
+        ],
+        "properties": {
+          "envelope_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "representation": {
+            "type": "string",
+            "minLength": 1
+          },
+          "state_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "provisional": {
+            "type": "boolean"
+          }
+        }
+      }
+    }
+  }
+}

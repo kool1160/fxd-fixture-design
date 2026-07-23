@@ -1,0 +1,395 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fxd.invalid/research/fixture_library_item_v1.schema.json",
+  "title": "FXD fixture library item v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "item_id",
+    "name",
+    "record_type",
+    "category",
+    "authority_level",
+    "revision",
+    "units",
+    "privacy_classification",
+    "summary",
+    "source_ids",
+    "applicability",
+    "limitations"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "fxd-fixture-library-item-v1"
+    },
+    "item_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]*$"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "record_type": {
+      "enum": [
+        "engineering_principle",
+        "fixture_pattern",
+        "component_application",
+        "failure_mode",
+        "library_component"
+      ]
+    },
+    "category": {
+      "enum": [
+        "fxd_standard_parametric_primitive",
+        "shop_standard_pack",
+        "private_purchased_tooling",
+        "user_created_reusable_component",
+        "fixture_family_template",
+        "process_context_asset",
+        "private_benchmark_reference",
+        "public_engineering_knowledge"
+      ]
+    },
+    "authority_level": {
+      "$ref": "#/$defs/authority"
+    },
+    "supplier_or_author": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "model_or_internal_number": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "revision": {
+      "type": "string",
+      "minLength": 1
+    },
+    "units": {
+      "enum": [
+        "mm",
+        "inch",
+        "unitless"
+      ]
+    },
+    "source_file": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "required": [
+        "identity",
+        "sha256",
+        "licensing_notes"
+      ],
+      "properties": {
+        "identity": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sha256": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "licensing_notes": {
+          "type": "string"
+        }
+      }
+    },
+    "source_ids": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
+    },
+    "privacy_classification": {
+      "enum": [
+        "public",
+        "synthetic_public",
+        "private_local",
+        "supplier_restricted",
+        "organization_confidential"
+      ]
+    },
+    "storage_policy": {
+      "enum": [
+        "embedded",
+        "linked",
+        "metadata_only",
+        "not_applicable"
+      ]
+    },
+    "edit_authority": {
+      "enum": [
+        "editable",
+        "read_only",
+        "editable_new_revision_only",
+        "not_applicable"
+      ]
+    },
+    "local_coordinate_system": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "frame_id",
+        "origin_mm",
+        "axis_convention"
+      ],
+      "properties": {
+        "frame_id": {
+          "type": "string"
+        },
+        "origin_mm": {
+          "$ref": "#/$defs/vector3"
+        },
+        "axis_convention": {
+          "type": "string"
+        }
+      }
+    },
+    "preview_representation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "authority",
+        "asset_identity"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "none",
+            "parametric_preview",
+            "exact_tessellation",
+            "provisional_envelope",
+            "metadata_card"
+          ]
+        },
+        "authority": {
+          "enum": [
+            "exact",
+            "provisional",
+            "informational",
+            "none"
+          ]
+        },
+        "asset_identity": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "feature_definition": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "mounting_interfaces": {
+      "type": "array",
+      "items": {
+        "$ref": "mounting_interface_v1.schema.json"
+      }
+    },
+    "functional_interfaces": {
+      "type": "array",
+      "items": {
+        "$ref": "functional_interface_v1.schema.json"
+      }
+    },
+    "contact_points": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "movement_states": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "open_closed_states": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "keep_out_envelopes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "maintenance_envelopes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "material_manufacturing_intent": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "bom_participation": {
+      "$ref": "#/$defs/participation"
+    },
+    "export_participation": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/participation"
+      }
+    },
+    "validation_participation": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/participation"
+      }
+    },
+    "configurable_variants": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "replacement_compatibility": {
+      "type": "object"
+    },
+    "revision_history": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "revision",
+          "created",
+          "reason"
+        ],
+        "properties": {
+          "revision": {
+            "type": "string"
+          },
+          "created": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "deprecation_state": {
+      "enum": [
+        "active",
+        "deprecated",
+        "withdrawn",
+        "superseded"
+      ]
+    },
+    "missing_link_behavior": {
+      "enum": [
+        "not_applicable",
+        "block_geometry_dependent_actions",
+        "retain_embedded_snapshot_and_mark_stale",
+        "metadata_only_continue_with_warning"
+      ]
+    },
+    "downstream_dependencies": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 20
+    },
+    "applicability": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "minItems": 1
+    },
+    "limitations": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "minItems": 1
+    },
+    "engineering_details": {
+      "type": "object"
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    }
+  },
+  "$defs": {
+    "authority": {
+      "enum": [
+        "fxd_parametric_component",
+        "exact_private_imported_cad",
+        "supplier_authorized_exact_cad",
+        "metadata_only_commercial_component",
+        "provisional_review_envelope",
+        "user_authored_reusable_component",
+        "fixture_family_template",
+        "shop_standard",
+        "process_context_asset",
+        "private_benchmark_reference",
+        "public_engineering_knowledge"
+      ]
+    },
+    "participation": {
+      "enum": [
+        "required",
+        "permitted",
+        "provisional only",
+        "excluded",
+        "blocks when missing",
+        "human confirmation required"
+      ]
+    },
+    "vector3": {
+      "type": "array",
+      "prefixItems": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "number"
+        }
+      ],
+      "items": false,
+      "minItems": 3,
+      "maxItems": 3
+    }
+  }
+}

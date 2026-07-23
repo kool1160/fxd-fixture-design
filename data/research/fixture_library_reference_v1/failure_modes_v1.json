@@ -1,0 +1,339 @@
+{
+  "schema_version": "fxd-fixture-library-failure-modes-v1",
+  "research_only": true,
+  "records": [
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "failure-001-provisional-treated-exact",
+      "name": "Provisional geometry treated as exact",
+      "record_type": "failure_mode",
+      "category": "public_engineering_knowledge",
+      "authority_level": "public_engineering_knowledge",
+      "revision": "1",
+      "units": "unitless",
+      "privacy_classification": "public",
+      "summary": "A review envelope silently participates as exact supplier geometry in collision, clearance, export, or release evidence.",
+      "source_ids": [
+        "destaco-welding-applications"
+      ],
+      "applicability": [
+        "commercial tooling and process-context assets"
+      ],
+      "limitations": [
+        "detection requires explicit authority propagation"
+      ],
+      "engineering_details": {
+        "severity": "blocker",
+        "detection": [
+          "compare requested operation with geometry authority"
+        ],
+        "required_response": [
+          "block exact operation",
+          "retain provisional label",
+          "request authorized geometry"
+        ]
+      }
+    },
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "failure-002-redundant-location",
+      "name": "Redundant or contradictory location",
+      "record_type": "failure_mode",
+      "category": "public_engineering_knowledge",
+      "authority_level": "public_engineering_knowledge",
+      "revision": "1",
+      "units": "unitless",
+      "privacy_classification": "public",
+      "summary": "Multiple contacts restrict the same motion without allowance, or their normals and tolerances require incompatible product positions.",
+      "source_ids": [
+        "carr-lane-fixture-design-principles"
+      ],
+      "applicability": [
+        "locators",
+        "stops",
+        "nests",
+        "inspection fixtures"
+      ],
+      "limitations": [
+        "requires deterministic DOF and tolerance evidence"
+      ],
+      "engineering_details": {
+        "severity": "blocker_or_human_confirmation",
+        "detection": [
+          "constraint rank",
+          "duplicate DOF restriction",
+          "tolerance conflict"
+        ],
+        "required_response": [
+          "relieve, remove, or reclassify contact"
+        ]
+      }
+    },
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "failure-003-unsupported-clamp-load",
+      "name": "Unsupported clamp load",
+      "record_type": "failure_mode",
+      "category": "public_engineering_knowledge",
+      "authority_level": "public_engineering_knowledge",
+      "revision": "1",
+      "units": "unitless",
+      "privacy_classification": "public",
+      "summary": "Clamp force is applied to flexible or unsupported product geometry without a named and plausible reaction path.",
+      "source_ids": [
+        "carr-lane-fixture-design-principles",
+        "destaco-welding-applications"
+      ],
+      "applicability": [
+        "all clamped fixtures"
+      ],
+      "limitations": [
+        "mapping alone does not establish quantitative force adequacy"
+      ],
+      "engineering_details": {
+        "severity": "blocker",
+        "detection": [
+          "missing clamp-to-support map",
+          "reaction direction mismatch"
+        ],
+        "required_response": [
+          "add or move support",
+          "change clamp direction",
+          "require qualified review"
+        ]
+      }
+    },
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "failure-004-trapped-product",
+      "name": "Finished product is trapped",
+      "record_type": "failure_mode",
+      "category": "public_engineering_knowledge",
+      "authority_level": "public_engineering_knowledge",
+      "revision": "1",
+      "units": "unitless",
+      "privacy_classification": "public",
+      "summary": "The raw parts can load, but the joined, assembled, or processed product cannot exit through the declared release path.",
+      "source_ids": [
+        "carr-lane-fixture-design-principles"
+      ],
+      "applicability": [
+        "weld fixtures",
+        "assembly fixtures",
+        "nests"
+      ],
+      "limitations": [
+        "requires representative final geometry and state sequence"
+      ],
+      "engineering_details": {
+        "severity": "blocker",
+        "detection": [
+          "unload sweep collision",
+          "closed topology or interference after process"
+        ],
+        "required_response": [
+          "revise split, removable member, clamp state, or unload path"
+        ]
+      }
+    },
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "failure-005-missing-state",
+      "name": "Required movement state is missing",
+      "record_type": "failure_mode",
+      "category": "public_engineering_knowledge",
+      "authority_level": "public_engineering_knowledge",
+      "revision": "1",
+      "units": "unitless",
+      "privacy_classification": "public",
+      "summary": "Collision or access is reported without covering an open, closed, loading, process, unloading, or maintenance state required by the validation pack.",
+      "source_ids": [
+        "osha-robotics-overview"
+      ],
+      "applicability": [
+        "moving clamps",
+        "positioners",
+        "robots",
+        "doors",
+        "service zones"
+      ],
+      "limitations": [
+        "state completeness depends on the selected process pack"
+      ],
+      "engineering_details": {
+        "severity": "blocks_when_missing",
+        "detection": [
+          "required state set minus modeled state set"
+        ],
+        "required_response": [
+          "add state evidence or keep result provisional"
+        ]
+      }
+    },
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "failure-006-stale-replacement-evidence",
+      "name": "Replacement preserves placement but not evidence",
+      "record_type": "failure_mode",
+      "category": "public_engineering_knowledge",
+      "authority_level": "public_engineering_knowledge",
+      "revision": "1",
+      "units": "unitless",
+      "privacy_classification": "public",
+      "summary": "A replacement matches mounting placement while changed functional geometry, movement, contact, or authority leaves prior validation incorrectly fresh.",
+      "source_ids": [
+        "occt-application-framework",
+        "jergens-fixturing-components"
+      ],
+      "applicability": [
+        "component replacement and revision update"
+      ],
+      "limitations": [
+        "requires dependency tracking at interface and evidence level"
+      ],
+      "engineering_details": {
+        "severity": "blocker",
+        "detection": [
+          "functional interface digest changed",
+          "geometry authority changed",
+          "movement states changed"
+        ],
+        "required_response": [
+          "mark dependent evidence stale",
+          "rerun affected validation packs"
+        ]
+      }
+    },
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "failure-007-missing-linked-asset",
+      "name": "Linked asset cannot be resolved",
+      "record_type": "failure_mode",
+      "category": "public_engineering_knowledge",
+      "authority_level": "public_engineering_knowledge",
+      "revision": "1",
+      "units": "unitless",
+      "privacy_classification": "public",
+      "summary": "A project references a private or supplier file that is missing, changed, or resolves to a different SHA-256.",
+      "source_ids": [
+        "occt-application-framework"
+      ],
+      "applicability": [
+        "linked exact CAD and private components"
+      ],
+      "limitations": [
+        "filesystem recovery is outside the public project"
+      ],
+      "engineering_details": {
+        "severity": "blocks_geometry_dependent_actions",
+        "detection": [
+          "path unavailable",
+          "hash mismatch"
+        ],
+        "required_response": [
+          "retain identity and placement metadata",
+          "block geometry-dependent operations",
+          "offer explicit relink"
+        ]
+      }
+    },
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "failure-008-output-revision-mismatch",
+      "name": "Output revision mismatch",
+      "record_type": "failure_mode",
+      "category": "public_engineering_knowledge",
+      "authority_level": "public_engineering_knowledge",
+      "revision": "1",
+      "units": "unitless",
+      "privacy_classification": "public",
+      "summary": "STEP, DXF, BOM, drawing, marking, or review evidence refers to different component or project revisions.",
+      "source_ids": [
+        "occt-xde-guide"
+      ],
+      "applicability": [
+        "all manufacturing output packages"
+      ],
+      "limitations": [
+        "digest coherence does not establish manufacturing correctness"
+      ],
+      "engineering_details": {
+        "severity": "blocker",
+        "detection": [
+          "manifest identity and revision reconciliation"
+        ],
+        "required_response": [
+          "regenerate all stale outputs from the pinned project revision"
+        ]
+      }
+    },
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "failure-009-private-data-publication",
+      "name": "Private asset publication",
+      "record_type": "failure_mode",
+      "category": "public_engineering_knowledge",
+      "authority_level": "public_engineering_knowledge",
+      "revision": "1",
+      "units": "unitless",
+      "privacy_classification": "public",
+      "summary": "Private fixture geometry, screenshots, paths, dimensions, supplier-controlled content, or proprietary rules enter a public repository or provider payload.",
+      "source_ids": [
+        "occt-application-framework"
+      ],
+      "applicability": [
+        "private benchmark corpus",
+        "private tooling",
+        "customer and employer data"
+      ],
+      "limitations": [
+        "automated scans cannot replace owner and IP review"
+      ],
+      "engineering_details": {
+        "severity": "protected_boundary",
+        "detection": [
+          "path and binary scan",
+          "privacy classification audit",
+          "manual disclosure review"
+        ],
+        "required_response": [
+          "stop publication",
+          "remove sensitive content",
+          "obtain explicit owner approval before any selected release"
+        ]
+      }
+    },
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "failure-010-template-treated-complete",
+      "name": "Template treated as completed fixture",
+      "record_type": "failure_mode",
+      "category": "public_engineering_knowledge",
+      "authority_level": "public_engineering_knowledge",
+      "revision": "1",
+      "units": "unitless",
+      "privacy_classification": "public",
+      "summary": "A family template is instantiated and represented as validated without project geometry, configuration, process context, deterministic checks, and human review.",
+      "source_ids": [
+        "carr-lane-fixture-design-principles"
+      ],
+      "applicability": [
+        "all fixture family templates"
+      ],
+      "limitations": [
+        "template usefulness depends on bounded supported conditions"
+      ],
+      "engineering_details": {
+        "severity": "blocker",
+        "detection": [
+          "template authority reaches release path",
+          "required project evidence absent"
+        ],
+        "required_response": [
+          "retain starting-structure status",
+          "require project synthesis and validation"
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,1124 @@
+{
+  "schema_version": "fxd-fixture-family-template-corpus-v1",
+  "research_only": true,
+  "templates": [
+    {
+      "schema_version": "fxd-fixture-family-template-v1",
+      "template_id": "family-001-flat-base-weld-fixture",
+      "name": "Flat-base weld fixture",
+      "authority_level": "fixture_family_template",
+      "revision": "1",
+      "intended_product_family": [
+        "fabricated assemblies with a defensible primary support orientation"
+      ],
+      "material_forms": [
+        "sheet",
+        "plate",
+        "tube",
+        "angle",
+        "channel"
+      ],
+      "processes": [
+        "manual welding",
+        "cobot or robot welding when separately validated"
+      ],
+      "production_volume_range": {
+        "minimum": 1,
+        "maximum": null,
+        "basis": "Project quantity drives simplicity, durability, and automation tradeoffs."
+      },
+      "supported_handling_modes": [
+        "manual",
+        "assisted",
+        "automated when context is supplied"
+      ],
+      "expected_datum_opportunities": [
+        "stable lower faces",
+        "verified holes",
+        "edges or formed features away from weld distortion"
+      ],
+      "support_strategy": [
+        "three or more justified discrete supports with explicit load and distortion intent"
+      ],
+      "locator_strategy": [
+        "independent secondary and tertiary contacts tied to immutable product references"
+      ],
+      "stop_strategy": [
+        "replaceable stop that preserves loading and post-weld release"
+      ],
+      "clamp_strategy": [
+        "clamp toward named supports and keep joint corridors open"
+      ],
+      "base_structure_strategy": [
+        "plate or connected rail frame selected from size, access, shop capability, and volume"
+      ],
+      "loading_unloading_model": [
+        "load, seat, locate, clamp, process, release, and unload are distinct checked states"
+      ],
+      "access_expectations": [
+        "required joints, tacks, operator actions, tools, cleaning, and finished-product release remain clear"
+      ],
+      "manufacturable_construction": [
+        "standard tooling, laser-cut plates, formed brackets, tubes, and limited machining"
+      ],
+      "applicable_primitive_categories": [
+        "support pads",
+        "locator pins",
+        "hard stops",
+        "risers",
+        "clamp brackets",
+        "gussets",
+        "baseplates"
+      ],
+      "applicable_purchased_tooling_categories": [
+        "commercial clamps",
+        "pins and bushings",
+        "sensors when required"
+      ],
+      "process_context_needs": [
+        "torch or hand envelope when access is not obvious",
+        "table or positioner when mounting or motion matters"
+      ],
+      "configuration_parameters": [
+        {
+          "name": "build_orientation",
+          "units": "frame",
+          "required": true,
+          "description": "Accepted manufacturing frame linked to source identity."
+        },
+        {
+          "name": "production_quantity",
+          "units": "parts per planning period",
+          "required": true,
+          "description": "Quantity basis for cost and durability decisions."
+        }
+      ],
+      "known_failure_modes": [
+        "contour skeleton replaces discrete locating",
+        "clamps load unsupported sheet",
+        "finished weldment is trapped"
+      ],
+      "unsupported_conditions": [
+        "no defensible build orientation",
+        "unrepresented thermal or structural claim",
+        "missing essential weld access evidence"
+      ],
+      "deterministic_validations_required": [
+        "constraint",
+        "collision",
+        "clearance",
+        "loading_unloading",
+        "weld_tool_access",
+        "manufacturability",
+        "output_coherence"
+      ],
+      "required_human_review_questions": [
+        "Is the locating scheme stable without fighting variation?",
+        "Can every required weld and unload action be completed?",
+        "Is the structure practical to build and maintain?"
+      ],
+      "template_boundary": "starting_structure_not_completed_fixture"
+    },
+    {
+      "schema_version": "fxd-fixture-family-template-v1",
+      "template_id": "family-002-tack-location-fixture",
+      "name": "Tack and location fixture",
+      "authority_level": "fixture_family_template",
+      "revision": "1",
+      "intended_product_family": [
+        "assemblies that transfer to another process after initial location and tack"
+      ],
+      "material_forms": [
+        "sheet",
+        "plate",
+        "tube",
+        "formed parts"
+      ],
+      "processes": [
+        "fit-up",
+        "tacking",
+        "transfer to downstream welding"
+      ],
+      "production_volume_range": {
+        "minimum": 1,
+        "maximum": null,
+        "basis": "Transfer frequency and repeatability determine construction effort."
+      },
+      "supported_handling_modes": [
+        "manual",
+        "assisted"
+      ],
+      "expected_datum_opportunities": [
+        "assembly interfaces needed to establish pre-tack relationship"
+      ],
+      "support_strategy": [
+        "support components through fit-up without hiding required tack regions"
+      ],
+      "locator_strategy": [
+        "locate constituent parts independently where needed"
+      ],
+      "stop_strategy": [
+        "use stops that permit removal of the tacked assembly"
+      ],
+      "clamp_strategy": [
+        "use minimum hold-down needed for fit-up without creating transfer traps"
+      ],
+      "base_structure_strategy": [
+        "simple plate, rail, or modular base suited to transfer handling"
+      ],
+      "loading_unloading_model": [
+        "load parts, locate, clamp, tack, cool as required, release, transfer"
+      ],
+      "access_expectations": [
+        "all specified tack locations and release directions remain accessible"
+      ],
+      "manufacturable_construction": [
+        "prefer simple fabricated and reusable elements"
+      ],
+      "applicable_primitive_categories": [
+        "supports",
+        "stops",
+        "locator blocks",
+        "generic review clamps"
+      ],
+      "applicable_purchased_tooling_categories": [
+        "manual clamps",
+        "temporary alignment tooling"
+      ],
+      "process_context_needs": [
+        "tack tool envelope",
+        "transfer handling envelope when constrained"
+      ],
+      "configuration_parameters": [
+        {
+          "name": "tack_sequence",
+          "units": "ordered steps",
+          "required": true,
+          "description": "Project-approved tack intent and access sequence."
+        }
+      ],
+      "known_failure_modes": [
+        "fixture supports only the final shape but not individual parts",
+        "tacked assembly cannot release",
+        "tack access is assumed from full-weld access"
+      ],
+      "unsupported_conditions": [
+        "downstream transfer state is unknown",
+        "tack locations are unconfirmed"
+      ],
+      "deterministic_validations_required": [
+        "component_identity",
+        "constraint",
+        "tack_access",
+        "loading_unloading",
+        "collision"
+      ],
+      "required_human_review_questions": [
+        "Will the tacked assembly retain required relationship during transfer?",
+        "Are tack locations and release sequence practical?"
+      ],
+      "template_boundary": "starting_structure_not_completed_fixture"
+    },
+    {
+      "schema_version": "fxd-fixture-family-template-v1",
+      "template_id": "family-003-multi-station-weld-fixture",
+      "name": "Multi-station weld fixture",
+      "authority_level": "fixture_family_template",
+      "revision": "1",
+      "intended_product_family": [
+        "small repeatable fabricated assemblies suited to repeated product-specific nests"
+      ],
+      "material_forms": [
+        "sheet",
+        "plate",
+        "tube"
+      ],
+      "processes": [
+        "manual welding",
+        "cobot welding",
+        "robotic welding"
+      ],
+      "production_volume_range": {
+        "minimum": 2,
+        "maximum": null,
+        "basis": "Station count follows takt, access, envelope, and handling evidence."
+      },
+      "supported_handling_modes": [
+        "manual",
+        "assisted",
+        "automated"
+      ],
+      "expected_datum_opportunities": [
+        "one validated nest definition repeated with station-specific source references"
+      ],
+      "support_strategy": [
+        "repeat role-consistent supports with station identities and reaction mappings"
+      ],
+      "locator_strategy": [
+        "repeat the approved datum logic without erasing station-specific evidence"
+      ],
+      "stop_strategy": [
+        "preserve individual loading and unloading at every station"
+      ],
+      "clamp_strategy": [
+        "provide open and closed states and avoid cross-station access interference"
+      ],
+      "base_structure_strategy": [
+        "continuous mounted base or connected frame with explicit station parent paths"
+      ],
+      "loading_unloading_model": [
+        "define one-up and aggregate station flow, including partial occupancy when permitted"
+      ],
+      "access_expectations": [
+        "adjacent products, clamps, structure, and process equipment are included in access checks"
+      ],
+      "manufacturable_construction": [
+        "repeatable modules tied to a connected fabricated base"
+      ],
+      "applicable_primitive_categories": [
+        "base rails",
+        "crossmembers",
+        "supports",
+        "locators",
+        "stops",
+        "clamp brackets"
+      ],
+      "applicable_purchased_tooling_categories": [
+        "repeated clamps",
+        "sensors",
+        "pneumatic or hydraulic devices when approved"
+      ],
+      "process_context_needs": [
+        "table or positioner",
+        "tool or automation envelope when applicable"
+      ],
+      "configuration_parameters": [
+        {
+          "name": "station_count",
+          "units": "count",
+          "required": true,
+          "description": "Requested count and deterministic feasible alternatives."
+        },
+        {
+          "name": "station_pitch",
+          "units": "mm",
+          "required": true,
+          "description": "Derived or engineer-set pitch with clearance evidence."
+        }
+      ],
+      "known_failure_modes": [
+        "isolated station islands",
+        "excess empty span",
+        "adjacent station blocks process access",
+        "generic blocks replace product-specific contacts"
+      ],
+      "unsupported_conditions": [
+        "unbounded station count",
+        "no coherent loading model",
+        "unvalidated family reuse"
+      ],
+      "deterministic_validations_required": [
+        "station_fit",
+        "connectivity",
+        "constraint",
+        "collision",
+        "clearance",
+        "loading_unloading",
+        "process_access",
+        "BOM_reconciliation"
+      ],
+      "required_human_review_questions": [
+        "Is the station rhythm practical?",
+        "Does the connected base remain manufacturable and serviceable?",
+        "Are all stations reachable without unsafe or awkward handling?"
+      ],
+      "template_boundary": "starting_structure_not_completed_fixture"
+    },
+    {
+      "schema_version": "fxd-fixture-family-template-v1",
+      "template_id": "family-004-assembly-fixture",
+      "name": "Assembly fixture",
+      "authority_level": "fixture_family_template",
+      "revision": "1",
+      "intended_product_family": [
+        "mechanical assemblies requiring controlled relationship during fastening, bonding, or insertion"
+      ],
+      "material_forms": [
+        "fabricated parts",
+        "machined parts",
+        "purchased components"
+      ],
+      "processes": [
+        "mechanical assembly",
+        "fastening",
+        "bonding",
+        "press or slip insertion when separately validated"
+      ],
+      "production_volume_range": {
+        "minimum": 1,
+        "maximum": null,
+        "basis": "Volume and changeover needs determine modularity."
+      },
+      "supported_handling_modes": [
+        "manual",
+        "assisted"
+      ],
+      "expected_datum_opportunities": [
+        "mating features and assembly-critical interfaces"
+      ],
+      "support_strategy": [
+        "support each component through the assembly sequence"
+      ],
+      "locator_strategy": [
+        "locate components without blocking mating motion"
+      ],
+      "stop_strategy": [
+        "use insertion or seating stops only with defined reaction paths"
+      ],
+      "clamp_strategy": [
+        "hold assembled state without masking incomplete seating"
+      ],
+      "base_structure_strategy": [
+        "open frame, plate, or nest arranged around operator and tool access"
+      ],
+      "loading_unloading_model": [
+        "sequence constituent parts, tools, fasteners, release, and completed assembly removal"
+      ],
+      "access_expectations": [
+        "fastener, adhesive, insertion, inspection, and hand access are explicit"
+      ],
+      "manufacturable_construction": [
+        "simple reusable modules and replaceable product contacts"
+      ],
+      "applicable_primitive_categories": [
+        "nests",
+        "stops",
+        "locator blocks",
+        "support pads",
+        "sensor brackets"
+      ],
+      "applicable_purchased_tooling_categories": [
+        "clamps",
+        "press devices",
+        "sensors"
+      ],
+      "process_context_needs": [
+        "operator and assembly-tool envelopes when access is constrained"
+      ],
+      "configuration_parameters": [
+        {
+          "name": "assembly_sequence",
+          "units": "ordered steps",
+          "required": true,
+          "description": "Required constituent-part and tool sequence."
+        }
+      ],
+      "known_failure_modes": [
+        "fixture blocks mating motion",
+        "clamp hides incomplete seating",
+        "finished assembly is trapped"
+      ],
+      "unsupported_conditions": [
+        "unmodeled press force or adhesive process claims"
+      ],
+      "deterministic_validations_required": [
+        "constraint",
+        "assembly_sequence",
+        "collision",
+        "operator_tool_access",
+        "loading_unloading"
+      ],
+      "required_human_review_questions": [
+        "Can each component and tool enter in sequence?",
+        "How is complete seating verified?"
+      ],
+      "template_boundary": "starting_structure_not_completed_fixture"
+    },
+    {
+      "schema_version": "fxd-fixture-family-template-v1",
+      "template_id": "family-005-inspection-fixture",
+      "name": "Inspection fixture",
+      "authority_level": "fixture_family_template",
+      "revision": "1",
+      "intended_product_family": [
+        "parts and assemblies needing repeatable presentation to measurement equipment"
+      ],
+      "material_forms": [
+        "sheet",
+        "plate",
+        "formed",
+        "machined",
+        "fabricated"
+      ],
+      "processes": [
+        "dimensional inspection",
+        "probe or scanner inspection"
+      ],
+      "production_volume_range": {
+        "minimum": 1,
+        "maximum": null,
+        "basis": "Inspection frequency and measurement plan govern fixture effort."
+      },
+      "supported_handling_modes": [
+        "manual",
+        "assisted",
+        "automated when separately validated"
+      ],
+      "expected_datum_opportunities": [
+        "features aligned to an approved inspection datum strategy"
+      ],
+      "support_strategy": [
+        "support without masking required inspection surfaces"
+      ],
+      "locator_strategy": [
+        "make datum simulation and verification authority explicit"
+      ],
+      "stop_strategy": [
+        "prevent wrong orientation without forcing non-datum surfaces"
+      ],
+      "clamp_strategy": [
+        "use only force needed for repeatable seating without measurement distortion"
+      ],
+      "base_structure_strategy": [
+        "stable base with explicit instrument or table interface"
+      ],
+      "loading_unloading_model": [
+        "load, seat, confirm, measure, release, and unload"
+      ],
+      "access_expectations": [
+        "probe, scanner, sight, calibration, and service access remain open"
+      ],
+      "manufacturable_construction": [
+        "stable, serviceable contacts and identifiable inspection features"
+      ],
+      "applicable_primitive_categories": [
+        "rest buttons",
+        "locator pins",
+        "datum blocks",
+        "probe brackets"
+      ],
+      "applicable_purchased_tooling_categories": [
+        "probes",
+        "sensors",
+        "inspection equipment"
+      ],
+      "process_context_needs": [
+        "probe or scanner envelope",
+        "inspection table interface"
+      ],
+      "configuration_parameters": [
+        {
+          "name": "inspection_plan_reference",
+          "units": "identity",
+          "required": true,
+          "description": "Approved measurement-plan identity outside this template."
+        }
+      ],
+      "known_failure_modes": [
+        "fixture contact masks measurement",
+        "clamp distorts product",
+        "build datum is silently treated as inspection datum"
+      ],
+      "unsupported_conditions": [
+        "no approved measurement intent",
+        "automatic pass or fail without metrology evidence"
+      ],
+      "deterministic_validations_required": [
+        "constraint",
+        "probe_access",
+        "contact_exclusion",
+        "loading_unloading",
+        "output_traceability"
+      ],
+      "required_human_review_questions": [
+        "Does the fixture represent the intended datum strategy?",
+        "Could fixture force bias the measurement?",
+        "Are calibration and uncertainty responsibilities explicit?"
+      ],
+      "template_boundary": "starting_structure_not_completed_fixture"
+    },
+    {
+      "schema_version": "fxd-fixture-family-template-v1",
+      "template_id": "family-006-profile-check-fixture",
+      "name": "Profile-check fixture",
+      "authority_level": "fixture_family_template",
+      "revision": "1",
+      "intended_product_family": [
+        "formed or fabricated products reviewed against bounded profile regions"
+      ],
+      "material_forms": [
+        "formed sheet",
+        "bent plate",
+        "fabricated profile"
+      ],
+      "processes": [
+        "profile comparison",
+        "visual and feeler review"
+      ],
+      "production_volume_range": {
+        "minimum": 1,
+        "maximum": null,
+        "basis": "Sampling plan and tolerance intent drive construction."
+      },
+      "supported_handling_modes": [
+        "manual"
+      ],
+      "expected_datum_opportunities": [
+        "approved seating features independent of checked profile"
+      ],
+      "support_strategy": [
+        "support at non-checked regions or explicitly account for contact influence"
+      ],
+      "locator_strategy": [
+        "locate from the approved datum scheme, not the profile being checked"
+      ],
+      "stop_strategy": [
+        "foolproof orientation while leaving check regions visible"
+      ],
+      "clamp_strategy": [
+        "avoid forcing flexible product into a passing shape"
+      ],
+      "base_structure_strategy": [
+        "open plate or frame supporting replaceable profile references"
+      ],
+      "loading_unloading_model": [
+        "load without forcing, seat, compare, record, unload"
+      ],
+      "access_expectations": [
+        "all checked regions and gauges remain visible and reachable"
+      ],
+      "manufacturable_construction": [
+        "replaceable check segments with traceable nominal and allowance basis"
+      ],
+      "applicable_primitive_categories": [
+        "rests",
+        "stops",
+        "replaceable profile blocks"
+      ],
+      "applicable_purchased_tooling_categories": [
+        "feeler gauges",
+        "indicators"
+      ],
+      "process_context_needs": [
+        "operator viewing and gauge access envelopes"
+      ],
+      "configuration_parameters": [
+        {
+          "name": "checked_profile_regions",
+          "units": "stable references",
+          "required": true,
+          "description": "Explicit product regions and tolerance intent."
+        }
+      ],
+      "known_failure_modes": [
+        "fixture forces product to nominal",
+        "checked surface is also used as an uncontrolled locator"
+      ],
+      "unsupported_conditions": [
+        "missing profile tolerance and disposition rule"
+      ],
+      "deterministic_validations_required": [
+        "datum_separation",
+        "contact_exclusion",
+        "gauge_access",
+        "loading_unloading"
+      ],
+      "required_human_review_questions": [
+        "Can the product be evaluated without being forced?",
+        "Are the profile reference and wear strategy maintainable?"
+      ],
+      "template_boundary": "starting_structure_not_completed_fixture"
+    },
+    {
+      "schema_version": "fxd-fixture-family-template-v1",
+      "template_id": "family-007-go-no-go-gauge",
+      "name": "Go/no-go gauge",
+      "authority_level": "fixture_family_template",
+      "revision": "1",
+      "intended_product_family": [
+        "products with an approved attribute suitable for bounded comparative gauging"
+      ],
+      "material_forms": [
+        "machined",
+        "formed",
+        "fabricated"
+      ],
+      "processes": [
+        "comparative acceptance gauging"
+      ],
+      "production_volume_range": {
+        "minimum": 1,
+        "maximum": null,
+        "basis": "Inspection frequency and gauge-control plan determine durability."
+      },
+      "supported_handling_modes": [
+        "manual"
+      ],
+      "expected_datum_opportunities": [
+        "approved gauge datum and controlled characteristic"
+      ],
+      "support_strategy": [
+        "support consistently without influencing the checked condition"
+      ],
+      "locator_strategy": [
+        "use the approved gauge datum definition"
+      ],
+      "stop_strategy": [
+        "separate go and no-go functions visibly"
+      ],
+      "clamp_strategy": [
+        "normally avoid force that can change the gauged condition"
+      ],
+      "base_structure_strategy": [
+        "compact, durable, identified, and calibration-accessible"
+      ],
+      "loading_unloading_model": [
+        "identify gauge, clean, load, evaluate without force, record, unload"
+      ],
+      "access_expectations": [
+        "operator can observe disposition and maintain gauge surfaces"
+      ],
+      "manufacturable_construction": [
+        "wear-resistant replaceable gauge elements where approved"
+      ],
+      "applicable_primitive_categories": [
+        "gauge blocks",
+        "rests",
+        "foolproof stops"
+      ],
+      "applicable_purchased_tooling_categories": [
+        "indicators when used by the approved plan"
+      ],
+      "process_context_needs": [
+        "operator handling envelope"
+      ],
+      "configuration_parameters": [
+        {
+          "name": "gauge_disposition_definition",
+          "units": "approved external requirement",
+          "required": true,
+          "description": "Licensed and approved inspection requirement not embedded by this template."
+        }
+      ],
+      "known_failure_modes": [
+        "operator can force a reject through the go side",
+        "go and no-go identity is ambiguous",
+        "wear invalidates the result"
+      ],
+      "unsupported_conditions": [
+        "no approved gauge design and calibration authority"
+      ],
+      "deterministic_validations_required": [
+        "identity",
+        "wrong_way_loading",
+        "contact_clearance",
+        "maintenance_access"
+      ],
+      "required_human_review_questions": [
+        "Who owns gauge design, calibration, and acceptance?",
+        "Can misuse or excessive force produce a false result?"
+      ],
+      "template_boundary": "starting_structure_not_completed_fixture"
+    },
+    {
+      "schema_version": "fxd-fixture-family-template-v1",
+      "template_id": "family-008-rework-fixture",
+      "name": "Rework fixture",
+      "authority_level": "fixture_family_template",
+      "revision": "1",
+      "intended_product_family": [
+        "nonconforming or service products requiring controlled access to a defined repair"
+      ],
+      "material_forms": [
+        "fabricated assemblies",
+        "machined assemblies"
+      ],
+      "processes": [
+        "repair",
+        "rework",
+        "controlled disassembly"
+      ],
+      "production_volume_range": {
+        "minimum": 1,
+        "maximum": null,
+        "basis": "Expected recurrence and product variability govern reuse."
+      },
+      "supported_handling_modes": [
+        "manual",
+        "assisted"
+      ],
+      "expected_datum_opportunities": [
+        "surviving verified features not compromised by the defect"
+      ],
+      "support_strategy": [
+        "support current product condition without assuming nominal geometry"
+      ],
+      "locator_strategy": [
+        "use repair-relevant datums and allow known variation"
+      ],
+      "stop_strategy": [
+        "avoid relying on damaged or removed features"
+      ],
+      "clamp_strategy": [
+        "hold without worsening the defect or blocking repair"
+      ],
+      "base_structure_strategy": [
+        "adjustable or modular structure with locked and recorded settings"
+      ],
+      "loading_unloading_model": [
+        "identify condition, load, locate, repair, inspect, release, unload"
+      ],
+      "access_expectations": [
+        "repair tools, removed material, inspection, and safe handling are explicit"
+      ],
+      "manufacturable_construction": [
+        "bounded adjustment and replaceable condition-specific contacts"
+      ],
+      "applicable_primitive_categories": [
+        "adjustable supports",
+        "locator towers",
+        "tool access reliefs"
+      ],
+      "applicable_purchased_tooling_categories": [
+        "clamps",
+        "repair tools",
+        "inspection equipment"
+      ],
+      "process_context_needs": [
+        "repair tool and operator envelopes"
+      ],
+      "configuration_parameters": [
+        {
+          "name": "approved_rework_instruction",
+          "units": "identity",
+          "required": true,
+          "description": "External controlled rework instruction."
+        }
+      ],
+      "known_failure_modes": [
+        "fixture assumes nominal product condition",
+        "repair tool access is incomplete",
+        "adjustment is not locked or recorded"
+      ],
+      "unsupported_conditions": [
+        "no approved rework instruction",
+        "unknown product condition that affects safe support"
+      ],
+      "deterministic_validations_required": [
+        "condition_identity",
+        "collision",
+        "repair_access",
+        "loading_unloading",
+        "revision_traceability"
+      ],
+      "required_human_review_questions": [
+        "Does the fixture accommodate the actual nonconforming condition?",
+        "Can repair proceed without creating additional damage?"
+      ],
+      "template_boundary": "starting_structure_not_completed_fixture"
+    },
+    {
+      "schema_version": "fxd-fixture-family-template-v1",
+      "template_id": "family-009-machining-workholding",
+      "name": "Machining and workholding setup",
+      "authority_level": "fixture_family_template",
+      "revision": "1",
+      "intended_product_family": [
+        "parts needing bounded workholding and machine-context fit review"
+      ],
+      "material_forms": [
+        "machined stock",
+        "cast",
+        "fabricated preform"
+      ],
+      "processes": [
+        "machining",
+        "drilling",
+        "milling"
+      ],
+      "production_volume_range": {
+        "minimum": 1,
+        "maximum": null,
+        "basis": "Setup count, cutting plan, and repeatability govern complexity."
+      },
+      "supported_handling_modes": [
+        "manual",
+        "assisted",
+        "automated when separately validated"
+      ],
+      "expected_datum_opportunities": [
+        "machining datums and verified stock surfaces"
+      ],
+      "support_strategy": [
+        "support cutting reactions without hidden overconstraint"
+      ],
+      "locator_strategy": [
+        "align to the approved machining setup datum strategy"
+      ],
+      "stop_strategy": [
+        "provide repeatable loading and orientation"
+      ],
+      "clamp_strategy": [
+        "keep clamps clear of tool paths and direct force into supported regions"
+      ],
+      "base_structure_strategy": [
+        "pallet, vise, table-grid, or custom base interface recorded explicitly"
+      ],
+      "loading_unloading_model": [
+        "load, locate, clamp, verify, machine, release, unload"
+      ],
+      "access_expectations": [
+        "tool, spindle, holder, chips, coolant, probing, doors, and service are considered where relevant"
+      ],
+      "manufacturable_construction": [
+        "standard workholding before avoidable custom machining"
+      ],
+      "applicable_primitive_categories": [
+        "supports",
+        "pins",
+        "stops",
+        "fixture plates"
+      ],
+      "applicable_purchased_tooling_categories": [
+        "vises",
+        "pallets",
+        "clamps",
+        "probes"
+      ],
+      "process_context_needs": [
+        "machine envelope",
+        "table or pallet",
+        "spindle and tool envelope",
+        "door and loading region when constrained"
+      ],
+      "configuration_parameters": [
+        {
+          "name": "machine_context_identity",
+          "units": "asset identity",
+          "required": true,
+          "description": "Exact or explicitly provisional machine context."
+        }
+      ],
+      "known_failure_modes": [
+        "fixture fits nominal table but conflicts with tool or door",
+        "clamp blocks machining",
+        "metadata-only vise is used for exact clearance"
+      ],
+      "unsupported_conditions": [
+        "cutting force or machine safety certification",
+        "missing essential exact machine context"
+      ],
+      "deterministic_validations_required": [
+        "mounting_interface",
+        "constraint",
+        "exact_collision_when_required",
+        "tool_access",
+        "loading_unloading",
+        "chip_service_access"
+      ],
+      "required_human_review_questions": [
+        "Is the workholding compatible with the actual machine and process?",
+        "Are cutting reactions and tool access acceptable?"
+      ],
+      "template_boundary": "starting_structure_not_completed_fixture"
+    },
+    {
+      "schema_version": "fxd-fixture-family-template-v1",
+      "template_id": "family-010-nest",
+      "name": "Product nest",
+      "authority_level": "fixture_family_template",
+      "revision": "1",
+      "intended_product_family": [
+        "parts or assemblies needing repeatable support without necessarily full six-DOF restraint"
+      ],
+      "material_forms": [
+        "formed",
+        "fabricated",
+        "machined"
+      ],
+      "processes": [
+        "handling",
+        "assembly",
+        "inspection",
+        "presentation"
+      ],
+      "production_volume_range": {
+        "minimum": 1,
+        "maximum": null,
+        "basis": "Handling risk and reuse frequency govern durability."
+      },
+      "supported_handling_modes": [
+        "manual",
+        "assisted"
+      ],
+      "expected_datum_opportunities": [
+        "stable non-marring support regions"
+      ],
+      "support_strategy": [
+        "minimum product-specific contacts needed for stable presentation"
+      ],
+      "locator_strategy": [
+        "only the motion required by the task is controlled"
+      ],
+      "stop_strategy": [
+        "orientation and loading cues are explicit"
+      ],
+      "clamp_strategy": [
+        "clamping is optional and separately justified"
+      ],
+      "base_structure_strategy": [
+        "compact plate, frame, or removable insert"
+      ],
+      "loading_unloading_model": [
+        "simple visible entry and lift-out or slide-out path"
+      ],
+      "access_expectations": [
+        "handling and downstream task access remain clear"
+      ],
+      "manufacturable_construction": [
+        "replaceable pads, cut plates, formed or machined inserts as justified"
+      ],
+      "applicable_primitive_categories": [
+        "support pads",
+        "stops",
+        "replaceable blocks"
+      ],
+      "applicable_purchased_tooling_categories": [
+        "handles",
+        "wear pads"
+      ],
+      "process_context_needs": [
+        "only assets needed for the nest task"
+      ],
+      "configuration_parameters": [
+        {
+          "name": "required_restraint",
+          "units": "DOF set",
+          "required": true,
+          "description": "Motion that the nest must and must not control."
+        }
+      ],
+      "known_failure_modes": [
+        "contour copy traps product",
+        "nest overconstrains variation",
+        "wrong orientation is easy"
+      ],
+      "unsupported_conditions": [
+        "unqualified full restraint or lifting claims"
+      ],
+      "deterministic_validations_required": [
+        "stability",
+        "collision",
+        "loading_unloading",
+        "wrong_way_loading"
+      ],
+      "required_human_review_questions": [
+        "Does the nest control only the motion needed?",
+        "Can the product be handled without damage or trapping?"
+      ],
+      "template_boundary": "starting_structure_not_completed_fixture"
+    },
+    {
+      "schema_version": "fxd-fixture-family-template-v1",
+      "template_id": "family-011-combined-build-check",
+      "name": "Combined build-and-check tooling",
+      "authority_level": "fixture_family_template",
+      "revision": "1",
+      "intended_product_family": [
+        "assemblies where selected in-process checks are intentionally integrated with build tooling"
+      ],
+      "material_forms": [
+        "sheet",
+        "plate",
+        "tube",
+        "machined components"
+      ],
+      "processes": [
+        "assembly or welding",
+        "in-process inspection"
+      ],
+      "production_volume_range": {
+        "minimum": 1,
+        "maximum": null,
+        "basis": "Integration is justified only when it improves flow without destroying inspection independence."
+      },
+      "supported_handling_modes": [
+        "manual",
+        "assisted"
+      ],
+      "expected_datum_opportunities": [
+        "separately identified build and inspection datum relationships"
+      ],
+      "support_strategy": [
+        "build supports do not silently become measurement references"
+      ],
+      "locator_strategy": [
+        "each contact declares build, inspection, or shared role with justification"
+      ],
+      "stop_strategy": [
+        "loading stops remain distinct from acceptance features"
+      ],
+      "clamp_strategy": [
+        "inspection occurs in a declared clamp state and distortion risk is reviewed"
+      ],
+      "base_structure_strategy": [
+        "stable open structure supporting process and measurement access"
+      ],
+      "loading_unloading_model": [
+        "load, build, reach declared check state, inspect, release, unload"
+      ],
+      "access_expectations": [
+        "process and inspection equipment can reach without mutual interference"
+      ],
+      "manufacturable_construction": [
+        "replaceable and traceable inspection features separated from general fixture wear"
+      ],
+      "applicable_primitive_categories": [
+        "supports",
+        "locators",
+        "check blocks",
+        "sensor or probe brackets"
+      ],
+      "applicable_purchased_tooling_categories": [
+        "clamps",
+        "indicators",
+        "probes",
+        "sensors"
+      ],
+      "process_context_needs": [
+        "process tool envelope",
+        "inspection probe or scanner envelope"
+      ],
+      "configuration_parameters": [
+        {
+          "name": "inspection_state",
+          "units": "fixture state identity",
+          "required": true,
+          "description": "Exact fixture and clamp state in which inspection evidence is valid."
+        }
+      ],
+      "known_failure_modes": [
+        "fixture forces product into a passing condition",
+        "inspection and build roles are conflated",
+        "process debris invalidates check features"
+      ],
+      "unsupported_conditions": [
+        "automatic acceptance without approved measurement authority"
+      ],
+      "deterministic_validations_required": [
+        "role_separation",
+        "constraint",
+        "process_access",
+        "inspection_access",
+        "state_freshness",
+        "output_traceability"
+      ],
+      "required_human_review_questions": [
+        "Is the check independent enough to be meaningful?",
+        "Does clamp or process state bias the result?",
+        "How are check features calibrated and maintained?"
+      ],
+      "template_boundary": "starting_structure_not_completed_fixture"
+    }
+  ]
+}

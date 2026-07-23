@@ -1,0 +1,171 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fxd.invalid/research/shop_standard_pack_v1.schema.json",
+  "title": "FXD shop standard pack v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "pack_id",
+    "revision",
+    "authority_level",
+    "scope",
+    "precedence_level",
+    "source_records",
+    "values",
+    "conflicts",
+    "effective_provenance",
+    "human_approval_required"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "fxd-shop-standard-pack-v1"
+    },
+    "pack_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "revision": {
+      "type": "string",
+      "minLength": 1
+    },
+    "authority_level": {
+      "const": "shop_standard"
+    },
+    "scope": {
+      "enum": [
+        "fxd_default",
+        "organization",
+        "shop",
+        "machine_process",
+        "project",
+        "engineer_decision"
+      ]
+    },
+    "precedence_level": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 6
+    },
+    "source_records": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
+    },
+    "values": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "available_materials",
+        "plate_thicknesses_mm",
+        "structural_stock",
+        "hole_slot_sizes_mm",
+        "fasteners",
+        "tab_slot_clearances_mm",
+        "process_allowances_mm",
+        "clamp_preferences",
+        "support_locator_styles",
+        "finish_conventions",
+        "marking_conventions",
+        "reuse_preferences",
+        "cost_volume_preferences"
+      ],
+      "properties": {
+        "available_materials": {
+          "$ref": "#/$defs/string_array"
+        },
+        "plate_thicknesses_mm": {
+          "$ref": "#/$defs/number_array"
+        },
+        "structural_stock": {
+          "$ref": "#/$defs/string_array"
+        },
+        "hole_slot_sizes_mm": {
+          "$ref": "#/$defs/number_array"
+        },
+        "fasteners": {
+          "$ref": "#/$defs/string_array"
+        },
+        "tab_slot_clearances_mm": {
+          "$ref": "#/$defs/number_array"
+        },
+        "process_allowances_mm": {
+          "$ref": "#/$defs/number_array"
+        },
+        "clamp_preferences": {
+          "$ref": "#/$defs/string_array"
+        },
+        "support_locator_styles": {
+          "$ref": "#/$defs/string_array"
+        },
+        "finish_conventions": {
+          "$ref": "#/$defs/string_array"
+        },
+        "marking_conventions": {
+          "$ref": "#/$defs/string_array"
+        },
+        "reuse_preferences": {
+          "$ref": "#/$defs/string_array"
+        },
+        "cost_volume_preferences": {
+          "$ref": "#/$defs/string_array"
+        }
+      }
+    },
+    "conflicts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "field",
+          "lower_precedence_value",
+          "effective_value",
+          "resolution"
+        ],
+        "properties": {
+          "field": {
+            "type": "string"
+          },
+          "lower_precedence_value": {},
+          "effective_value": {},
+          "resolution": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "effective_provenance": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      }
+    },
+    "human_approval_required": {
+      "type": "boolean"
+    }
+  },
+  "$defs": {
+    "string_array": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
+    },
+    "number_array": {
+      "type": "array",
+      "items": {
+        "type": "number"
+      },
+      "uniqueItems": true
+    }
+  }
+}

@@ -1,0 +1,659 @@
+{
+  "schema_version": "fxd-fixture-library-component-patterns-v1",
+  "research_only": true,
+  "records": [
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "component-pattern-001-support-pad",
+      "name": "Product-bound support pad",
+      "record_type": "component_application",
+      "category": "fxd_standard_parametric_primitive",
+      "authority_level": "fxd_parametric_component",
+      "revision": "1",
+      "units": "mm",
+      "privacy_classification": "public",
+      "summary": "Apply a discrete support pad at a verified stable product region and assign its datum, auxiliary, or clamp-reaction role explicitly.",
+      "source_ids": [
+        "fixtureworks-components",
+        "jergens-fixturing-components"
+      ],
+      "applicability": [
+        "sheet",
+        "plate",
+        "tube",
+        "fabricated assemblies"
+      ],
+      "limitations": [
+        "contact suitability and height require project geometry"
+      ],
+      "engineering_details": {
+        "required_inputs": [
+          "product reference",
+          "support direction",
+          "contact allowance",
+          "wear intent"
+        ],
+        "reject_when": [
+          "support is under an unstable or forbidden region",
+          "clamp load has no reaction path"
+        ]
+      }
+    },
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "component-pattern-002-round-locator-pin",
+      "name": "Round locator pin",
+      "record_type": "component_application",
+      "category": "fxd_standard_parametric_primitive",
+      "authority_level": "fxd_parametric_component",
+      "revision": "1",
+      "units": "mm",
+      "privacy_classification": "public",
+      "summary": "Use a round pin only where verified hole geometry, fit intent, insertion direction, wear, and controlled degrees of freedom are explicit.",
+      "source_ids": [
+        "carr-lane-fixture-design-principles",
+        "jergens-fixturing-components"
+      ],
+      "applicability": [
+        "verified locating holes"
+      ],
+      "limitations": [
+        "diameter, fit, bushing, and tolerance are project-specific"
+      ],
+      "engineering_details": {
+        "required_inputs": [
+          "hole identity",
+          "nominal axis",
+          "fit class intent",
+          "insertion clearance"
+        ],
+        "reject_when": [
+          "hole authority is provisional",
+          "two round pins redundantly constrain variation"
+        ]
+      }
+    },
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "component-pattern-003-relieved-locator",
+      "name": "Relieved or directional locator",
+      "record_type": "component_application",
+      "category": "fxd_standard_parametric_primitive",
+      "authority_level": "fxd_parametric_component",
+      "revision": "1",
+      "units": "mm",
+      "privacy_classification": "public",
+      "summary": "Use a relieved contact to control the intended direction while allowing variation or thermal movement in the orthogonal direction.",
+      "source_ids": [
+        "carr-lane-fixture-design-principles"
+      ],
+      "applicability": [
+        "secondary location with known variation direction"
+      ],
+      "limitations": [
+        "relief orientation and contact width require deterministic evidence"
+      ],
+      "engineering_details": {
+        "required_inputs": [
+          "controlled direction",
+          "floating direction",
+          "contact normal"
+        ],
+        "reject_when": [
+          "relief direction contradicts datum intent"
+        ]
+      }
+    },
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "component-pattern-004-hard-stop",
+      "name": "Replaceable hard stop",
+      "record_type": "component_application",
+      "category": "fxd_standard_parametric_primitive",
+      "authority_level": "fxd_parametric_component",
+      "revision": "1",
+      "units": "mm",
+      "privacy_classification": "public",
+      "summary": "Apply a stop against a verified product feature with clear approach, seating, unload, adjustment, and wear-replacement behavior.",
+      "source_ids": [
+        "fixtureworks-components"
+      ],
+      "applicability": [
+        "tertiary location",
+        "end location",
+        "loading stop"
+      ],
+      "limitations": [
+        "a stop is not automatically a clamp or support"
+      ],
+      "engineering_details": {
+        "required_inputs": [
+          "contact feature",
+          "stop direction",
+          "replacement interface"
+        ],
+        "reject_when": [
+          "stop traps finished product",
+          "stop receives unsupported clamp load"
+        ]
+      }
+    },
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "component-pattern-005-rest-button",
+      "name": "Serviceable rest button",
+      "record_type": "component_application",
+      "category": "fxd_standard_parametric_primitive",
+      "authority_level": "fxd_parametric_component",
+      "revision": "1",
+      "units": "mm",
+      "privacy_classification": "public",
+      "summary": "Use a compact rest button when a small serviceable contact is preferable to a broad contour-matched support.",
+      "source_ids": [
+        "fixtureworks-components",
+        "jergens-fixturing-components"
+      ],
+      "applicability": [
+        "localized support and wear contacts"
+      ],
+      "limitations": [
+        "contact stress and surface marking require review"
+      ],
+      "engineering_details": {
+        "required_inputs": [
+          "contact diameter intent",
+          "replacement access",
+          "reaction load direction"
+        ],
+        "reject_when": [
+          "contact area is insufficient or damages the product"
+        ]
+      }
+    },
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "component-pattern-006-laser-cut-riser",
+      "name": "Laser-cut tab-and-slot riser",
+      "record_type": "component_application",
+      "category": "fxd_standard_parametric_primitive",
+      "authority_level": "fxd_parametric_component",
+      "revision": "1",
+      "units": "mm",
+      "privacy_classification": "public",
+      "summary": "Use a plate riser with explicit material, thickness, slot partner, engagement, clearance, insertion direction, weld relief, and sequence.",
+      "source_ids": [
+        "json-schema-2020-12"
+      ],
+      "applicability": [
+        "laser-cut fabricated fixture structure"
+      ],
+      "limitations": [
+        "shop process allowances must be supplied and retained"
+      ],
+      "engineering_details": {
+        "required_inputs": [
+          "plate thickness",
+          "tab partner",
+          "clearance source",
+          "weld access"
+        ],
+        "reject_when": [
+          "assembly direction is impossible",
+          "slot evidence conflicts with thickness"
+        ]
+      }
+    },
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "component-pattern-007-clamp-bracket",
+      "name": "Clamp bracket with reaction evidence",
+      "record_type": "component_application",
+      "category": "fxd_standard_parametric_primitive",
+      "authority_level": "fxd_parametric_component",
+      "revision": "1",
+      "units": "mm",
+      "privacy_classification": "public",
+      "summary": "A clamp bracket binds the commercial clamp mounting interface to the fixture structure and records the product contact and reaction path separately.",
+      "source_ids": [
+        "destaco-welding-applications"
+      ],
+      "applicability": [
+        "manual, pneumatic, or hydraulic clamp mounting"
+      ],
+      "limitations": [
+        "bracket geometry does not validate the selected clamp or fixture strength"
+      ],
+      "engineering_details": {
+        "required_inputs": [
+          "clamp mounting interface",
+          "structural parent",
+          "working direction",
+          "reaction support"
+        ],
+        "reject_when": [
+          "mounting pattern is metadata-only",
+          "bracket blocks access"
+        ]
+      }
+    },
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "component-pattern-008-gusset",
+      "name": "Access-aware gusset",
+      "record_type": "component_application",
+      "category": "fxd_standard_parametric_primitive",
+      "authority_level": "fxd_parametric_component",
+      "revision": "1",
+      "units": "mm",
+      "privacy_classification": "public",
+      "summary": "Use a gusset only where it connects named parents and stays clear of product loading, tools, welds, inspection, and service corridors.",
+      "source_ids": [
+        "strong-hand-modular-table"
+      ],
+      "applicability": [
+        "fabricated plate and rail structures"
+      ],
+      "limitations": [
+        "presence of a gusset does not establish structural adequacy"
+      ],
+      "engineering_details": {
+        "required_inputs": [
+          "connected parent identities",
+          "access corridors",
+          "manufacturing method"
+        ],
+        "reject_when": [
+          "gusset is disconnected or decorative",
+          "gusset obstructs required access"
+        ]
+      }
+    },
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "component-pattern-009-base-rail",
+      "name": "Mounted base rail",
+      "record_type": "component_application",
+      "category": "fxd_standard_parametric_primitive",
+      "authority_level": "fxd_parametric_component",
+      "revision": "1",
+      "units": "mm",
+      "privacy_classification": "public",
+      "summary": "A base rail carries explicit section, end, parent, mounting, connection, and service interfaces rather than serving as an unqualified visual spine.",
+      "source_ids": [
+        "demmeler-welding-tables",
+        "strong-hand-modular-table"
+      ],
+      "applicability": [
+        "welded frames and modular bases"
+      ],
+      "limitations": [
+        "stock availability and section selection are shop and project inputs"
+      ],
+      "engineering_details": {
+        "required_inputs": [
+          "stock family",
+          "mounting interfaces",
+          "connection strategy"
+        ],
+        "reject_when": [
+          "stations lack a parent path",
+          "mounting is only implied"
+        ]
+      }
+    },
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "component-pattern-010-baseplate",
+      "name": "Fixture baseplate",
+      "record_type": "component_application",
+      "category": "fxd_standard_parametric_primitive",
+      "authority_level": "fxd_parametric_component",
+      "revision": "1",
+      "units": "mm",
+      "privacy_classification": "public",
+      "summary": "A baseplate records material, thickness, profile, mounting, lifting, drainage or cleaning, datum, and downstream DXF participation.",
+      "source_ids": [
+        "demmeler-welding-tables"
+      ],
+      "applicability": [
+        "flat-base fixtures",
+        "inspection nests",
+        "small workholding"
+      ],
+      "limitations": [
+        "thickness and flatness are not universal defaults"
+      ],
+      "engineering_details": {
+        "required_inputs": [
+          "plate source",
+          "thickness",
+          "mounting plan",
+          "manufacturing profile"
+        ],
+        "reject_when": [
+          "profile conflicts with loading or machine envelope"
+        ]
+      }
+    },
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "component-pattern-011-mounting-foot",
+      "name": "Replaceable mounting foot",
+      "record_type": "component_application",
+      "category": "fxd_standard_parametric_primitive",
+      "authority_level": "fxd_parametric_component",
+      "revision": "1",
+      "units": "mm",
+      "privacy_classification": "public",
+      "summary": "Use a mounting foot to expose table contact, fastener, leveling, replacement, and maintenance interfaces independently of the main frame.",
+      "source_ids": [
+        "strong-hand-modular-table"
+      ],
+      "applicability": [
+        "table-mounted and floor-supported fixtures"
+      ],
+      "limitations": [
+        "anchoring and load suitability require qualified review"
+      ],
+      "engineering_details": {
+        "required_inputs": [
+          "mating surface",
+          "fastener intent",
+          "leveling intent"
+        ],
+        "reject_when": [
+          "foot floats without a mating definition"
+        ]
+      }
+    },
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "component-pattern-012-bridge-member",
+      "name": "Removable bridge member",
+      "record_type": "component_application",
+      "category": "fxd_standard_parametric_primitive",
+      "authority_level": "fxd_parametric_component",
+      "revision": "1",
+      "units": "mm",
+      "privacy_classification": "public",
+      "summary": "A bridge member spans structure only when its installation, removal, process access, product release, and connected interfaces are explicit.",
+      "source_ids": [
+        "osha-machine-guarding"
+      ],
+      "applicability": [
+        "fixtures needing overhead or cross-frame support"
+      ],
+      "limitations": [
+        "bridge removal can create stale alignment and validation evidence"
+      ],
+      "engineering_details": {
+        "required_inputs": [
+          "mating interfaces",
+          "removal sequence",
+          "access states"
+        ],
+        "reject_when": [
+          "bridge traps the product",
+          "bridge blocks tool approach"
+        ]
+      }
+    },
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "component-pattern-013-locator-block",
+      "name": "Shimmed locator block",
+      "record_type": "component_application",
+      "category": "fxd_standard_parametric_primitive",
+      "authority_level": "fxd_parametric_component",
+      "revision": "1",
+      "units": "mm",
+      "privacy_classification": "public",
+      "summary": "A locator block records its datum contact, pinned or keyed parent interface, shim stack, adjustment limits, and prove-out state.",
+      "source_ids": [
+        "jergens-fixturing-components"
+      ],
+      "applicability": [
+        "adjustable and serviceable locating"
+      ],
+      "limitations": [
+        "shim values and fit require measurement"
+      ],
+      "engineering_details": {
+        "required_inputs": [
+          "datum contact",
+          "parent locating interface",
+          "shim evidence"
+        ],
+        "reject_when": [
+          "adjustment is unlocked or untraceable"
+        ]
+      }
+    },
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "component-pattern-014-generic-review-clamp",
+      "name": "Generic review clamp envelope",
+      "record_type": "component_application",
+      "category": "private_purchased_tooling",
+      "authority_level": "provisional_review_envelope",
+      "revision": "1",
+      "units": "mm",
+      "privacy_classification": "public",
+      "summary": "Represent an unresolved commercial clamp with clearly provisional body, handle, arm, and open-closed envelopes plus a metadata-only mounting intent.",
+      "source_ids": [
+        "destaco-welding-applications"
+      ],
+      "applicability": [
+        "concept review before exact tooling selection"
+      ],
+      "limitations": [
+        "excluded from exact collision, BOM part identity, STEP release, and manufacturing claims"
+      ],
+      "engineering_details": {
+        "required_inputs": [
+          "provisional state envelopes",
+          "contact role",
+          "selection unresolved question"
+        ],
+        "reject_when": [
+          "shown or exported as exact supplier geometry"
+        ]
+      }
+    },
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "component-pattern-015-wear-shim-pack",
+      "name": "Wear and shim pack",
+      "record_type": "component_application",
+      "category": "fxd_standard_parametric_primitive",
+      "authority_level": "fxd_parametric_component",
+      "revision": "1",
+      "units": "mm",
+      "privacy_classification": "public",
+      "summary": "Track wear plates and shim packs as individually revisioned BOM items with installed state, service access, and measurement provenance.",
+      "source_ids": [
+        "fixtureworks-components"
+      ],
+      "applicability": [
+        "serviceable contacts and prove-out"
+      ],
+      "limitations": [
+        "installed thickness must be measured or explicitly assumed"
+      ],
+      "engineering_details": {
+        "required_inputs": [
+          "installed stack",
+          "parent interface",
+          "replacement interval intent"
+        ],
+        "reject_when": [
+          "stack is omitted from geometry or BOM evidence"
+        ]
+      }
+    },
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "component-pattern-016-user-clamp-stand",
+      "name": "User-authored clamp stand",
+      "record_type": "component_application",
+      "category": "user_created_reusable_component",
+      "authority_level": "user_authored_reusable_component",
+      "revision": "1",
+      "units": "mm",
+      "privacy_classification": "private_local",
+      "summary": "A reusable clamp stand preserves its authored feature history, table or frame mount, commercial clamp mount, access envelope, and replacement classes.",
+      "source_ids": [
+        "occt-application-framework"
+      ],
+      "applicability": [
+        "private shop reusable components"
+      ],
+      "limitations": [
+        "private geometry and shop dimensions remain outside the public repository"
+      ],
+      "engineering_details": {
+        "required_inputs": [
+          "author",
+          "revision",
+          "mounting interfaces",
+          "privacy policy"
+        ],
+        "reject_when": [
+          "private source is embedded in public data"
+        ]
+      }
+    },
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "component-pattern-017-user-locator-tower",
+      "name": "User-authored locator tower",
+      "record_type": "component_application",
+      "category": "user_created_reusable_component",
+      "authority_level": "user_authored_reusable_component",
+      "revision": "1",
+      "units": "mm",
+      "privacy_classification": "private_local",
+      "summary": "A reusable locator tower separates its base mount, vertical structure, replaceable locator interface, adjustment range, and product contact evidence.",
+      "source_ids": [
+        "occt-application-framework",
+        "jergens-fixturing-components"
+      ],
+      "applicability": [
+        "private shop fixture modules"
+      ],
+      "limitations": [
+        "placement and datum suitability do not transfer across projects"
+      ],
+      "engineering_details": {
+        "required_inputs": [
+          "base interface",
+          "locator interface",
+          "adjustment and lock states"
+        ],
+        "reject_when": [
+          "tower revision silently changes an existing project"
+        ]
+      }
+    },
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "component-pattern-018-user-removable-nest",
+      "name": "User-authored removable nest",
+      "record_type": "component_application",
+      "category": "user_created_reusable_component",
+      "authority_level": "user_authored_reusable_component",
+      "revision": "1",
+      "units": "mm",
+      "privacy_classification": "private_local",
+      "summary": "A removable nest packages stable base mounting, product contacts, orientation cues, lifting or handling, and changeover validation triggers.",
+      "source_ids": [
+        "occt-xde-guide"
+      ],
+      "applicability": [
+        "family fixtures and changeover tooling"
+      ],
+      "limitations": [
+        "product-specific contacts may prevent reuse without explicit migration"
+      ],
+      "engineering_details": {
+        "required_inputs": [
+          "base datum interface",
+          "product interfaces",
+          "changeover sequence"
+        ],
+        "reject_when": [
+          "wrong nest can be installed without detection"
+        ]
+      }
+    },
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "component-pattern-019-commercial-metadata",
+      "name": "Metadata-only commercial component",
+      "record_type": "component_application",
+      "category": "private_purchased_tooling",
+      "authority_level": "metadata_only_commercial_component",
+      "revision": "1",
+      "units": "unitless",
+      "privacy_classification": "public",
+      "summary": "Store supplier, model, sourcing link, interface intent, and engineer confirmation without inventing or redistributing exact geometry.",
+      "source_ids": [
+        "destaco-welding-applications",
+        "fixtureworks-components"
+      ],
+      "applicability": [
+        "commercial clamps",
+        "pins",
+        "cylinders",
+        "sensors"
+      ],
+      "limitations": [
+        "excluded from exact collision, STEP, DXF, and release geometry"
+      ],
+      "engineering_details": {
+        "required_inputs": [
+          "supplier identity",
+          "model identity",
+          "source URL",
+          "licensing note"
+        ],
+        "reject_when": [
+          "metadata is treated as an exact interface without confirmation"
+        ]
+      }
+    },
+    {
+      "schema_version": "fxd-fixture-library-item-v1",
+      "item_id": "component-pattern-020-supplier-authorized-exact",
+      "name": "Supplier-authorized exact tooling",
+      "record_type": "component_application",
+      "category": "private_purchased_tooling",
+      "authority_level": "supplier_authorized_exact_cad",
+      "revision": "1",
+      "units": "mm",
+      "privacy_classification": "supplier_restricted",
+      "summary": "Use exact supplier geometry only when the source, license, revision, SHA-256, storage policy, and permitted outputs are recorded and honored.",
+      "source_ids": [
+        "destaco-welding-applications"
+      ],
+      "applicability": [
+        "authorized exact tooling imports"
+      ],
+      "limitations": [
+        "supplier authorization does not prove application suitability or permit public redistribution"
+      ],
+      "engineering_details": {
+        "required_inputs": [
+          "authorized file identity",
+          "SHA-256",
+          "license",
+          "supplier revision"
+        ],
+        "reject_when": [
+          "license or revision is unknown",
+          "file is proposed for public commit"
+        ]
+      }
+    }
+  ]
+}

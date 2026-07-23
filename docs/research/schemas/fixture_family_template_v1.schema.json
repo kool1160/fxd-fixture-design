@@ -1,0 +1,188 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fxd.invalid/research/fixture_family_template_v1.schema.json",
+  "title": "FXD fixture family template v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "template_id",
+    "name",
+    "authority_level",
+    "revision",
+    "intended_product_family",
+    "material_forms",
+    "processes",
+    "production_volume_range",
+    "supported_handling_modes",
+    "expected_datum_opportunities",
+    "support_strategy",
+    "locator_strategy",
+    "stop_strategy",
+    "clamp_strategy",
+    "base_structure_strategy",
+    "loading_unloading_model",
+    "access_expectations",
+    "manufacturable_construction",
+    "applicable_primitive_categories",
+    "applicable_purchased_tooling_categories",
+    "process_context_needs",
+    "configuration_parameters",
+    "known_failure_modes",
+    "unsupported_conditions",
+    "deterministic_validations_required",
+    "required_human_review_questions",
+    "template_boundary"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "fxd-fixture-family-template-v1"
+    },
+    "template_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]*$"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "authority_level": {
+      "const": "fixture_family_template"
+    },
+    "revision": {
+      "type": "string",
+      "minLength": 1
+    },
+    "intended_product_family": {
+      "$ref": "#/$defs/string_array"
+    },
+    "material_forms": {
+      "$ref": "#/$defs/string_array"
+    },
+    "processes": {
+      "$ref": "#/$defs/string_array"
+    },
+    "production_volume_range": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "minimum",
+        "maximum",
+        "basis"
+      ],
+      "properties": {
+        "minimum": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "maximum": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "basis": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "supported_handling_modes": {
+      "$ref": "#/$defs/string_array"
+    },
+    "expected_datum_opportunities": {
+      "$ref": "#/$defs/string_array"
+    },
+    "support_strategy": {
+      "$ref": "#/$defs/string_array"
+    },
+    "locator_strategy": {
+      "$ref": "#/$defs/string_array"
+    },
+    "stop_strategy": {
+      "$ref": "#/$defs/string_array"
+    },
+    "clamp_strategy": {
+      "$ref": "#/$defs/string_array"
+    },
+    "base_structure_strategy": {
+      "$ref": "#/$defs/string_array"
+    },
+    "loading_unloading_model": {
+      "$ref": "#/$defs/string_array"
+    },
+    "access_expectations": {
+      "$ref": "#/$defs/string_array"
+    },
+    "manufacturable_construction": {
+      "$ref": "#/$defs/string_array"
+    },
+    "applicable_primitive_categories": {
+      "$ref": "#/$defs/string_array"
+    },
+    "applicable_purchased_tooling_categories": {
+      "$ref": "#/$defs/string_array"
+    },
+    "process_context_needs": {
+      "$ref": "#/$defs/string_array"
+    },
+    "configuration_parameters": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "units",
+          "required",
+          "description"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "units": {
+            "type": "string",
+            "minLength": 1
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "minItems": 1
+    },
+    "known_failure_modes": {
+      "$ref": "#/$defs/string_array"
+    },
+    "unsupported_conditions": {
+      "$ref": "#/$defs/string_array"
+    },
+    "deterministic_validations_required": {
+      "$ref": "#/$defs/string_array"
+    },
+    "required_human_review_questions": {
+      "$ref": "#/$defs/string_array"
+    },
+    "template_boundary": {
+      "const": "starting_structure_not_completed_fixture"
+    }
+  },
+  "$defs": {
+    "string_array": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "minItems": 1,
+      "uniqueItems": true
+    }
+  }
+}

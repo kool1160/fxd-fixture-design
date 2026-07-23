@@ -1,0 +1,126 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fxd.invalid/research/functional_interface_v1.schema.json",
+  "title": "FXD functional interface v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "interface_id",
+    "interface_type",
+    "role",
+    "frame_id",
+    "direction",
+    "geometry",
+    "movement_state",
+    "permissible_contact",
+    "dependent_validation_packs"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "fxd-functional-interface-v1"
+    },
+    "interface_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "interface_type": {
+      "enum": [
+        "clamp_contact",
+        "locator_contact",
+        "support_contact",
+        "stop_contact",
+        "torch_tip",
+        "robot_tcp",
+        "probe_point",
+        "sensor_field",
+        "load_direction",
+        "unload_direction",
+        "maintenance_access"
+      ]
+    },
+    "role": {
+      "type": "string",
+      "minLength": 1
+    },
+    "frame_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "direction": {
+      "$ref": "#/$defs/vector3"
+    },
+    "geometry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "values",
+        "units"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "point",
+            "axis",
+            "plane",
+            "region"
+          ]
+        },
+        "values": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 3
+        },
+        "units": {
+          "enum": [
+            "mm",
+            "unitless"
+          ]
+        }
+      }
+    },
+    "movement_state": {
+      "type": "string",
+      "minLength": 1
+    },
+    "permissible_contact": {
+      "enum": [
+        "required",
+        "permitted",
+        "forbidden",
+        "not_applicable",
+        "human_confirmation_required"
+      ]
+    },
+    "dependent_validation_packs": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
+    }
+  },
+  "$defs": {
+    "vector3": {
+      "type": "array",
+      "prefixItems": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "number"
+        }
+      ],
+      "items": false,
+      "minItems": 3,
+      "maxItems": 3
+    }
+  }
+}

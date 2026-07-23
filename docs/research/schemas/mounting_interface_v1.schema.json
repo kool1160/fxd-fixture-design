@@ -1,0 +1,170 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fxd.invalid/research/mounting_interface_v1.schema.json",
+  "title": "FXD mounting interface v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "interface_id",
+    "interface_type",
+    "frame_id",
+    "origin_mm",
+    "axes",
+    "feature_identities",
+    "fastener_intent",
+    "mating_authority",
+    "tolerance_clearance_intent",
+    "allowed_replacement_classes"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "fxd-mounting-interface-v1"
+    },
+    "interface_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "interface_type": {
+      "enum": [
+        "face_mount",
+        "hole_pattern",
+        "slot_pattern",
+        "pin_and_bushing",
+        "rail_mount",
+        "weld_mount",
+        "table_grid_mount",
+        "custom_datum_frame"
+      ]
+    },
+    "frame_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "origin_mm": {
+      "$ref": "#/$defs/vector3"
+    },
+    "axes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "x",
+        "y",
+        "z"
+      ],
+      "properties": {
+        "x": {
+          "$ref": "#/$defs/vector3"
+        },
+        "y": {
+          "$ref": "#/$defs/vector3"
+        },
+        "z": {
+          "$ref": "#/$defs/vector3"
+        }
+      }
+    },
+    "feature_identities": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
+    },
+    "fastener_intent": {
+      "type": "string",
+      "minLength": 1
+    },
+    "mating_authority": {
+      "$ref": "#/$defs/authority"
+    },
+    "tolerance_clearance_intent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "classification",
+        "nominal_mm",
+        "plus_mm",
+        "minus_mm",
+        "human_confirmation_required"
+      ],
+      "properties": {
+        "classification": {
+          "enum": [
+            "nominal",
+            "clearance",
+            "transition",
+            "interference",
+            "weld_fitup",
+            "shop_defined",
+            "unknown"
+          ]
+        },
+        "nominal_mm": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "plus_mm": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "minus_mm": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "human_confirmation_required": {
+          "type": "boolean"
+        }
+      }
+    },
+    "allowed_replacement_classes": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
+    }
+  },
+  "$defs": {
+    "vector3": {
+      "type": "array",
+      "prefixItems": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "number"
+        }
+      ],
+      "items": false,
+      "minItems": 3,
+      "maxItems": 3
+    },
+    "authority": {
+      "enum": [
+        "fxd_parametric_component",
+        "exact_private_imported_cad",
+        "supplier_authorized_exact_cad",
+        "metadata_only_commercial_component",
+        "provisional_review_envelope",
+        "user_authored_reusable_component",
+        "fixture_family_template",
+        "shop_standard",
+        "process_context_asset",
+        "private_benchmark_reference",
+        "public_engineering_knowledge"
+      ]
+    }
+  }
+}
