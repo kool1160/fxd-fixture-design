@@ -1,5 +1,18 @@
 # Milestone 32 Multi-Station Weld Fixture Synthesis
 
+## Feature-bound reconstruction
+
+The current M32 implementation requires exact imported OCP product-feature
+bindings and qualifies one complete station before repeated authoring. The
+repair evidence, resource reconciliation, two failed-review response, and
+remaining human boundary are recorded in
+`docs/engineering-reviews/M32_FEATURE_BOUND_RECONSTRUCTION.md`.
+
+Arbitrary sorted-face selection and percentage-of-product-AABB contacts are not
+permitted. Supports, locator and stop planes, cylindrical pin axes and radii,
+clamp contacts, projected reaction supports, mounting interfaces, and access
+evidence are validated against the current immutable product geometry.
+
 ## Supported family and boundary
 
 Milestone 32 supports exactly one deterministic fixture family:

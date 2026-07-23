@@ -443,6 +443,48 @@ def _bounds(points: tuple[tuple[float, float, float], ...]) -> Aabb:
     )
 
 
+def _normalized_face(face: object, mesh: object) -> Face:
+    """Preserve exact OCP feature evidence in the CAD-neutral product model."""
+    vertices = tuple(getattr(mesh, "vertices_mm"))
+    triangles = tuple(getattr(mesh, "triangles"))
+    payload = repr((str(getattr(face, "reference")), vertices, triangles)).encode("utf-8")
+    axis_origin = getattr(face, "axis_origin_mm", None)
+    axis_direction = getattr(face, "axis_direction", None)
+    return Face(
+        str(getattr(face, "reference")),
+        Vec3(*getattr(face, "center_mm")),
+        Vec3(*getattr(face, "normal")),
+        float(getattr(face, "area_mm2")),
+        str(getattr(face, "surface_type", "unknown")),
+        bool(getattr(face, "is_planar", False)),
+        _bounds(vertices),
+        Vec3(*axis_origin) if axis_origin is not None else None,
+        Vec3(*axis_direction) if axis_direction is not None else None,
+        float(getattr(face, "radius_mm")) if getattr(face, "radius_mm", None) is not None else None,
+        sha256(payload).hexdigest(),
+        _interior_mesh_points(vertices, triangles),
+    )
+
+
+def _interior_mesh_points(
+    vertices: tuple[tuple[float, float, float], ...],
+    triangles: tuple[tuple[int, int, int], ...],
+) -> tuple[Vec3, ...]:
+    """Return stable points proven to lie inside tessellated face triangles."""
+    candidates: list[tuple[float, float, float]] = []
+    weights = ((1 / 3, 1 / 3, 1 / 3), (0.6, 0.2, 0.2),
+               (0.2, 0.6, 0.2), (0.2, 0.2, 0.6))
+    for triangle in triangles:
+        points = tuple(vertices[index] for index in triangle)
+        for barycentric in weights:
+            candidates.append(tuple(
+                round(sum(barycentric[index] * points[index][axis] for index in range(3)), 9)
+                for axis in range(3)
+            ))
+    unique = tuple(sorted(set(candidates)))
+    return tuple(Vec3(*point) for point in unique)
+
+
 def product_from_workbench_document(document: WorkbenchDocument) -> ProductModel:
     """Create a neutral product only from real OCP identities and vertices."""
     mesh_by_face = {mesh.face_reference: mesh for mesh in document.meshes}
@@ -457,7 +499,12 @@ def product_from_workbench_document(document: WorkbenchDocument) -> ProductModel
                 )
             points = tuple(point for mesh in meshes for point in mesh.vertices_mm)
             body_token = sha256(kernel_component.reference.encode()).hexdigest()[:20]
-            body = Body("body:" + body_token, _bounds(points), tuple(Face(item) for item in face_ids))
+            normalized_faces = tuple(
+                _normalized_face(face, mesh_by_face[face.reference])
+                for face in kernel_component.faces
+                if face.reference in mesh_by_face
+            )
+            body = Body("body:" + body_token, _bounds(points), normalized_faces)
             components.append(Component(
                 kernel_component.reference, kernel_component.name,
                 kernel_component.parent_reference, Transform(), (body,),
@@ -465,8 +512,25 @@ def product_from_workbench_document(document: WorkbenchDocument) -> ProductModel
             ))
     else:
         points = tuple(point for mesh in document.meshes for point in mesh.vertices_mm)
+        face_by_reference = {
+            face.reference: face for face in document.kernel_faces
+        }
         body = Body("body:source", _bounds(points),
-                    tuple(Face(mesh.face_reference) for mesh in document.meshes))
+                    tuple(
+                        _normalized_face(face_by_reference[mesh.face_reference], mesh)
+                        if mesh.face_reference in face_by_reference else
+                        Face(
+                            mesh.face_reference,
+                            bounds=_bounds(mesh.vertices_mm),
+                            mesh_evidence_digest=sha256(repr((
+                                mesh.face_reference, mesh.vertices_mm, mesh.triangles,
+                            )).encode("utf-8")).hexdigest(),
+                            contact_points_mm=_interior_mesh_points(
+                                mesh.vertices_mm, mesh.triangles,
+                            ),
+                        )
+                        for mesh in document.meshes
+                    ))
         components.append(Component(
             "source:geometry", document.source_name, None, Transform(), (body,),
             "source:geometry",
@@ -486,17 +550,11 @@ def face_annotation(document: WorkbenchDocument, reference: GeometryReference,
                  if component.reference == reference.component_identity
                  for face in component.faces if face.reference == reference.face_identity), None)
     if face is None and reference.component_identity == "source:geometry":
-        mesh = next((item for item in document.meshes
-                     if item.face_reference == reference.face_identity), None)
-        if mesh is not None:
-            points = mesh.vertices_mm
-            center = tuple(sum(point[index] for point in points) / len(points) for index in range(3))
-            # Unstructured STEP lacks XCAF face normals. Exact identity remains
-            # selectable, but datum candidacy cannot be manufactured from a
-            # guessed normal.
-            raise InteractiveWorkflowError(
-                f"face {reference.face_identity} lacks XCAF normal evidence; annotation was not created"
-            )
+        face = next(
+            (item for item in document.kernel_faces
+             if item.reference == reference.face_identity),
+            None,
+        )
     if face is None:
         raise InteractiveWorkflowError("selected face is not mapped to the imported OCP assembly")
     token = sha256(f"{role.value}:{reference.component_identity}:{reference.face_identity}".encode()).hexdigest()[:16]

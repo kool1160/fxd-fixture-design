@@ -99,12 +99,13 @@ from .fabrication_workflow import (
     ConfirmedWeldIntent, ConstructionMethod, FixtureBuildComparison, FixtureBuildComponent, FixtureBuildError,
     FixtureBuildFinding, FixtureBuildPlan, FixtureBuildRequirements, FixtureBuildValidation,
     FixtureFamily, FixtureLifecycle, FixturePurpose, GeometryAuthority, HoleProcess, HoleProcessSpec,
-    MultiStationFitProposal, MultiStationLayout, MultiStationRequirements, SlotProcessSpec, StationTransform,
+    MultiStationFitProposal, MultiStationLayout, MultiStationRequirements, ProductFeatureBinding,
+    ProductFeatureRole, SlotProcessSpec, StationTransform,
     WeldJointAccessResult,
     M30Rule, NestClassification, PokaYokeSpec, TabSlotJoint, author_fixture_build, propose_multi_station_fit,
     bind_fixture_build_plan_to_proposal, build_fixture_build_package, compare_fixture_build_plans, generate_fixture_build_plan,
     generate_multi_station_fixture_alternatives, generate_multi_station_fixture_build_plan,
-    generate_multi_station_layout,
+    build_m32_product_feature_bindings, generate_multi_station_layout,
     propose_multi_station_count, validate_fixture_build_plan, write_fixture_build_package,
 )
 from .fixture_quality import (
@@ -188,12 +189,13 @@ __all__ += ["M30_SCHEMA", "M32_SCHEMA", "RULE_CATALOG", "RULES_BY_ID", "Adjustme
             "ConfirmedWeldIntent", "ConstructionMethod", "FixtureBuildComparison", "FixtureBuildComponent", "FixtureBuildError",
             "FixtureBuildFinding", "FixtureBuildPlan", "FixtureBuildRequirements", "FixtureBuildValidation",
             "FixtureFamily", "FixtureLifecycle", "FixturePurpose", "GeometryAuthority", "HoleProcess", "HoleProcessSpec",
-            "MultiStationFitProposal", "MultiStationLayout", "MultiStationRequirements", "SlotProcessSpec", "StationTransform",
+            "MultiStationFitProposal", "MultiStationLayout", "MultiStationRequirements",
+            "ProductFeatureBinding", "ProductFeatureRole", "SlotProcessSpec", "StationTransform",
             "WeldJointAccessResult",
             "M30Rule", "NestClassification", "PokaYokeSpec", "TabSlotJoint", "author_fixture_build", "propose_multi_station_fit",
             "bind_fixture_build_plan_to_proposal", "build_fixture_build_package", "compare_fixture_build_plans", "generate_fixture_build_plan",
             "generate_multi_station_fixture_alternatives", "generate_multi_station_fixture_build_plan",
-            "generate_multi_station_layout",
+            "build_m32_product_feature_bindings", "generate_multi_station_layout",
             "propose_multi_station_count", "validate_fixture_build_plan", "write_fixture_build_package"]
 __all__ += [
     "FIXTURE_KNOWLEDGE_RECORD_TYPES", "FIXTURE_KNOWLEDGE_SCHEMA",

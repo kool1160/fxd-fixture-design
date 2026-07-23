@@ -79,6 +79,7 @@ from fxd_geometry import (
     FixtureBuildError,
     FixtureBuildFinding,
     MultiStationRequirements,
+    ProductFeatureRole,
     ExportError,
     GeometryReference,
     InteractiveWorkflow,
@@ -97,6 +98,7 @@ from fxd_geometry import (
     RenderDiagnostics,
     Vec3,
     author_fixture_build,
+    build_m32_product_feature_bindings,
     bind_fixture_build_plan_to_proposal,
     WorkbenchDocument,
     analyze_engineering_workflow,
@@ -4511,6 +4513,43 @@ class FxdWorkbenchWindow(QMainWindow):
 
         operator_source = side_source(self.process_operator_loading_side.currentText(), "operator loading side")
         clamp_source = side_source(self.process_clamp_operating_side.currentText(), "clamp operating side")
+        annotations = (
+            self.workflow.geometry_annotations if self.workflow is not None else ()
+        )
+        role_references: list[tuple[ProductFeatureRole, GeometryReference]] = []
+        annotation_roles = (
+            (AnnotationRole.PRIMARY_DATUM, ProductFeatureRole.PRIMARY_SUPPORT),
+            (AnnotationRole.SECONDARY_DATUM, ProductFeatureRole.SECONDARY_LOCATOR),
+            (AnnotationRole.TERTIARY_DATUM, ProductFeatureRole.TERTIARY_STOP),
+            (AnnotationRole.PERMITTED_LOCATOR, ProductFeatureRole.LOCATOR_HOLE),
+            (AnnotationRole.PERMITTED_SUPPORT, ProductFeatureRole.CLAMP_CONTACT),
+        )
+        for annotation_role, feature_role in annotation_roles:
+            role_references.extend(
+                (feature_role, annotation.reference)
+                for annotation in annotations
+                if annotation.role == annotation_role
+            )
+        feature_bindings = build_m32_product_feature_bindings(
+            self.project.product, tuple(role_references),
+        )
+        binding_counts = {
+            role: sum(binding.role == role for binding in feature_bindings)
+            for role in ProductFeatureRole
+        }
+        required_roles = (
+            ProductFeatureRole.PRIMARY_SUPPORT,
+            ProductFeatureRole.SECONDARY_LOCATOR,
+            ProductFeatureRole.TERTIARY_STOP,
+            ProductFeatureRole.CLAMP_CONTACT,
+        )
+        if (any(binding_counts[role] != 1 for role in required_roles)
+                or binding_counts[ProductFeatureRole.LOCATOR_HOLE] not in {0, 2}):
+            raise FixtureBuildError(
+                "M32 requires exact OCP face annotations for one primary datum, "
+                "one secondary datum, one tertiary datum, one clamp-support "
+                "contact, and either zero or two cylindrical locator holes"
+            )
         mode = {"Manual": "manual", "Cobot": "cobot", "Robotic": "robot"}.get(
             setup.operation_mode or "", "manual"
         )
@@ -4550,6 +4589,7 @@ class FxdWorkbenchWindow(QMainWindow):
             source_to_manufacturing=orientation.source_to_manufacturing,
             manufacturing_to_source=orientation.manufacturing_to_source,
             manufacturing_orientation_identity=orientation.identity,
+            product_feature_bindings=feature_bindings,
         )
 
     def _multi_station_fit_key(self, requested: int) -> tuple[int, float, float]:

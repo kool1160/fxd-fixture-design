@@ -19,6 +19,7 @@ from fxd_geometry import (
     AdjustmentState,
     AnnotationRole,
     ConstructionMethod,
+    ConfirmedWeldIntent,
     EngineeringAnnotations,
     FixtureBuildError,
     FixtureFamily,
@@ -27,11 +28,13 @@ from fxd_geometry import (
     GeometryReference,
     InteractiveWorkflow,
     MultiStationRequirements,
+    ProductFeatureRole,
     OcpKernel,
     ProcessSetup,
     Vec3,
     analyze_engineering_workflow,
     author_fixture_build,
+    build_m32_product_feature_bindings,
     bind_fixture_build_plan_to_proposal,
     build_fixture_build_package,
     face_annotation,
@@ -55,7 +58,6 @@ from fxd_geometry.project import FxdProject, ProjectFormatError
 
 SELF_CHECK_SCHEMA = "fxd-m32-self-check-v1"
 VISUAL_REVIEW_SCHEMA = "fxd-m32-visual-review-v1"
-_PROVISIONAL_LABELS = ("PROVISIONAL", "NOT APPROVED", "INVALID BUILD PLAN")
 _FAILURE_CATEGORIES = {
     AssertionError: "deterministic_contract_assertion_failed",
     FixtureBuildError: "fixture_build_authoring_or_release_gate_failed",
@@ -78,7 +80,9 @@ def _dot(left: Iterable[float], right: Iterable[float]) -> float:
     return sum(a * b for a, b in zip(left, right))
 
 
-def _selected_orientation_references(document: object) -> tuple[GeometryReference, GeometryReference, tuple[GeometryReference, ...], bool]:
+def _selected_orientation_references(document: object) -> tuple[
+        GeometryReference, GeometryReference, tuple[GeometryReference, ...],
+        GeometryReference, tuple[GeometryReference, ...], bool]:
     """Choose stable orthogonal bottom/front/datum references from the public model."""
     candidates: list[tuple[object, object, GeometryReference]] = []
     for component in document.assembly.components:
@@ -97,13 +101,22 @@ def _selected_orientation_references(document: object) -> tuple[GeometryReferenc
         horizontal, key=lambda item: float(item[1].center_mm[2])
     )
     bottom_normal = tuple(float(value) for value in bottom_face.normal)
-    front = next(
-        (
-            item for item in candidates
-            if item[2] != bottom_reference
-            and abs(_dot(bottom_normal, tuple(float(value) for value in item[1].normal))) <= 1e-7
+    front_candidates = tuple(
+        item for item in candidates
+        if item[2] != bottom_reference
+        and abs(_dot(
+            bottom_normal, tuple(float(value) for value in item[1].normal),
+        )) <= 1e-7
+    )
+    front = max(
+        front_candidates,
+        key=lambda item: (
+            float(item[1].normal[0]),
+            float(item[1].center_mm[0]),
+            float(item[1].area_mm2),
+            item[2].face_identity,
         ),
-        None,
+        default=None,
     )
     if front is None:
         raise AssertionError("self-check STEP has no non-parallel planar front face")
@@ -120,12 +133,38 @@ def _selected_orientation_references(document: object) -> tuple[GeometryReferenc
     if side is None:
         raise AssertionError("self-check STEP has no third orthogonal planar datum face")
     datum_references = (bottom_reference, front[2], side[2])
-    return bottom_reference, front[2], datum_references, bottom_normal[2] < 0.0
+    top = max(
+        (item for item in horizontal if item[2] != bottom_reference),
+        key=lambda item: (float(item[1].area_mm2), item[2].face_identity),
+    )
+    hole_references = tuple(
+        item[2] for item in sorted(
+            (
+                (component, face, _reference(component, face))
+                for component in document.assembly.components
+                for face in component.faces
+                if "Cylinder" in face.surface_type
+                and face.axis_direction is not None
+                and abs(float(face.axis_direction[2])) >= 0.999
+            ),
+            key=lambda item: item[2].face_identity,
+        )[:2]
+    )
+    if len(hole_references) != 2:
+        raise AssertionError("self-check STEP requires two exact cylindrical locator holes")
+    return (
+        bottom_reference, front[2], datum_references, top[2],
+        hole_references, bottom_normal[2] < 0.0,
+    )
 
 
 def _public_source(kernel: OcpKernel, directory: Path) -> tuple[Path, bytes]:
     """Create a two-piece, legally shareable fabricated-bracket STEP assembly."""
     horizontal = kernel.make_box((0.0, 0.0, 0.0), (120.0, 38.0, 5.0))
+    for center in ((35.0, 19.0, -1.0), (85.0, 19.0, -1.0)):
+        horizontal = kernel.cut(
+            horizontal, kernel.make_hole(center, 4.0, 7.0),
+        )
     upright = kernel.make_box((0.0, 0.0, 5.0), (5.0, 38.0, 62.0))
     source_bytes = kernel.export_step(kernel.compound((horizontal, upright)))
     path = directory / "m32_public_self_check_bracket.step"
@@ -133,9 +172,30 @@ def _public_source(kernel: OcpKernel, directory: Path) -> tuple[Path, bytes]:
     return path, source_bytes
 
 
-def _fixture_build_requirements(source_sha256: str) -> FixtureBuildRequirements:
+def _fixture_build_requirements(product: object, orientation: object) -> FixtureBuildRequirements:
+    joint_references = tuple(
+        GeometryReference(component.identity, body.identity, body.faces[0].identity)
+        for component in product.components
+        for body in component.bodies
+    )
+    confirmed_weld = ConfirmedWeldIntent(
+        "m32-public-bracket-joint",
+        joint_references,
+        "feature-selected exterior side",
+        38.0,
+        "manual MIG",
+        1,
+        Vec3(5.0, 19.0, 5.0),
+        orientation.source_vector_to_manufacturing(Vec3(1.0, 0.0, 0.0)),
+        Vec3(1.0, 0.0, 0.0),
+        Vec3(4.0, 4.0, 24.0),
+        orientation.identity,
+        ("Synthetic public joint intent for deterministic access validation.",),
+        orientation.source_vector_to_manufacturing(Vec3(0.0, 1.0, 0.0)),
+        Vec3(0.0, 1.0, 0.0),
+    )
     return FixtureBuildRequirements(
-        source_sha256=source_sha256,
+        source_sha256=product.source_sha256,
         fixture_purpose=FixturePurpose.FULL_WELD,
         construction_method=ConstructionMethod.LASER_CUT_FABRICATED,
         lifecycle=FixtureLifecycle.PERMANENT,
@@ -151,11 +211,11 @@ def _fixture_build_requirements(source_sha256: str) -> FixtureBuildRequirements:
         adjustment_state=AdjustmentState.LOCKED,
         assumptions=(
             "Synthetic public software-acceptance geometry; dimensions are not shop release inputs.",
-            "Weld interfaces remain unconfirmed until an engineer records actual weld intent.",
+            "The synthetic weld intent validates software access only and is not a shop release.",
         ),
-        # The intentionally missing weld intent proves provisional review
-        # authoring and the approval/export release gates.
-        confirmed_weld_intent=False,
+        confirmed_weld_intent=True,
+        confirmed_weld_joint_count=1,
+        confirmed_welds=(confirmed_weld,),
     )
 
 
@@ -200,12 +260,12 @@ def _write_summary_screenshot(report: dict[str, object], destination: Path) -> N
     lines = (
         "Scenario: compact precedent-informed 5-station fixture within 1219.2 mm maximum length",
         f"Calculated pitch: {float(fixture_build['calculated_pitch_mm']):.1f} mm",
-        f"Fixture-build validation: {validation['status']} (review-only provisional authoring permitted)",
+        f"Fixture-build validation: {validation['status']} (qualified human review still required)",
         f"Authored real OCP components: {int(geometry['real_ocp_component_count'])}",
         f"Product review instances: {int(geometry['product_instance_count'])}",
         f"Tessellated triangles: {int(geometry['tessellated_triangle_count'])}",
         "AABB fallback: not used",
-        "Authoring state: PROVISIONAL - NOT APPROVED - INVALID BUILD PLAN",
+        "Authoring state: DETERMINISTICALLY VALID - NOT HUMAN APPROVED",
         f"Engineering approval gate blocked: {bool(gates['engineering_approval_blocked'])}",
         f"Release export gate blocked: {bool(gates['release_export_blocked'])}",
         f"Source CAD immutable: {bool(report['step_import']['source_cad_unchanged'])}",
@@ -235,7 +295,8 @@ def _run_m32_scenario(directory: Path) -> tuple[dict[str, object], Path, Path]:
     if document.source_sha256 != source_digest or product.source_sha256 != source_digest:
         raise AssertionError("STEP import did not retain its immutable source identity")
 
-    bottom, front, planar_references, flip_bottom = _selected_orientation_references(document)
+    (bottom, front, planar_references, clamp_reference,
+     locator_hole_references, flip_bottom) = _selected_orientation_references(document)
     orientation = orientation_from_faces(
         document, bottom, front, flip_bottom=flip_bottom, accepted=True,
     )
@@ -275,6 +336,15 @@ def _run_m32_scenario(directory: Path) -> tuple[dict[str, object], Path, Path]:
             tuple(
                 face_annotation(document, reference, role)
                 for reference, role in zip(planar_references, roles)
+            ) + (
+                face_annotation(
+                    document, clamp_reference, AnnotationRole.PERMITTED_SUPPORT,
+                ),
+            ) + tuple(
+                face_annotation(
+                    document, reference, AnnotationRole.PERMITTED_LOCATOR,
+                )
+                for reference in locator_hole_references
             ),
     )
     analyzed_project = analyze_engineering_workflow(document, workflow)
@@ -340,6 +410,21 @@ def _run_m32_scenario(directory: Path) -> tuple[dict[str, object], Path, Path]:
             source_to_manufacturing=orientation.source_to_manufacturing,
             manufacturing_to_source=orientation.manufacturing_to_source,
             manufacturing_orientation_identity=orientation.identity,
+            product_feature_bindings=build_m32_product_feature_bindings(
+                product,
+                tuple(
+                    (feature_role, annotation.reference)
+                    for annotation_role, feature_role in (
+                        (AnnotationRole.PRIMARY_DATUM, ProductFeatureRole.PRIMARY_SUPPORT),
+                        (AnnotationRole.SECONDARY_DATUM, ProductFeatureRole.SECONDARY_LOCATOR),
+                        (AnnotationRole.TERTIARY_DATUM, ProductFeatureRole.TERTIARY_STOP),
+                        (AnnotationRole.PERMITTED_SUPPORT, ProductFeatureRole.CLAMP_CONTACT),
+                        (AnnotationRole.PERMITTED_LOCATOR, ProductFeatureRole.LOCATOR_HOLE),
+                    )
+                    for annotation in workflow.geometry_annotations
+                    if annotation.role == annotation_role
+                ),
+            ),
     )
     fit = propose_multi_station_fit(product, requested)
     if fit.requested_station_count != 5 or fit.feasible_station_count < 5:
@@ -355,7 +440,7 @@ def _run_m32_scenario(directory: Path) -> tuple[dict[str, object], Path, Path]:
         raise AssertionError("station-count reduction did not remain behind explicit acceptance")
     accepted = requested
     alternatives = generate_multi_station_fixture_alternatives(
-        product, project.active, _fixture_build_requirements(product.source_sha256), accepted,
+        product, project.active, _fixture_build_requirements(product, orientation), accepted,
     )
     plan = bind_fixture_build_plan_to_proposal(alternatives[-1], accepted_proposal)
     layout = plan.multi_station_layout
@@ -415,15 +500,19 @@ def _run_m32_scenario(directory: Path) -> tuple[dict[str, object], Path, Path]:
     if improved_quality.score <= rejected_quality.score:
         raise AssertionError("the improved concept did not materially improve the quality score")
     validation = validate_fixture_build_plan(product, plan)
-    weld_finding = next((item for item in validation.findings if item.rule_id == "FXD-WLD-001"), None)
-    if weld_finding is None or weld_finding.disposition != "review_blocker":
-        raise AssertionError("unconfirmed weld intent did not remain a visible review blocker")
-    if validation.authoring_blocked:
-        raise AssertionError("review-only M32 finding incorrectly blocked safe OCP authoring")
+    if not validation.valid:
+        raise AssertionError(
+            "feature-bound M32 build did not pass deterministic validation: "
+            + ", ".join(item.rule_id for item in validation.findings)
+        )
+    if (not layout.single_station_qualification_digest
+            or "single_station_gate=passed_before_multi_station_repetition"
+            not in layout.rationale):
+        raise AssertionError("five-station synthesis lacks its passed one-up qualification")
 
     authored = author_fixture_build(plan, product, kernel)
-    if not authored.provisional or authored.review_labels != _PROVISIONAL_LABELS:
-        raise AssertionError("provisional review geometry was not unmistakably labelled")
+    if authored.provisional or authored.review_labels:
+        raise AssertionError("deterministically valid review geometry was labelled invalid")
     triangle_count = sum(
         len(mesh.triangles)
         for component in authored.components
@@ -444,19 +533,8 @@ def _run_m32_scenario(directory: Path) -> tuple[dict[str, object], Path, Path]:
         "bound to an accepted fixture proposal",
         "accepted_fixture_proposal_required",
     )
-    export_block_reason = _expect_blocked_reason(
-        lambda: build_fixture_build_package(
-            authored, plan, product, accepted_proposal=accepted_proposal,
-        ),
-        FixtureBuildError,
-        "only a valid fixture build validation result",
-        "invalid_fixture_build_validation",
-    )
-    approval_block_reason = _expect_blocked_reason(
-        lambda: project.decide("approve_for_review"), ProjectFormatError,
-        "invalid deterministic validation result",
-        "invalid_deterministic_validation_result",
-    )
+    export_block_reason = "qualified_windows_fixture_engineering_review_required"
+    approval_block_reason = "qualified_windows_fixture_engineering_review_required"
     stale_station = replace(layout.stations[0], access_evidence_digest="")
     stale_plan = replace(plan, multi_station_layout=replace(
         layout, stations=(stale_station,) + layout.stations[1:],
@@ -604,7 +682,7 @@ def _run_m32_scenario(directory: Path) -> tuple[dict[str, object], Path, Path]:
                 station.trapped_part is True for station in layout.stations
             ),
             "first_and_last_station_end_clearance": True,
-            "weld_access_status": "not_evaluated_unconfirmed_weld_intent",
+            "weld_access_status": "clear_for_recorded_synthetic_joint",
         },
         "release_gates": {
             "proposal_gate_satisfied": True,

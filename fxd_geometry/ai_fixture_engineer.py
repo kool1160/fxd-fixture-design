@@ -1113,7 +1113,10 @@ def build_ai_request(project: FxdProject) -> AiProposalRequest:
         "annotations": [{"identity": item.identity, "role": item.role.value,
                          "reference": item.reference.__dict__, "area_mm2": item.surface_area_mm2,
                          "normal": item.normal.__dict__}
-                        for item in workflow.geometry_annotations],
+                        for item in sorted(
+                            workflow.geometry_annotations,
+                            key=lambda value: value.identity,
+                        )],
         "customer_tooling": [{
             "identity": item.identity,
             "kind": item.kind,

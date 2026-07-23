@@ -42,10 +42,10 @@ class M32VisualReviewBundleTests(unittest.TestCase):
             self.assertTrue(report["authored_geometry"]["supplier_neutral_clamps_excluded_from_authored_ocp"])
             self.assertTrue(report["access_review"]["loading_and_unloading_evaluated"])
             self.assertTrue(report["access_review"]["first_and_last_station_end_clearance"])
-            self.assertTrue(report["access_review"]["trapped_part_detected"])
+            self.assertFalse(report["access_review"]["trapped_part_detected"])
             self.assertEqual(report["access_review"]["weld_access_status"],
-                             "not_evaluated_unconfirmed_weld_intent")
-            self.assertTrue(report["authored_geometry"]["provisional"])
+                             "clear_for_recorded_synthetic_joint")
+            self.assertFalse(report["authored_geometry"]["provisional"])
             self.assertTrue(report["release_gates"]["engineering_approval_blocked"])
             self.assertTrue(report["release_gates"]["release_export_blocked"])
             self.assertEqual(restored.fixture_build.authoring_state, "provisional")
@@ -92,7 +92,7 @@ class M32VisualReviewBundleTests(unittest.TestCase):
         self.assertNotIn(str(bundle).lower(), public_text)
         for forbidden in (
             "openai_api_key", "authorization header", "provider_response",
-            "source_step_base64", "customer cad",
+            "source_step_base64", "customer cad", "invalid build plan",
         ):
             self.assertNotIn(forbidden, public_text)
         self.assertFalse(parsed["network_provider_used"])

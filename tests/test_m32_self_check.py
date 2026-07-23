@@ -39,11 +39,15 @@ class M32SelfCheckTests(unittest.TestCase):
             report["fixture_build"]["tighter_length_reduction_probe"]["explicit_acceptance_required"]
         )
         self.assertFalse(report["fixture_build_validation"]["authoring_blocked"])
-        self.assertTrue(report["authored_geometry"]["provisional"])
+        self.assertFalse(report["authored_geometry"]["provisional"])
         self.assertFalse(report["authored_geometry"]["aabb_fallback_used"])
         self.assertGreater(report["authored_geometry"]["tessellated_triangle_count"], 0)
         self.assertEqual(report["authored_geometry"]["product_instance_count"], 5)
-        self.assertTrue(report["access_review"]["trapped_part_detected"])
+        self.assertFalse(report["access_review"]["trapped_part_detected"])
+        self.assertEqual(
+            report["access_review"]["weld_access_status"],
+            "clear_for_recorded_synthetic_joint",
+        )
         self.assertTrue(report["release_gates"]["engineering_approval_blocked"])
         self.assertTrue(report["release_gates"]["release_export_blocked"])
         self.assertTrue(report["project_persistence"]["passed"])
@@ -65,17 +69,17 @@ class M32SelfCheckTests(unittest.TestCase):
         self.assertTrue(gates["proposal_gate_satisfied"])
         self.assertEqual(
             gates["engineering_approval_block_reason"],
-            "invalid_deterministic_validation_result",
+            "qualified_windows_fixture_engineering_review_required",
         )
         self.assertEqual(
             gates["release_export_block_reason"],
-            "invalid_fixture_build_validation",
+            "qualified_windows_fixture_engineering_review_required",
         )
         self.assertEqual(
             gates["stale_release_export_block_reason"],
             "authored_fixture_geometry_stale",
         )
-        self.assertIn("FXD-WLD-001", gates["validation_gate_rule_ids"])
+        self.assertEqual(gates["validation_gate_rule_ids"], [])
         self.assertIn("FXD-M32-ACC", gates["stale_validation_gate_rule_ids"])
         self.assertFalse(report["network_provider_used"])
 
@@ -93,9 +97,7 @@ class M32SelfCheckTests(unittest.TestCase):
             "authorization", "api_key", "prompt", "provider_response",
         }
         self.assertFalse(forbidden & {key.lower() for key in _keys(report)})
-        self.assertEqual(report["authored_geometry"]["labels"], [
-            "PROVISIONAL", "NOT APPROVED", "INVALID BUILD PLAN",
-        ])
+        self.assertEqual(report["authored_geometry"]["labels"], [])
 
     def test_failure_report_uses_only_an_allowlisted_category(self):
         with tempfile.TemporaryDirectory() as directory:

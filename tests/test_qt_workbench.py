@@ -25,11 +25,13 @@ from fxd_geometry import (
     AnnotationRole,
     EngineeringAnnotations,
     ExportError,
+    FixtureBuildError,
     GeometryReference,
     KernelOperationError,
     InteractiveWorkflow,
     OcpKernel,
     ProcessSetup,
+    ProductFeatureRole,
     ReferencePlane,
     RenderDiagnostics,
     Vec3,
@@ -346,7 +348,7 @@ class QtWorkbenchTests(unittest.TestCase):
         self.assertGreater(self.window.fabrication_components.count(), 0)
         self.assertIn("REAL OCP B-REP", self.window.fabrication_components.item(0).text())
 
-    def test_m32_multi_station_controls_author_real_meshes_and_persist_station_intent(self):
+    def test_m32_multi_station_controls_require_exact_feature_annotations(self):
         with tempfile.TemporaryDirectory() as directory:
             source = self._real_step(directory, compound=True)
             self.window.document = load_step_for_workbench(source)
@@ -373,73 +375,87 @@ class QtWorkbenchTests(unittest.TestCase):
         self.window.process_station_count.setValue(5)
         self.window.process_max_fixture_length.setValue(3000.0)
         self.window.process_compare_multi_up.setChecked(True)
-        self.window.generate_fixture_build_plan()
+        with patch("fxd_qt_app.QMessageBox.warning") as warning:
+            self.window.generate_fixture_build_plan()
         self.assertIsNone(self.window.project.fixture_build)
-        self.assertIn("accept the Fixture Proposal", self.window.statusBar().currentMessage())
-        proposal = self._accept_current_fixture_proposal()
-        self.window.generate_fixture_build_plan()
-        plan = self.window.project.fixture_build
-        self.assertIsNotNone(plan)
-        self.assertEqual(plan.fixture_proposal_identity, proposal.proposal_identity)
-        self.assertEqual(plan.fixture_proposal_evidence_digest, proposal.evidence_digest)
-        self.assertEqual(len(plan.multi_station_layout.stations), 5)
-        self.assertIn("Alternative comparison", self.window.fabrication_status.text())
-        self.window.author_real_fixture_geometry()
-        items = self.window._review_geometry_items()
-        self.assertTrue(any(item["kind"] == "authored_mesh" for item in items))
-        self.assertEqual(sum(item["kind"] == "product_review_mesh" for item in items), 5)
-        self.assertFalse(any("debug_bounds" in item["kind"] for item in items))
-        self.assertEqual(sum(item["kind"] == "purchased_tooling_closed" for item in items), 5)
-        self.assertEqual(sum(item["kind"] == "clamp_open_envelope" for item in items), 5)
-        self.assertEqual(sum(item.get("semantic") == "load_direction" for item in items), 5)
-        self.assertEqual(sum(item.get("semantic") == "unload_direction" for item in items), 5)
-        self.assertGreater(len({tuple(item["color"]) for item in items if "color" in item}), 5)
-        product_item = next(item for item in items if item["kind"] == "product_review_mesh")
-        station = plan.multi_station_layout.stations[0]
-        source_vertex = self.window.document.meshes[0].vertices_mm[0]
-        matrix = station.source_to_station_manufacturing
-        expected_vertex = (
-            matrix[0] * source_vertex[0] + matrix[1] * source_vertex[1] + matrix[2] * source_vertex[2] + matrix[3],
-            matrix[4] * source_vertex[0] + matrix[5] * source_vertex[1] + matrix[6] * source_vertex[2] + matrix[7],
-            matrix[8] * source_vertex[0] + matrix[9] * source_vertex[1] + matrix[10] * source_vertex[2] + matrix[11],
+        self.assertIn(
+            "Fixture Proposal",
+            self.window.statusBar().currentMessage(),
         )
-        self.assertNotEqual(matrix[:12], (1.0, 0.0, 0.0, station.translation_mm.x,
-                                          0.0, 1.0, 0.0, station.translation_mm.y,
-                                          0.0, 0.0, 1.0, station.translation_mm.z))
-        for actual, expected in zip(product_item["vertices"][0], expected_vertex):
-            self.assertAlmostEqual(actual, expected, places=7)
-        load_arrow = next(item for item in items
-                          if item.get("semantic") == "load_direction"
-                          and item["identity"].endswith(station.identity))
-        source_direction = station.loading_direction_source
-        expected_direction = (
-            matrix[0] * source_direction.x + matrix[1] * source_direction.y + matrix[2] * source_direction.z,
-            matrix[4] * source_direction.x + matrix[5] * source_direction.y + matrix[6] * source_direction.z,
-            matrix[8] * source_direction.x + matrix[9] * source_direction.y + matrix[10] * source_direction.z,
+        self._accept_current_fixture_proposal()
+        with self.assertRaisesRegex(FixtureBuildError, "exact OCP face"):
+            self.window._multi_station_requirements(
+                self.window._capture_process_setup()
+            )
+
+    def test_m32_controls_bind_exact_annotated_product_features(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = self._real_step(directory, compound=True)
+            document = load_step_for_workbench(source)
+            self.window.document = document
+            self.window.viewport.load_document(document)
+            self.window._replace_project(self._project(source))
+        product = self.window.project.product
+
+        def reference_for(normal):
+            candidates = tuple(
+                (component, body, face)
+                for component in product.components
+                for body in component.bodies
+                for face in body.faces
+                if face.is_planar and face.normal == Vec3(*normal)
+            )
+            component, body, face = max(
+                candidates,
+                key=lambda item: (item[2].area_mm2, item[2].identity),
+            )
+            return GeometryReference(component.identity, body.identity, face.identity)
+
+        annotations = tuple(
+            face_annotation(document, reference_for(normal), role)
+            for normal, role in (
+                ((0.0, 0.0, -1.0), AnnotationRole.PRIMARY_DATUM),
+                ((0.0, -1.0, 0.0), AnnotationRole.SECONDARY_DATUM),
+                ((-1.0, 0.0, 0.0), AnnotationRole.TERTIARY_DATUM),
+                ((0.0, 0.0, 1.0), AnnotationRole.PERMITTED_SUPPORT),
+            )
         )
-        self.assertNotEqual(tuple(load_arrow["direction"]), tuple(source_direction.__dict__.values()))
-        for actual, expected in zip(load_arrow["direction"], expected_direction):
-            self.assertAlmostEqual(actual, expected, places=7)
-        visible_project = self.window.project
-        expectations = {
-            "product_instances": (0, 5, 5, 10),
-            "purchased_tooling": (5, 0, 5, 10),
-            "access_envelopes": (5, 5, 0, 0),
-            "clamps": (5, 0, 0, 10),
-        }
-        for layer, expected_counts in expectations.items():
-            with self.subTest(hidden_layer=layer):
-                self.window.project = visible_project.toggle_layer(layer)
-                filtered = self.window._review_geometry_items()
-                counts = (
-                    sum(item["kind"] == "product_review_mesh" for item in filtered),
-                    sum(item["kind"] == "purchased_tooling_closed" for item in filtered),
-                    sum(item["kind"] == "clamp_open_envelope" for item in filtered),
-                    sum(item.get("semantic") in {"load_direction", "unload_direction"}
-                        for item in filtered),
-                )
-                self.assertEqual(counts, expected_counts)
-        self.window.project = visible_project
+        orientation = source_orientation(product.source_sha256, accepted=True)
+        setup = ProcessSetup(
+            "M32 exact UI bindings",
+            fixture_family="linear_multi_station_weld_fixture",
+            operation_mode="Manual",
+            production_quantity=1,
+            manufacturing_orientation=orientation,
+            manufacturing_loading_direction=Vec3(1.0, 0.0, 0.0),
+            manufacturing_unloading_direction=Vec3(-1.0, 0.0, 0.0),
+        )
+        self.window.workflow = InteractiveWorkflow(
+            product.source_sha256, setup, annotations, concepts_generated=True,
+        )
+        self.window._replace_project(
+            self.window.project.with_workflow(self.window.workflow)
+        )
+        self.window.process_fixture_family.setCurrentText(
+            "Linear multi-station weld fixture"
+        )
+        requirements = self.window._multi_station_requirements(setup)
+
+        self.assertEqual(len(requirements.product_feature_bindings), 4)
+        self.assertEqual(
+            {binding.role for binding in requirements.product_feature_bindings},
+            {
+                ProductFeatureRole.PRIMARY_SUPPORT,
+                ProductFeatureRole.SECONDARY_LOCATOR,
+                ProductFeatureRole.TERTIARY_STOP,
+                ProductFeatureRole.CLAMP_CONTACT,
+            },
+        )
+        self.assertTrue(all(
+            binding.mesh_evidence_digest
+            and binding.contact_points_source_mm
+            for binding in requirements.product_feature_bindings
+        ))
 
     def test_editing_accepted_station_count_creates_new_intent(self):
         self.window._replace_project(self._project())
@@ -450,15 +466,14 @@ class QtWorkbenchTests(unittest.TestCase):
         self.window.process_station_pitch.setValue(0.0)
         self.window._accepted_multi_station_fit_key = (5, 1219.2, 0.0)
         self.window._accepted_multi_station_feasible_count = 4
-        requirements = self.window._multi_station_requirements(ProcessSetup(
-            "station intent edit", fixture_family="linear_multi_station_weld_fixture",
-            operation_mode="Manual", production_quantity=1,
-            manufacturing_orientation=orientation,
-            manufacturing_loading_direction=Vec3(1, 0, 0),
-            manufacturing_unloading_direction=Vec3(-1, 0, 0),
-        ))
-        self.assertEqual(requirements.requested_station_count, 3)
-        self.assertIsNone(requirements.requested_intent_station_count)
+        with self.assertRaisesRegex(FixtureBuildError, "exact OCP face"):
+            self.window._multi_station_requirements(ProcessSetup(
+                "station intent edit", fixture_family="linear_multi_station_weld_fixture",
+                operation_mode="Manual", production_quantity=1,
+                manufacturing_orientation=orientation,
+                manufacturing_loading_direction=Vec3(1, 0, 0),
+                manufacturing_unloading_direction=Vec3(-1, 0, 0),
+            ))
 
     def test_m32_process_directions_convert_through_rotated_and_flipped_orientation(self):
         self.window._replace_project(self._project())
@@ -476,28 +491,17 @@ class QtWorkbenchTests(unittest.TestCase):
             manufacturing_loading_direction=Vec3(1, 0, 0),
             manufacturing_unloading_direction=Vec3(0, -1, 0),
         )
-        requirements = self.window._multi_station_requirements(setup)
-        self.assertEqual(requirements.loading_direction_source,
-                         rotated.manufacturing_vector_to_source(Vec3(1, 0, 0)))
-        self.assertEqual(requirements.unloading_direction_source,
-                         rotated.manufacturing_vector_to_source(Vec3(0, -1, 0)))
-        self.assertEqual(requirements.operator_loading_direction_source,
-                         rotated.manufacturing_vector_to_source(Vec3(0, 1, 0)))
-        self.assertEqual(requirements.clamp_operating_direction_source,
-                         rotated.manufacturing_vector_to_source(Vec3(1, 0, 0)))
-        self.assertEqual(requirements.manufacturing_orientation_identity, rotated.identity)
+        with self.assertRaisesRegex(FixtureBuildError, "exact OCP face"):
+            self.window._multi_station_requirements(setup)
 
         flipped = reference_plane_orientation(
             source_sha, ReferencePlane.TOP, flip_normal=True,
             rotation_degrees=180.0, accepted=True,
         )
-        flipped_requirements = self.window._multi_station_requirements(replace(
-            setup, manufacturing_orientation=flipped,
-        ))
-        self.assertEqual(flipped_requirements.operator_loading_direction_source,
-                         flipped.manufacturing_vector_to_source(Vec3(0, 1, 0)))
-        self.assertNotEqual(flipped_requirements.operator_loading_direction_source,
-                            Vec3(0, 1, 0))
+        with self.assertRaisesRegex(FixtureBuildError, "exact OCP face"):
+            self.window._multi_station_requirements(replace(
+                setup, manufacturing_orientation=flipped,
+            ))
 
     def test_weld_confirmation_does_not_invent_torch_approach_or_envelope(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -553,7 +557,7 @@ class QtWorkbenchTests(unittest.TestCase):
             self.window._replace_project(self._project(source))
         self.window.workflow = InteractiveWorkflow(
             self.window.project.product.source_sha256,
-            ProcessSetup("M32 validation source", manufacturing_orientation=source_orientation(
+            ProcessSetup("fixture-build validation source", manufacturing_orientation=source_orientation(
                 self.window.project.product.source_sha256, accepted=True,
             )),
             concepts_generated=True,
@@ -561,12 +565,12 @@ class QtWorkbenchTests(unittest.TestCase):
         self.window.process_fixture_type.setCurrentText("Full weld fixture")
         self.window.process_construction.setCurrentText("Laser-cut fabricated")
         self.window.process_lifecycle.setCurrentText("Full permanent fixture")
-        self.window.process_weld_access.setChecked(True)
+        self.window.process_weld_access.setChecked(False)
         self.window.process_unload_clearance.setChecked(True)
         self.window.process_adjustment_state.setCurrentText("Locked production position")
-        self.window.process_fixture_family.setCurrentText("Linear multi-station weld fixture")
-        self.window.process_station_count.setValue(5)
-        self.window.process_max_fixture_length.setValue(3000.0)
+        self.window.process_fixture_family.setCurrentText(
+            "Existing single-station fixture workflow"
+        )
         self._accept_current_fixture_proposal()
         self.window.generate_fixture_build_plan()
         self.assertIsNotNone(self.window.project.fixture_build)

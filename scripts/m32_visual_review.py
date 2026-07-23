@@ -32,7 +32,10 @@ def _outside_repository(path: Path) -> Path:
 def _human_checklist() -> str:
     return """# M32 qualified human fixture-engineering review
 
-This bundle is synthetic software-review evidence. It is **PROVISIONAL**, **NOT APPROVED**, and an **INVALID BUILD PLAN** until deterministic findings and qualified engineering review are resolved. Software acceptance is not engineering approval.
+This bundle is synthetic software-review evidence. Its deterministic build and
+authored-geometry gates passed, but it remains **PROVISIONAL** and **NOT
+APPROVED** until qualified fixture-engineering review is recorded. Software
+acceptance is not engineering approval.
 
 Record qualified engineering judgment for every item before any production decision:
 
@@ -49,7 +52,7 @@ Record qualified engineering judgment for every item before any production decis
 - [ ] Heat, distortion, spatter, cleaning, and maintenance provisions
 - [ ] Pinch points, guarding, and all applicable safety review
 - [ ] Structural adequacy under qualified calculations and review
-- [ ] Accept the governed four-station arrangement or return to Process for the five-station intent
+- [ ] Accept the governed five-station arrangement or return it for redesign
 - [ ] Final production approval by authorized people under the applicable process
 
 Do not use this checklist or the displayed geometry as a release, certification, or safety claim.
@@ -70,11 +73,11 @@ def create_visual_review_bundle(destination: Path) -> dict[str, object]:
     summary = (
         "FXD M32 governed synthetic visual review\n"
         "Requested stations: 5\n"
-        "Accepted feasible stations: 4\n"
+        "Accepted feasible stations: 5\n"
         f"Calculated pitch: {report['fixture_build']['calculated_pitch_mm']:.1f} mm\n"
         "Maximum fixture length: 1219.2 mm\n"
         f"Real OCP authored components: {report['authored_geometry']['real_ocp_component_count']}\n"
-        "Disposition: PROVISIONAL / NOT APPROVED / INVALID BUILD PLAN\n"
+        "Disposition: DETERMINISTIC GATES PASSED / PROVISIONAL / NOT APPROVED\n"
         "Engineering approval: blocked\n"
         "Release export: blocked\n"
         "Source CAD bytes and SHA: unchanged\n"
