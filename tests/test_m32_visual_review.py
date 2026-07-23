@@ -47,6 +47,7 @@ class M32VisualReviewBundleTests(unittest.TestCase):
                              "clear_for_recorded_synthetic_joint")
             self.assertFalse(report["authored_geometry"]["provisional"])
             self.assertTrue(report["release_gates"]["engineering_approval_blocked"])
+            self.assertTrue(report["release_gates"]["review_package_export_passed"])
             self.assertTrue(report["release_gates"]["release_export_blocked"])
             self.assertEqual(restored.fixture_build.authoring_state, "provisional")
             self.assertEqual(sha256(step_path.read_bytes()).hexdigest(), restored.product.source_sha256)

@@ -49,6 +49,7 @@ class M32SelfCheckTests(unittest.TestCase):
             "clear_for_recorded_synthetic_joint",
         )
         self.assertTrue(report["release_gates"]["engineering_approval_blocked"])
+        self.assertTrue(report["release_gates"]["review_package_export_passed"])
         self.assertTrue(report["release_gates"]["release_export_blocked"])
         self.assertTrue(report["project_persistence"]["passed"])
         self.assertEqual(report["concept_quality"]["precedent_informed_concept"]["status"], "passed")
@@ -73,7 +74,11 @@ class M32SelfCheckTests(unittest.TestCase):
         )
         self.assertEqual(
             gates["release_export_block_reason"],
-            "qualified_windows_fixture_engineering_review_required",
+            "production_release_not_supported_review_only_package",
+        )
+        self.assertIn(
+            "Not production release",
+            gates["review_package_approval_boundary"],
         )
         self.assertEqual(
             gates["stale_release_export_block_reason"],

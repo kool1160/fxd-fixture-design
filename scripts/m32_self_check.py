@@ -533,7 +533,16 @@ def _run_m32_scenario(directory: Path) -> tuple[dict[str, object], Path, Path]:
         "bound to an accepted fixture proposal",
         "accepted_fixture_proposal_required",
     )
-    export_block_reason = "qualified_windows_fixture_engineering_review_required"
+    review_package = build_fixture_build_package(
+        authored, plan, product, accepted_proposal=accepted_proposal,
+    )
+    review_manifest = json.loads(str(review_package["manifest.json"]))
+    approval_boundary = str(review_manifest.get("approval_boundary", ""))
+    if "Not production release" not in approval_boundary:
+        raise AssertionError(
+            "valid M32 export did not retain the review-only production-release boundary"
+        )
+    export_block_reason = "production_release_not_supported_review_only_package"
     approval_block_reason = "qualified_windows_fixture_engineering_review_required"
     stale_station = replace(layout.stations[0], access_evidence_digest="")
     stale_plan = replace(plan, multi_station_layout=replace(
@@ -688,6 +697,8 @@ def _run_m32_scenario(directory: Path) -> tuple[dict[str, object], Path, Path]:
             "proposal_gate_satisfied": True,
             "engineering_approval_blocked": True,
             "engineering_approval_block_reason": approval_block_reason,
+            "review_package_export_passed": True,
+            "review_package_approval_boundary": approval_boundary,
             "release_export_blocked": True,
             "release_export_block_reason": export_block_reason,
             "stale_release_export_block_reason": stale_export_block_reason,
