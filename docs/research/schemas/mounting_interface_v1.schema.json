@@ -1,0 +1,497 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fxd.invalid/research/mounting_interface_v1.schema.json",
+  "title": "FXD typed mounting interface v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "interface_id",
+    "interface_type",
+    "frame",
+    "features",
+    "fastener_intent",
+    "mating_authority",
+    "tolerance_clearance_intent",
+    "allowed_replacement_classes",
+    "replacement_semantics"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "fxd-mounting-interface-v1"
+    },
+    "interface_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "interface_type": {
+      "enum": [
+        "face_mount",
+        "hole_pattern",
+        "slot_pattern",
+        "pin_and_bushing",
+        "rail_mount",
+        "weld_mount",
+        "table_grid_mount",
+        "custom_datum_frame"
+      ]
+    },
+    "frame": {
+      "$ref": "owned_coordinate_frame_v1.schema.json"
+    },
+    "features": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/mounting_feature"
+      },
+      "minItems": 1
+    },
+    "fastener_intent": {
+      "type": "string",
+      "minLength": 1
+    },
+    "mating_authority": {
+      "$ref": "#/$defs/authority"
+    },
+    "tolerance_clearance_intent": {
+      "$ref": "#/$defs/tolerance_intent"
+    },
+    "allowed_replacement_classes": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
+    },
+    "replacement_semantics": {
+      "enum": [
+        "placement_only_validation_stale",
+        "placement_candidate_functional_equivalence_unproven",
+        "placement_and_function_candidate_requires_revalidation"
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "interface_type": {
+            "const": "face_mount"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "features": {
+            "items": {
+              "properties": {
+                "feature_type": {
+                  "const": "planar_face"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "interface_type": {
+            "const": "hole_pattern"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "features": {
+            "items": {
+              "properties": {
+                "feature_type": {
+                  "const": "hole"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "interface_type": {
+            "const": "slot_pattern"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "features": {
+            "items": {
+              "properties": {
+                "feature_type": {
+                  "const": "slot"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "interface_type": {
+            "const": "pin_and_bushing"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "features": {
+            "items": {
+              "properties": {
+                "feature_type": {
+                  "enum": [
+                    "pin",
+                    "bushing"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "interface_type": {
+            "const": "rail_mount"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "features": {
+            "items": {
+              "properties": {
+                "feature_type": {
+                  "const": "rail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "interface_type": {
+            "const": "weld_mount"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "features": {
+            "items": {
+              "properties": {
+                "feature_type": {
+                  "const": "weld_mount"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "interface_type": {
+            "const": "table_grid_mount"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "features": {
+            "items": {
+              "properties": {
+                "feature_type": {
+                  "const": "table_grid_mount"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "interface_type": {
+            "const": "custom_datum_frame"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "features": {
+            "items": {
+              "properties": {
+                "feature_type": {
+                  "const": "custom_datum_frame"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "vector3": {
+      "type": "array",
+      "prefixItems": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "number"
+        }
+      ],
+      "items": false,
+      "minItems": 3,
+      "maxItems": 3
+    },
+    "authority": {
+      "enum": [
+        "fxd_parametric_component",
+        "exact_private_imported_cad",
+        "supplier_authorized_exact_cad",
+        "metadata_only_commercial_component",
+        "provisional_review_envelope",
+        "user_authored_reusable_component",
+        "fixture_family_template",
+        "shop_standard",
+        "process_context_asset",
+        "private_benchmark_reference",
+        "public_engineering_knowledge"
+      ]
+    },
+    "tolerance_intent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "classification",
+        "nominal",
+        "plus",
+        "minus",
+        "units",
+        "human_confirmation_required"
+      ],
+      "properties": {
+        "classification": {
+          "enum": [
+            "nominal",
+            "clearance",
+            "transition",
+            "interference",
+            "weld_fitup",
+            "shop_defined",
+            "unknown"
+          ]
+        },
+        "nominal": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "plus": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "minus": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "units": {
+          "enum": [
+            "mm",
+            "inch"
+          ]
+        },
+        "human_confirmation_required": {
+          "type": "boolean"
+        }
+      }
+    },
+    "mounting_feature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "feature_id",
+        "feature_type",
+        "owning_interface_id",
+        "local_position",
+        "axis",
+        "dimensions",
+        "adjustment_range",
+        "tolerance_clearance_intent",
+        "mating_role",
+        "datum_responsibility",
+        "allowed_replacement_class"
+      ],
+      "properties": {
+        "feature_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "feature_type": {
+          "enum": [
+            "hole",
+            "slot",
+            "pin",
+            "bushing",
+            "rail",
+            "planar_face",
+            "weld_mount",
+            "table_grid_mount",
+            "custom_datum_frame"
+          ]
+        },
+        "owning_interface_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "local_position": {
+          "$ref": "#/$defs/vector3"
+        },
+        "axis": {
+          "$ref": "#/$defs/vector3"
+        },
+        "dimensions": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "diameter",
+            "length",
+            "width",
+            "height",
+            "pitch",
+            "units"
+          ],
+          "properties": {
+            "diameter": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "exclusiveMinimum": 0
+            },
+            "length": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "exclusiveMinimum": 0
+            },
+            "width": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "exclusiveMinimum": 0
+            },
+            "height": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "exclusiveMinimum": 0
+            },
+            "pitch": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "exclusiveMinimum": 0
+            },
+            "units": {
+              "enum": [
+                "mm",
+                "inch"
+              ]
+            }
+          }
+        },
+        "adjustment_range": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "required": [
+            "minimum",
+            "maximum",
+            "units"
+          ],
+          "properties": {
+            "minimum": {
+              "type": "number"
+            },
+            "maximum": {
+              "type": "number"
+            },
+            "units": {
+              "enum": [
+                "mm",
+                "inch",
+                "degree"
+              ]
+            }
+          }
+        },
+        "tolerance_clearance_intent": {
+          "$ref": "#/$defs/tolerance_intent"
+        },
+        "mating_role": {
+          "enum": [
+            "male",
+            "female",
+            "either",
+            "surface",
+            "welded",
+            "datum_only"
+          ]
+        },
+        "datum_responsibility": {
+          "enum": [
+            "primary",
+            "secondary",
+            "tertiary",
+            "adjustment_only",
+            "none",
+            "human_confirmation_required"
+          ]
+        },
+        "allowed_replacement_class": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

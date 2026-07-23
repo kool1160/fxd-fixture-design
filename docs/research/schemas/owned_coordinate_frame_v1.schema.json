@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fxd.invalid/research/owned_coordinate_frame_v1.schema.json",
+  "title": "FXD owned coordinate frame v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "frame_id",
+    "owner_id",
+    "units",
+    "origin",
+    "axes",
+    "handedness",
+    "frame_purpose"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "fxd-owned-coordinate-frame-v1"
+    },
+    "frame_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "owner_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "units": {
+      "enum": [
+        "mm",
+        "inch"
+      ]
+    },
+    "origin": {
+      "$ref": "#/$defs/vector3"
+    },
+    "axes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "x",
+        "y",
+        "z"
+      ],
+      "properties": {
+        "x": {
+          "$ref": "#/$defs/vector3"
+        },
+        "y": {
+          "$ref": "#/$defs/vector3"
+        },
+        "z": {
+          "$ref": "#/$defs/vector3"
+        }
+      }
+    },
+    "handedness": {
+      "enum": [
+        "right_handed",
+        "left_handed"
+      ]
+    },
+    "frame_purpose": {
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "$defs": {
+    "vector3": {
+      "type": "array",
+      "prefixItems": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "number"
+        }
+      ],
+      "items": false,
+      "minItems": 3,
+      "maxItems": 3
+    }
+  }
+}
