@@ -29,20 +29,33 @@ are required. The milestone remains Active through implementation merge and
 requires a separate closeout evidence PR followed, after merge, by a distinct
 state-finalization PR that records the already-existing closeout merge SHA.
 
+The implementation adds the first supported
+`linear_multi_station_weld_fixture` family by extending the existing fixture
+build, OCP authoring, validation, proposal, export, persistence, and workbench
+contracts. It persists stable immutable-source product review instances,
+station intent, equal-pitch layout evidence, real component identities, and
+deterministic access/connectivity results; it does not create a parallel fixture
+system.
+
 The application preserves ordinary vendor STEP import, source bytes and
 SHA-256, XCAF color evidence, zero-based tessellation, and fail-closed behavior.
-Generated AABB fixture evidence is explicitly provisional wireframe review
-geometry and cannot be represented as source or final manufacturing geometry.
+When an M32 build is authored, the workbench displays tessellated real OCP
+fixture components and transformed immutable source-product review instances.
+AABB evidence is retained only as explicitly labelled fallback/debug evidence.
 
 ## Review boundary
 
 PR #54 remains draft, open, and unmerged. Its implementation evidence does not
-complete Milestone 32. A closeout evidence PR must reconcile the required
-evidence profiles, explicit human acceptance, merge evidence, remaining risks,
-and Issue #57 while M32 remains Active. After that PR merges, a distinct
-state-finalization PR records its merge SHA, sets Complete, and formally pauses
-the product lane with zero Active milestones. No Milestone 33 is created or
-implied.
+complete Milestone 32. Integrated-head automated validation must pass before
+the remaining Windows visual and qualified fixture-engineering acceptance.
+A closeout evidence PR must then reconcile the required evidence profiles,
+explicit human acceptance, merge evidence, remaining risks, and Issue #57 while
+M32 remains Active. After that PR merges, a distinct state-finalization PR
+records its merge SHA, sets Complete, and formally pauses the product lane with
+zero Active milestones. No Milestone 33 is created or implied.
+
+The workbench and all exports remain engineering-review-only and never imply
+production, structural, weld-process, or safety approval.
 
 PR #55 is blocked documentation maintenance governed by Issue #58. It does not
 own product status, and its dependency/licensing, byte-determinism, and

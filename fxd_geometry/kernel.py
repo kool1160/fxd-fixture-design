@@ -77,6 +77,9 @@ class KernelFace:
     normal: tuple[float, float, float]
     surface_type: str = "unknown"
     is_planar: bool = False
+    axis_origin_mm: tuple[float, float, float] | None = None
+    axis_direction: tuple[float, float, float] | None = None
+    radius_mm: float | None = None
 
 
 @dataclass(frozen=True)
@@ -475,7 +478,7 @@ class OcpKernel:
 
     def face_records(self, model: object) -> tuple[KernelFace, ...]:
         from OCP.BRepAdaptor import BRepAdaptor_Surface
-        from OCP.GeomAbs import GeomAbs_Plane
+        from OCP.GeomAbs import GeomAbs_Cylinder, GeomAbs_Plane
         from OCP.BRepGProp import BRepGProp
         from OCP.GProp import GProp_GProps
         from OCP.TopAbs import TopAbs_REVERSED
@@ -500,11 +503,26 @@ class OcpKernel:
             direction = tuple(round(x, 9) for x in (normal.X(), normal.Y(), normal.Z()))
             surface_type = surface.GetType()
             planar = surface_type == GeomAbs_Plane
+            axis_origin = axis_direction = None
+            radius = None
+            if surface_type == GeomAbs_Cylinder:
+                cylinder = surface.Cylinder()
+                axis = cylinder.Axis()
+                location = axis.Location()
+                direction_axis = axis.Direction()
+                axis_origin = tuple(round(float(value), 9) for value in (
+                    location.X(), location.Y(), location.Z(),
+                ))
+                axis_direction = tuple(round(float(value), 9) for value in (
+                    direction_axis.X(), direction_axis.Y(), direction_axis.Z(),
+                ))
+                radius = round(float(cylinder.Radius()), 9)
             token = hashlib.sha256(repr((area, center, direction,
                                          int(surface_type))).encode()).hexdigest()[:24]
             records.append(KernelFace(
                 "face:" + token, area, center, direction,
                 "plane" if planar else str(surface_type), planar,
+                axis_origin, axis_direction, radius,
             ))
         return tuple(sorted(records, key=lambda item: item.reference))
 

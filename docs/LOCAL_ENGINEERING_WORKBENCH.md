@@ -163,3 +163,19 @@ provisional output retains the engineering-review-only boundary.
 Milestones 30 and 31 were squash-merged through PRs #52 and #53. Current
 milestone status belongs only to `docs/MILESTONE_STATE.json`; Issue #57 governs
 the sole Active Milestone 32 implementation in draft PR #54.
+
+### Multi-station weld-fixture synthesis
+
+The **Process** page exposes the first supported family, **Linear multi-station
+weld fixture**, together with editable station count (1–8), maximum fixture
+length, optional pitch, loading side, clamp side, table mounting, weld/unload
+evidence, and one-up/multi-up comparison intent. **Generate Fixture Build Plan**
+uses deterministic synthesis for that family; unsupported families are blocked.
+
+After **Author Real Manufacturing Geometry**, the Manufacturing page and VTK
+viewport show tessellated OCP base, rail, stations, locator/support/stop parts,
+clamp brackets, generic vendor-neutral clamp review solids, braces, and table
+holes. Source-product station copies are translucent review instances linked to
+the immutable source SHA and never modify customer CAD. Existing project layer
+controls retain base, locator, support, clamp, product-instance, purchased-tool,
+access-envelope, and findings visibility states. All results are review-only.

@@ -250,22 +250,22 @@ class VtkSceneController:
                 transform.Translate(*origin)
                 actor_transform = transform
                 geometry = source.GetOutput()
-            elif kind == "orientation_face_highlight":
+            elif kind in {"orientation_face_highlight", "authored_mesh", "product_review_mesh"}:
                 vertices = item.get("vertices")
                 triangles = item.get("triangles")
                 if not isinstance(vertices, (list, tuple)) or not isinstance(triangles, (list, tuple)):
-                    raise VtkViewerUnavailable("orientation face highlight requires tessellation")
+                    raise VtkViewerUnavailable("review mesh requires tessellation")
                 points = vtkPoints()
                 for point in vertices:
-                    points.InsertNextPoint(*vector(point, "orientation face vertex"))
+                    points.InsertNextPoint(*vector(point, "review mesh vertex"))
                 cells = vtkCellArray()
                 for triangle in triangles:
                     if not isinstance(triangle, (list, tuple)) or len(triangle) != 3:
-                        raise VtkViewerUnavailable("orientation face highlight requires triangles")
+                        raise VtkViewerUnavailable("review mesh requires triangles")
                     cell = vtkTriangle()
                     for local, index in enumerate(triangle):
                         if not isinstance(index, int) or index < 0 or index >= len(vertices):
-                            raise VtkViewerUnavailable("orientation face triangle index is invalid")
+                            raise VtkViewerUnavailable("review mesh triangle index is invalid")
                         cell.GetPointIds().SetId(local, index)
                     cells.InsertNextCell(cell)
                 source = vtkPolyData()

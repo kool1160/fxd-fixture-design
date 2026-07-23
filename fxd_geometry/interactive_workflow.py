@@ -79,15 +79,27 @@ class ProcessSetup:
     manufacturing_build_direction: Vec3 | None = None
     manufacturing_loading_direction: Vec3 | None = None
     manufacturing_unloading_direction: Vec3 | None = None
+    fixture_family: str | None = None
+    requested_station_count: int | None = None
+    maximum_fixture_length_mm: float | None = None
+    preferred_station_pitch_mm: float | None = None
+    operator_loading_side: str | None = None
+    clamp_operating_side: str | None = None
+    table_mounting_preference: str | None = None
+    compare_one_up_and_multi_up: bool = False
 
     def __post_init__(self) -> None:
         if not self.project_name.strip():
             raise InteractiveWorkflowError("project name is required")
         if self.production_quantity is not None and self.production_quantity < 1:
             raise InteractiveWorkflowError("production quantity must be positive")
+        if self.requested_station_count is not None and not 1 <= self.requested_station_count <= 8:
+            raise InteractiveWorkflowError("requested station count must be between 1 and 8")
         for value, name in (
             (self.required_repeatability_mm, "required repeatability"),
             (self.required_clearance_mm, "required clearance"),
+            (self.maximum_fixture_length_mm, "maximum fixture length"),
+            (self.preferred_station_pitch_mm, "preferred station pitch"),
         ):
             if value is not None and (not math.isfinite(value) or value < 0):
                 raise InteractiveWorkflowError(f"{name} must be finite and non-negative")
@@ -134,6 +146,14 @@ class ProcessSetup:
             "manufacturing_build_direction": vector(self.manufacturing_build_direction),
             "manufacturing_loading_direction": vector(self.manufacturing_loading_direction),
             "manufacturing_unloading_direction": vector(self.manufacturing_unloading_direction),
+            "fixture_family": self.fixture_family,
+            "requested_station_count": self.requested_station_count,
+            "maximum_fixture_length_mm": self.maximum_fixture_length_mm,
+            "preferred_station_pitch_mm": self.preferred_station_pitch_mm,
+            "operator_loading_side": self.operator_loading_side,
+            "clamp_operating_side": self.clamp_operating_side,
+            "table_mounting_preference": self.table_mounting_preference,
+            "compare_one_up_and_multi_up": self.compare_one_up_and_multi_up,
         }
 
     @classmethod
@@ -172,6 +192,14 @@ class ProcessSetup:
             manufacturing_build_direction=vector("manufacturing_build_direction"),
             manufacturing_loading_direction=vector("manufacturing_loading_direction"),
             manufacturing_unloading_direction=vector("manufacturing_unloading_direction"),
+            fixture_family=data.get("fixture_family"),
+            requested_station_count=data.get("requested_station_count"),
+            maximum_fixture_length_mm=data.get("maximum_fixture_length_mm"),
+            preferred_station_pitch_mm=data.get("preferred_station_pitch_mm"),
+            operator_loading_side=data.get("operator_loading_side"),
+            clamp_operating_side=data.get("clamp_operating_side"),
+            table_mounting_preference=data.get("table_mounting_preference"),
+            compare_one_up_and_multi_up=bool(data.get("compare_one_up_and_multi_up", False)),
         )
 
 
@@ -415,6 +443,48 @@ def _bounds(points: tuple[tuple[float, float, float], ...]) -> Aabb:
     )
 
 
+def _normalized_face(face: object, mesh: object) -> Face:
+    """Preserve exact OCP feature evidence in the CAD-neutral product model."""
+    vertices = tuple(getattr(mesh, "vertices_mm"))
+    triangles = tuple(getattr(mesh, "triangles"))
+    payload = repr((str(getattr(face, "reference")), vertices, triangles)).encode("utf-8")
+    axis_origin = getattr(face, "axis_origin_mm", None)
+    axis_direction = getattr(face, "axis_direction", None)
+    return Face(
+        str(getattr(face, "reference")),
+        Vec3(*getattr(face, "center_mm")),
+        Vec3(*getattr(face, "normal")),
+        float(getattr(face, "area_mm2")),
+        str(getattr(face, "surface_type", "unknown")),
+        bool(getattr(face, "is_planar", False)),
+        _bounds(vertices),
+        Vec3(*axis_origin) if axis_origin is not None else None,
+        Vec3(*axis_direction) if axis_direction is not None else None,
+        float(getattr(face, "radius_mm")) if getattr(face, "radius_mm", None) is not None else None,
+        sha256(payload).hexdigest(),
+        _interior_mesh_points(vertices, triangles),
+    )
+
+
+def _interior_mesh_points(
+    vertices: tuple[tuple[float, float, float], ...],
+    triangles: tuple[tuple[int, int, int], ...],
+) -> tuple[Vec3, ...]:
+    """Return stable points proven to lie inside tessellated face triangles."""
+    candidates: list[tuple[float, float, float]] = []
+    weights = ((1 / 3, 1 / 3, 1 / 3), (0.6, 0.2, 0.2),
+               (0.2, 0.6, 0.2), (0.2, 0.2, 0.6))
+    for triangle in triangles:
+        points = tuple(vertices[index] for index in triangle)
+        for barycentric in weights:
+            candidates.append(tuple(
+                round(sum(barycentric[index] * points[index][axis] for index in range(3)), 9)
+                for axis in range(3)
+            ))
+    unique = tuple(sorted(set(candidates)))
+    return tuple(Vec3(*point) for point in unique)
+
+
 def product_from_workbench_document(document: WorkbenchDocument) -> ProductModel:
     """Create a neutral product only from real OCP identities and vertices."""
     mesh_by_face = {mesh.face_reference: mesh for mesh in document.meshes}
@@ -429,7 +499,12 @@ def product_from_workbench_document(document: WorkbenchDocument) -> ProductModel
                 )
             points = tuple(point for mesh in meshes for point in mesh.vertices_mm)
             body_token = sha256(kernel_component.reference.encode()).hexdigest()[:20]
-            body = Body("body:" + body_token, _bounds(points), tuple(Face(item) for item in face_ids))
+            normalized_faces = tuple(
+                _normalized_face(face, mesh_by_face[face.reference])
+                for face in kernel_component.faces
+                if face.reference in mesh_by_face
+            )
+            body = Body("body:" + body_token, _bounds(points), normalized_faces)
             components.append(Component(
                 kernel_component.reference, kernel_component.name,
                 kernel_component.parent_reference, Transform(), (body,),
@@ -437,8 +512,25 @@ def product_from_workbench_document(document: WorkbenchDocument) -> ProductModel
             ))
     else:
         points = tuple(point for mesh in document.meshes for point in mesh.vertices_mm)
+        face_by_reference = {
+            face.reference: face for face in document.kernel_faces
+        }
         body = Body("body:source", _bounds(points),
-                    tuple(Face(mesh.face_reference) for mesh in document.meshes))
+                    tuple(
+                        _normalized_face(face_by_reference[mesh.face_reference], mesh)
+                        if mesh.face_reference in face_by_reference else
+                        Face(
+                            mesh.face_reference,
+                            bounds=_bounds(mesh.vertices_mm),
+                            mesh_evidence_digest=sha256(repr((
+                                mesh.face_reference, mesh.vertices_mm, mesh.triangles,
+                            )).encode("utf-8")).hexdigest(),
+                            contact_points_mm=_interior_mesh_points(
+                                mesh.vertices_mm, mesh.triangles,
+                            ),
+                        )
+                        for mesh in document.meshes
+                    ))
         components.append(Component(
             "source:geometry", document.source_name, None, Transform(), (body,),
             "source:geometry",
@@ -458,17 +550,11 @@ def face_annotation(document: WorkbenchDocument, reference: GeometryReference,
                  if component.reference == reference.component_identity
                  for face in component.faces if face.reference == reference.face_identity), None)
     if face is None and reference.component_identity == "source:geometry":
-        mesh = next((item for item in document.meshes
-                     if item.face_reference == reference.face_identity), None)
-        if mesh is not None:
-            points = mesh.vertices_mm
-            center = tuple(sum(point[index] for point in points) / len(points) for index in range(3))
-            # Unstructured STEP lacks XCAF face normals. Exact identity remains
-            # selectable, but datum candidacy cannot be manufactured from a
-            # guessed normal.
-            raise InteractiveWorkflowError(
-                f"face {reference.face_identity} lacks XCAF normal evidence; annotation was not created"
-            )
+        face = next(
+            (item for item in document.kernel_faces
+             if item.reference == reference.face_identity),
+            None,
+        )
     if face is None:
         raise InteractiveWorkflowError("selected face is not mapped to the imported OCP assembly")
     token = sha256(f"{role.value}:{reference.component_identity}:{reference.face_identity}".encode()).hexdigest()[:16]
@@ -518,10 +604,74 @@ def _engineering_annotations(product: ProductModel,
     critical = tuple(CriticalCharacteristic(
         item.identity, (item.reference,), notes=item.notes,
     ) for item in workflow.geometry_annotations if item.role == AnnotationRole.CRITICAL_FEATURE)
-    welds = tuple(WeldJoint(
-        item.identity, (item.reference,), setup.manufacturing_process, item.notes,
-        assumptions=item.assumptions,
-    ) for item in workflow.geometry_annotations if item.role == AnnotationRole.WELD_JOINT)
+    def _evidence_values(annotation: GeometryAnnotation) -> dict[str, str]:
+        values: dict[str, str] = {}
+        for evidence in annotation.evidence:
+            key, separator, value = evidence.partition("=")
+            if separator:
+                values[key] = value
+        return values
+
+    welds: list[WeldJoint] = []
+    for item in workflow.geometry_annotations:
+        if item.role != AnnotationRole.WELD_JOINT:
+            continue
+        values = _evidence_values(item)
+        # Legacy annotations predate explicit candidate state. They remain
+        # confirmed evidence for compatible existing projects; new M32
+        # annotations must explicitly state every weld-intent field.
+        status = values.get("weld_candidate_status")
+        if status is None:
+            if setup.fixture_family == "linear_multi_station_weld_fixture":
+                # M32 never promotes a legacy face tag into confirmed weld
+                # intent.  Side, length, process, and sequence must be explicit.
+                continue
+            welds.append(WeldJoint(
+                item.identity, (item.reference,), setup.manufacturing_process, item.notes,
+                assumptions=item.assumptions,
+            ))
+            continue
+        required = ("weld_side", "weld_length_mm", "weld_process", "weld_sequence")
+        if status != "confirmed" or any(not values.get(key) for key in required):
+            continue
+        try:
+            length = float(values["weld_length_mm"])
+            sequence = int(values["weld_sequence"])
+        except ValueError:
+            continue
+        if values["weld_side"] == "Unknown" or length <= 0.0 or sequence < 1:
+            continue
+        direction_values = {
+            "+X": Vec3(1.0, 0.0, 0.0), "-X": Vec3(-1.0, 0.0, 0.0),
+            "+Y": Vec3(0.0, 1.0, 0.0), "-Y": Vec3(0.0, -1.0, 0.0),
+            "+Z": Vec3(0.0, 0.0, 1.0), "-Z": Vec3(0.0, 0.0, -1.0),
+        }
+        approach_manufacturing = direction_values.get(
+            values.get("weld_approach_direction_mfg", "")
+        )
+        weld_direction_manufacturing = direction_values.get(
+            values.get("weld_direction_mfg", "")
+        )
+        weld_direction_source = (
+            orientation.manufacturing_vector_to_source(weld_direction_manufacturing)
+            if weld_direction_manufacturing is not None else None
+        )
+        torch_values = tuple(values.get(key, "") for key in (
+            "torch_envelope_width_mm", "torch_envelope_height_mm", "torch_envelope_length_mm",
+        ))
+        notes = (item.notes + " | " if item.notes else "") + (
+            f"side={values['weld_side']}; length_mm={length:.3f}; candidate_status=confirmed"
+        )
+        if approach_manufacturing is not None:
+            notes += f"; approach_mfg={values['weld_approach_direction_mfg']}"
+        if weld_direction_manufacturing is not None:
+            notes += f"; weld_direction_mfg={values['weld_direction_mfg']}"
+        if all(torch_values):
+            notes += "; torch_envelope_mm=" + "x".join(torch_values)
+        welds.append(WeldJoint(
+            item.identity, (item.reference,), values["weld_process"], notes, sequence,
+            direction=weld_direction_source, assumptions=item.assumptions,
+        ))
     assumptions = [
         Assumption("fixture_type", setup.fixture_type or "unknown", "Engineer process setup."),
         Assumption("operation_mode", setup.operation_mode or "unknown", "Engineer process setup."),
@@ -548,7 +698,7 @@ def _engineering_annotations(product: ProductModel,
         product.source_sha256, product.source_name, build_orientation,
         loading_direction,
         f"{setup.operation_mode} {setup.manufacturing_process}", setup.production_quantity,
-        critical, permitted, forbidden, welds, setup.shop_capabilities,
+        critical, permitted, forbidden, tuple(welds), setup.shop_capabilities,
         tuple(assumptions),
     )
 

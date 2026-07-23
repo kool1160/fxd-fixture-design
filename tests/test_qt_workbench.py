@@ -22,22 +22,30 @@ from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QCheckBox, QComboBox, QPushButton, QWidget
 
 from fxd_geometry import (
+    AnnotationRole,
     EngineeringAnnotations,
     ExportError,
+    FixtureBuildError,
+    GeometryReference,
     KernelOperationError,
     InteractiveWorkflow,
     OcpKernel,
     ProcessSetup,
+    ProductFeatureRole,
+    ReferencePlane,
     RenderDiagnostics,
     Vec3,
     generate_fixture_proposal,
+    face_annotation,
     import_step,
     load_step_for_workbench,
     minimal_intent_questions,
     product_from_workbench_document,
+    reference_plane_orientation,
     source_orientation,
 )
 from fxd_geometry.project import FxdProject
+from fxd_geometry.ai_fixture_engineer import deterministic_baseline_proposal
 from fxd_qt_app import (
     EVIDENCE_PROVISIONAL,
     EVIDENCE_REAL,
@@ -260,6 +268,44 @@ class QtWorkbenchTests(unittest.TestCase):
         self.window.author_real_fixture_geometry()
         return self.window.project.fixture_build, self.window.authored_fixture_build
 
+    def _accept_current_fixture_proposal(self):
+        self.window._capture_process_setup()
+        setup = self.window.workflow.setup
+        if (setup.manufacturing_loading_direction is None
+                or setup.manufacturing_unloading_direction is None):
+            self.window.workflow = replace(
+                self.window.workflow,
+                setup=replace(
+                    setup,
+                    manufacturing_loading_direction=(
+                        setup.manufacturing_loading_direction or Vec3(0.0, -1.0, 0.0)
+                    ),
+                    manufacturing_unloading_direction=(
+                        setup.manufacturing_unloading_direction or Vec3(0.0, 1.0, 0.0)
+                    ),
+                ),
+            )
+        if not self.window.workflow.geometry_annotations:
+            component = self.window.project.product.components[0]
+            body = component.bodies[0]
+            datum = face_annotation(
+                self.window.document,
+                GeometryReference(component.identity, body.identity, body.faces[0].identity),
+                AnnotationRole.PRIMARY_DATUM,
+            )
+            self.window.workflow = replace(
+                self.window.workflow, geometry_annotations=(datum,)
+            )
+        self.window._replace_project(self.window.project.with_workflow(self.window.workflow))
+        proposal = deterministic_baseline_proposal(self.window.project)
+        self.window._replace_project(
+            self.window.project.with_fixture_proposal(proposal).decide_fixture_proposal(
+                "accepted_for_engineering_review"
+            )
+        )
+        self.window.workflow = self.window.project.workflow
+        return self.window.project.fixture_proposal
+
     def test_shell_creation_has_one_embedded_viewport_and_no_side_effects(self):
         self.assertIs(self.window.centralWidget().findChild(FakeViewport), self.window.viewport)
         self.assertFalse(self.window.viewport.separate_window_created)
@@ -301,6 +347,250 @@ class QtWorkbenchTests(unittest.TestCase):
         self.assertIsNotNone(self.window.authored_fixture_build)
         self.assertGreater(self.window.fabrication_components.count(), 0)
         self.assertIn("REAL OCP B-REP", self.window.fabrication_components.item(0).text())
+
+    def test_m32_multi_station_controls_require_exact_feature_annotations(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = self._real_step(directory, compound=True)
+            self.window.document = load_step_for_workbench(source)
+            self.window.viewport.load_document(self.window.document)
+            self.window._replace_project(self._project(source))
+        self.window.workflow = InteractiveWorkflow(
+            self.window.project.product.source_sha256,
+            ProcessSetup(
+                "M32 workbench",
+                manufacturing_orientation=reference_plane_orientation(
+                    self.window.project.product.source_sha256, ReferencePlane.TOP,
+                    rotation_degrees=90.0, accepted=True,
+                ),
+            ),
+            concepts_generated=True,
+        )
+        self.window.process_fixture_type.setCurrentText("Full weld fixture")
+        self.window.process_construction.setCurrentText("Laser-cut fabricated")
+        self.window.process_lifecycle.setCurrentText("Full permanent fixture")
+        self.window.process_weld_access.setChecked(True)
+        self.window.process_unload_clearance.setChecked(True)
+        self.window.process_adjustment_state.setCurrentText("Locked production position")
+        self.window.process_fixture_family.setCurrentText("Linear multi-station weld fixture")
+        self.window.process_station_count.setValue(5)
+        self.window.process_max_fixture_length.setValue(3000.0)
+        self.window.process_compare_multi_up.setChecked(True)
+        with patch("fxd_qt_app.QMessageBox.warning") as warning:
+            self.window.generate_fixture_build_plan()
+        self.assertIsNone(self.window.project.fixture_build)
+        self.assertIn(
+            "Fixture Proposal",
+            self.window.statusBar().currentMessage(),
+        )
+        self._accept_current_fixture_proposal()
+        with self.assertRaisesRegex(FixtureBuildError, "exact OCP face"):
+            self.window._multi_station_requirements(
+                self.window._capture_process_setup()
+            )
+
+    def test_m32_controls_bind_exact_annotated_product_features(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = self._real_step(directory, compound=True)
+            document = load_step_for_workbench(source)
+            self.window.document = document
+            self.window.viewport.load_document(document)
+            self.window._replace_project(self._project(source))
+        product = self.window.project.product
+
+        def reference_for(normal):
+            candidates = tuple(
+                (component, body, face)
+                for component in product.components
+                for body in component.bodies
+                for face in body.faces
+                if face.is_planar and face.normal == Vec3(*normal)
+            )
+            component, body, face = max(
+                candidates,
+                key=lambda item: (item[2].area_mm2, item[2].identity),
+            )
+            return GeometryReference(component.identity, body.identity, face.identity)
+
+        annotations = tuple(
+            face_annotation(document, reference_for(normal), role)
+            for normal, role in (
+                ((0.0, 0.0, -1.0), AnnotationRole.PRIMARY_DATUM),
+                ((0.0, -1.0, 0.0), AnnotationRole.SECONDARY_DATUM),
+                ((-1.0, 0.0, 0.0), AnnotationRole.TERTIARY_DATUM),
+                ((0.0, 0.0, 1.0), AnnotationRole.PERMITTED_SUPPORT),
+            )
+        )
+        orientation = source_orientation(product.source_sha256, accepted=True)
+        setup = ProcessSetup(
+            "M32 exact UI bindings",
+            fixture_family="linear_multi_station_weld_fixture",
+            operation_mode="Manual",
+            production_quantity=1,
+            manufacturing_orientation=orientation,
+            manufacturing_loading_direction=Vec3(1.0, 0.0, 0.0),
+            manufacturing_unloading_direction=Vec3(-1.0, 0.0, 0.0),
+        )
+        self.window.workflow = InteractiveWorkflow(
+            product.source_sha256, setup, annotations, concepts_generated=True,
+        )
+        self.window._replace_project(
+            self.window.project.with_workflow(self.window.workflow)
+        )
+        self.window.process_fixture_family.setCurrentText(
+            "Linear multi-station weld fixture"
+        )
+        requirements = self.window._multi_station_requirements(setup)
+
+        self.assertEqual(len(requirements.product_feature_bindings), 4)
+        self.assertEqual(
+            {binding.role for binding in requirements.product_feature_bindings},
+            {
+                ProductFeatureRole.PRIMARY_SUPPORT,
+                ProductFeatureRole.SECONDARY_LOCATOR,
+                ProductFeatureRole.TERTIARY_STOP,
+                ProductFeatureRole.CLAMP_CONTACT,
+            },
+        )
+        self.assertTrue(all(
+            binding.mesh_evidence_digest
+            and binding.contact_points_source_mm
+            for binding in requirements.product_feature_bindings
+        ))
+
+    def test_editing_accepted_station_count_creates_new_intent(self):
+        self.window._replace_project(self._project())
+        orientation = source_orientation(self.window.project.product.source_sha256, accepted=True)
+        self.window.process_fixture_family.setCurrentText("Linear multi-station weld fixture")
+        self.window.process_station_count.setValue(3)
+        self.window.process_max_fixture_length.setValue(1219.2)
+        self.window.process_station_pitch.setValue(0.0)
+        self.window._accepted_multi_station_fit_key = (5, 1219.2, 0.0)
+        self.window._accepted_multi_station_feasible_count = 4
+        with self.assertRaisesRegex(FixtureBuildError, "exact OCP face"):
+            self.window._multi_station_requirements(ProcessSetup(
+                "station intent edit", fixture_family="linear_multi_station_weld_fixture",
+                operation_mode="Manual", production_quantity=1,
+                manufacturing_orientation=orientation,
+                manufacturing_loading_direction=Vec3(1, 0, 0),
+                manufacturing_unloading_direction=Vec3(-1, 0, 0),
+            ))
+
+    def test_m32_process_directions_convert_through_rotated_and_flipped_orientation(self):
+        self.window._replace_project(self._project())
+        source_sha = self.window.project.product.source_sha256
+        self.window.process_fixture_family.setCurrentText("Linear multi-station weld fixture")
+        self.window.process_operator_loading_side.setCurrentText("Operator front (+Y)")
+        self.window.process_clamp_operating_side.setCurrentText("Operator right (+X)")
+        rotated = reference_plane_orientation(
+            source_sha, ReferencePlane.TOP, rotation_degrees=90.0, accepted=True,
+        )
+        setup = ProcessSetup(
+            "rotated M32 directions", fixture_family="linear_multi_station_weld_fixture",
+            operation_mode="Manual", production_quantity=1,
+            manufacturing_orientation=rotated,
+            manufacturing_loading_direction=Vec3(1, 0, 0),
+            manufacturing_unloading_direction=Vec3(0, -1, 0),
+        )
+        with self.assertRaisesRegex(FixtureBuildError, "exact OCP face"):
+            self.window._multi_station_requirements(setup)
+
+        flipped = reference_plane_orientation(
+            source_sha, ReferencePlane.TOP, flip_normal=True,
+            rotation_degrees=180.0, accepted=True,
+        )
+        with self.assertRaisesRegex(FixtureBuildError, "exact OCP face"):
+            self.window._multi_station_requirements(replace(
+                setup, manufacturing_orientation=flipped,
+            ))
+
+    def test_weld_confirmation_does_not_invent_torch_approach_or_envelope(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = self._real_step(directory)
+            document = load_step_for_workbench(source)
+            product = product_from_workbench_document(document)
+            self.window.document = document
+            self.window.viewport.load_document(document)
+            self.window._replace_project(self._project(source))
+        orientation = source_orientation(product.source_sha256, accepted=True)
+        self.window.workflow = InteractiveWorkflow(
+            product.source_sha256,
+            ProcessSetup(
+                "explicit weld evidence", fixture_family="linear_multi_station_weld_fixture",
+                fixture_type="Full weld fixture", manufacturing_process="MIG welding",
+                operation_mode="Manual", production_quantity=1,
+                manufacturing_orientation=orientation,
+                manufacturing_build_direction=Vec3(0, 0, 1),
+                manufacturing_loading_direction=Vec3(1, 0, 0),
+                manufacturing_unloading_direction=Vec3(-1, 0, 0),
+            ),
+        )
+        component = product.components[0]
+        body = component.bodies[0]
+        from fxd_geometry import GeometryReference
+        self.window.selected_reference = GeometryReference(
+            component.identity, body.identity, body.faces[0].identity,
+        )
+        self.window.annotation_role.setCurrentIndex(tuple(AnnotationRole).index(AnnotationRole.WELD_JOINT))
+        self.window.weld_intent_state.setCurrentText("Confirm selected weld seam")
+        self.window.weld_intent_side.setCurrentText("Operator side")
+        self.window.weld_intent_length.setValue(20.0)
+        self.window.weld_intent_sequence.setValue(1)
+        self.window.process_method.setCurrentText("MIG welding")
+        self.assertEqual(self.window.weld_intent_direction.currentText(), "Unknown")
+        self.assertEqual(self.window.weld_intent_approach.currentText(), "Unknown")
+        self.assertEqual(self.window.weld_intent_torch_width.value(), 0.0)
+        self.assertEqual(self.window.weld_intent_torch_height.value(), 0.0)
+        self.assertEqual(self.window.weld_intent_torch_length.value(), 0.0)
+        with patch("fxd_qt_app.QMessageBox.warning") as warning:
+            self.window.assign_selected_annotation()
+        warning.assert_not_called()
+        evidence = self.window.workflow.geometry_annotations[-1].evidence
+        self.assertFalse(any(item.startswith("weld_direction_mfg=") for item in evidence))
+        self.assertFalse(any(item.startswith("weld_approach_direction_mfg=") for item in evidence))
+        self.assertFalse(any(item.startswith("torch_envelope_") for item in evidence))
+
+    def test_fixture_build_validation_source_is_independent_and_routes_to_visible_controls(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = self._real_step(directory, compound=True)
+            self.window.document = load_step_for_workbench(source)
+            self.window.viewport.load_document(self.window.document)
+            self.window._replace_project(self._project(source))
+        self.window.workflow = InteractiveWorkflow(
+            self.window.project.product.source_sha256,
+            ProcessSetup("fixture-build validation source", manufacturing_orientation=source_orientation(
+                self.window.project.product.source_sha256, accepted=True,
+            )),
+            concepts_generated=True,
+        )
+        self.window.process_fixture_type.setCurrentText("Full weld fixture")
+        self.window.process_construction.setCurrentText("Laser-cut fabricated")
+        self.window.process_lifecycle.setCurrentText("Full permanent fixture")
+        self.window.process_weld_access.setChecked(False)
+        self.window.process_unload_clearance.setChecked(True)
+        self.window.process_adjustment_state.setCurrentText("Locked production position")
+        self.window.process_fixture_family.setCurrentText(
+            "Existing single-station fixture workflow"
+        )
+        self._accept_current_fixture_proposal()
+        self.window.generate_fixture_build_plan()
+        self.assertIsNotNone(self.window.project.fixture_build)
+        build_digest = self.window.project.fixture_build_validation.evidence_digest
+        self.window._refresh_all()
+        self.assertEqual(self.window.project.fixture_build_validation.evidence_digest, build_digest)
+        self.window.validation_source_selector.setCurrentText("Fixture Build Plan")
+        self.assertIn("Active validation source: Fixture Build Plan", self.window.validation_source_summary.text())
+        self.assertGreater(self.window.findings.count(), 0)
+        self.assertGreater(self.window.guided_issues.count(), 0)
+        issue = self.window._selected_guided_issue()
+        if issue is None:
+            self.window.guided_issues.setCurrentRow(0)
+            issue = self.window._selected_guided_issue()
+        self.assertIsNotNone(issue)
+        self.assertTrue(hasattr(issue, "fix_target"))
+        self.window.validation_source_selector.setCurrentText("Fixture Proposal")
+        self.assertIn("Fixture Proposal", self.window.validation_source_summary.text())
+        self.window.validation_source_selector.setCurrentText("Authored Manufacturing Geometry")
+        self.assertIn("Authored Manufacturing Geometry", self.window.validation_source_summary.text())
 
     def test_m30_authored_geometry_cache_is_cleared_and_identity_gated(self):
         plan, authored = self._author_m30_tack_build()
@@ -1353,6 +1643,19 @@ print(json.dumps(result, sort_keys=True))
                 for index in range(window.tree.topLevelItemCount())
             ]
             self.assertIn("Product geometry", titles)
+        finally:
+            window.close()
+            self.application.processEvents()
+
+    def test_strict_visual_review_project_load_fails_when_native_renderer_fails(self):
+        window = FxdWorkbenchWindow(viewport_factory=FailingViewport)
+        try:
+            with tempfile.TemporaryDirectory() as directory:
+                source = Path(directory) / "project.fxd.json"
+                self._project().save(source)
+                with patch("fxd_qt_app.load_step_for_workbench", return_value=object()):
+                    with self.assertRaisesRegex(RuntimeError, "real OCP and native VTK"):
+                        window.load_project_path(source, require_real_display=True)
         finally:
             window.close()
             self.application.processEvents()

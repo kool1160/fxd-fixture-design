@@ -15,6 +15,17 @@ class Edge:
 @dataclass(frozen=True)
 class Face:
     identity: str
+    center_mm: Vec3 | None = None
+    normal: Vec3 | None = None
+    area_mm2: float | None = None
+    surface_type: str = "unknown"
+    is_planar: bool = False
+    bounds: Aabb | None = None
+    axis_origin_mm: Vec3 | None = None
+    axis_direction: Vec3 | None = None
+    radius_mm: float | None = None
+    mesh_evidence_digest: str | None = None
+    contact_points_mm: Tuple[Vec3, ...] = ()
 
 
 @dataclass(frozen=True)

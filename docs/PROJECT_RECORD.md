@@ -522,7 +522,35 @@ highlighting, guided issue explanation, correction routing, and post-resize
 repaint were exercised. The source SHA-256 remained
 `2A9EAC1BCEBD809EEC6DF40BA07D3576E6D1926AE7DA3D2AC0BC88F010CEAF94`.
 
-PR #53 hosted pinned-OCP acceptance and fresh independent Codex review pass on
-the final implementation. Milestone 31 remains pending user Windows visual
-acceptance, engineering acceptance, and explicit merge authority. No production
-fixture approval or physical adequacy claim is made.
+PR #53 hosted pinned-OCP acceptance and fresh independent Codex review passed
+on the final implementation. Milestone 31 was subsequently accepted and merged;
+no production fixture approval or physical adequacy claim was made.
+
+## 2026-07-19 - Milestone 31 merge and Milestone 32 local implementation evidence
+
+Milestone 31 was accepted and squash-merged through PR #53 at
+`ac1e7a1799ef9be674f6ab5739e48d178fa2f1dc`. Milestone 32 is locally verified and extends
+the existing fixture-build contract with the first governed
+`linear_multi_station_weld_fixture` family. The deterministic implementation
+persists one-to-eight station intent, source-SHA-referenced product review
+instances, equal pitch/length rationale, explicit access state, real OCP
+base/rail/station/brace/clamp component identities, slot operations, BOM and
+review-export evidence.
+
+The synthetic M32 acceptance model is generated from two public rectangular
+plate solids forming an angled bracket; no customer, employer, vendor, or
+private CAD is committed. Station review copies retain only the immutable source
+identity and transform. The workbench displays tessellated authored OCP solids
+and transformed product review meshes; AABB geometry remains only a labelled
+debug fallback when tessellation fails.
+
+Focused M32, M30 fixture-build, proposal, project-persistence, and Qt workbench
+tests pass locally. The full suite passes 298 tests with 3 expected skips;
+`bash scripts/ci.sh` passes with the pinned OCP proof and secret scan; the M31
+PowerShell acceptance-runner suite passes 9 tests; and the Windows workbench
+launch confirms OCP/VTK availability plus the M32 Process controls. PR #54's
+hosted `Kernel acceptance` workflow passed for implementation commit
+`e81db500e02f55a17ebe43bba6b30a006fb712da`, including pinned-wheel install,
+runtime proof, and repository validation. The PR remains draft and unmerged;
+engineering acceptance is still required. All outputs remain
+engineering-review-only.

@@ -275,10 +275,31 @@ rules, supplier scraping, or paid-service enablement is included.
 
 **Recommended level:** Sol
 
-## Milestone 32 - Multi-station weld fixture synthesis
+## Milestone 32 - Multi-station weld-fixture synthesis
 
 **Status:** Active
 
-Issue #57 is the authoritative scope. Draft PR #54 is the implementation PR. Evidence profiles A, B, C, D, and E are required. The milestone remains Active through implementation merge and its separate closeout evidence PR. A distinct state-finalization PR must then record the closeout merge SHA and formally pause the approved product lane with zero Active milestones; no Milestone 33 is created or implied.
+Issue #57 is the authoritative scope. Draft PR #54 is the implementation PR.
+Evidence profiles A, B, C, D, and E are required. The milestone remains Active
+through implementation merge and its separate closeout evidence PR. After that
+PR merges, a distinct state-finalization PR must record the closeout merge SHA,
+mark M32 Complete, and formally pause the approved product lane with zero Active
+milestones; no Milestone 33 is created or implied.
+
+Turn an accepted proposal and deterministic manufacturing intent into the first
+practical editable multi-station OCP fixture assembly. The supported family is
+`linear_multi_station_weld_fixture` for small repeatable fabricated assemblies;
+other fixture families fail explicitly. The build must compose the established
+fixture-build, placement, manufacturing-geometry, validation, project, export,
+proposal, and workbench contracts rather than creating a parallel fixture model.
+
+Acceptance requires stable immutable-source product review instances, editable
+one-to-eight station intent, deterministic pitch/length fit and smaller-count
+proposal, connected base/rail/braces, repeated supports/locators/stops/clamp
+brackets/generic clamp review solids, actual OCP authoring and VTK display,
+validation and export reconciliation, save/reload, full regression evidence,
+hosted pinned-OCP acceptance, and Windows visual/engineering acceptance. It
+does not add released vendor CAD, structural certification, automatic production
+release, paid-provider calls, or customer geometry.
 
 **Recommended level:** Sol

@@ -30,6 +30,12 @@ from .manufacturing_orientation import ManufacturingOrientationError
 from .placement import PlacementRole
 from .project import FxdProject, ProjectFormatError
 from .workbench import WorkbenchDocument
+from .fixture_knowledge import (
+    PrecedentQuery,
+    PrecedentRetrievalResult,
+    load_fixture_knowledge,
+    retrieve_precedent,
+)
 
 
 PROPOSAL_SCHEMA = "fxd-fixture-proposal-v1"
@@ -365,6 +371,12 @@ class FixtureProposal:
     @property
     def warning_count(self) -> int:
         return sum(item.severity == "warning" for item in self.guided_issues)
+
+    @property
+    def evidence_digest(self) -> str:
+        """Bind downstream work to the complete persisted proposal evidence."""
+        encoded = json.dumps(self.to_dict(), sort_keys=True, separators=(",", ":"))
+        return sha256(encoded.encode("utf-8")).hexdigest()
 
     @property
     def validation_status(self) -> str:
@@ -1021,7 +1033,59 @@ def _known_identities(project: FxdProject) -> frozenset[str]:
     orientation = project.workflow.setup.manufacturing_orientation if project.workflow else None
     if orientation:
         values.add(orientation.identity)
+    precedent = _fixture_precedent(project)
+    values.update(precedent.selected_record_identities)
+    values.update(item.record_identity for item in precedent.rejected_constraints)
     return frozenset(values)
+
+
+def _fixture_precedent(project: FxdProject) -> PrecedentRetrievalResult:
+    workflow = project.workflow
+    if workflow is None:
+        raise FixtureProposalError("fixture precedent requires manufacturing intent")
+    setup = workflow.setup
+    datum_roles = tuple(sorted(
+        item.role.value for item in workflow.geometry_annotations
+        if item.role in {
+            AnnotationRole.PRIMARY_DATUM,
+            AnnotationRole.SECONDARY_DATUM,
+            AnnotationRole.TERTIARY_DATUM,
+        }
+    ))
+    quantity = setup.production_quantity or 1
+    return retrieve_precedent(
+        load_fixture_knowledge(),
+        PrecedentQuery(
+            setup.fixture_family or "unsupported",
+            "sheet-metal and fabricated weldments",
+            setup.material_assumptions or "plate",
+            setup.manufacturing_process or "unresolved",
+            setup.volume_category or ("repeat production" if quantity > 20 else "low volume"),
+            setup.operation_mode or "unresolved",
+            "accepted manufacturing orientation",
+            setup.construction_method or "laser_cut_fabricated",
+            setup.requested_station_count,
+            datum_opportunities=datum_roles,
+            support_opportunities=tuple(
+                item.reference.face_identity or "" for item in workflow.geometry_annotations
+                if item.role == AnnotationRole.PRIMARY_DATUM
+            ),
+            locator_opportunities=tuple(
+                item.reference.face_identity or "" for item in workflow.geometry_annotations
+                if item.role in {AnnotationRole.SECONDARY_DATUM, AnnotationRole.TERTIARY_DATUM}
+            ),
+            clamp_direction=setup.clamp_operating_side or "",
+            load_unload_intent=tuple(
+                value for value in (
+                    str(setup.manufacturing_loading_direction or ""),
+                    str(setup.manufacturing_unloading_direction or ""),
+                ) if value
+            ),
+            weld_access=("qualified weld-access review required",),
+            changeover_needs=(setup.fixture_lifecycle or "unresolved",),
+        ),
+        limit=10,
+    )
 
 
 def build_ai_request(project: FxdProject) -> AiProposalRequest:
@@ -1030,6 +1094,7 @@ def build_ai_request(project: FxdProject) -> AiProposalRequest:
         raise FixtureProposalError("AI proposal requires an accepted current manufacturing orientation")
     orientation = workflow.setup.manufacturing_orientation
     assert orientation is not None
+    precedent = _fixture_precedent(project)
     context = {
         "source": {"name": project.product.source_name,
                    "sha256": project.product.source_sha256, "units": project.product.units},
@@ -1048,7 +1113,10 @@ def build_ai_request(project: FxdProject) -> AiProposalRequest:
         "annotations": [{"identity": item.identity, "role": item.role.value,
                          "reference": item.reference.__dict__, "area_mm2": item.surface_area_mm2,
                          "normal": item.normal.__dict__}
-                        for item in workflow.geometry_annotations],
+                        for item in sorted(
+                            workflow.geometry_annotations,
+                            key=lambda value: value.identity,
+                        )],
         "customer_tooling": [{
             "identity": item.identity,
             "kind": item.kind,
@@ -1080,6 +1148,7 @@ def build_ai_request(project: FxdProject) -> AiProposalRequest:
         "alternatives": [{"identity": item.identity, "objective": item.objective,
                           "validation": project.validation_for(item).status}
                          for item in project.concepts],
+        "fixture_precedent": precedent.compact_context(),
     }
     encoded = json.dumps(context, sort_keys=True)
     if "source_step_base64" in encoded or "source_bytes" in encoded:
@@ -1094,7 +1163,12 @@ def build_ai_request(project: FxdProject) -> AiProposalRequest:
 
 def proposal_engineering_context_identity(project: FxdProject) -> str:
     """Return the governed upstream context identity used to author a proposal."""
-    return build_ai_request(project).engineering_context_identity
+    # A fixture proposal is upstream authority for a fixture-build plan.  Its
+    # freshness therefore cannot depend on the downstream build that will be
+    # bound to it; doing so makes every subsequently attached invalid or
+    # provisional plan pre-empt its own validation gates as a stale proposal.
+    upstream = replace(project, fixture_build=None)
+    return build_ai_request(upstream).engineering_context_identity
 
 
 def _evidence(identity: str, kind: str, summary: str) -> tuple[ProposalEvidence, ...]:
@@ -1163,6 +1237,27 @@ def deterministic_baseline_proposal(
                             EditableParameter("role", placement.role.value)),
                 confidence=placement.confidence,
             ))
+    datum = next(iter(project.annotations.permitted_locating_surfaces), None)
+    if datum is None:
+        datum = next((
+            item.reference for item in workflow.geometry_annotations
+            if item.role in {
+                AnnotationRole.PRIMARY_DATUM,
+                AnnotationRole.SECONDARY_DATUM,
+                AnnotationRole.TERTIARY_DATUM,
+            }
+        ), None)
+    if (not any(item.recommendation_type == RecommendationType.DATUM
+                for item in recommendations)
+            and datum is not None):
+        recommendations.append(_recommendation(
+            "confirmed-datum-surface", RecommendationType.DATUM,
+            "Use the engineer-permitted locating surface as datum evidence",
+            "The deterministic baseline copies an existing permitted source face; it does not invent a datum surface.",
+            datum.face_identity or datum.body_identity or datum.component_identity,
+            "ocp_face", "Engineer-permitted immutable source reference",
+            reference=datum, confidence=1.0,
+        ))
     feature_kinds = {item.kind: item for item in project.active.fixture.features}
     for feature_kind, recommendation_type, title in (
         ("baseplate", RecommendationType.BASE_STRUCTURE, "Fabricated plate base"),
@@ -1181,6 +1276,45 @@ def deterministic_baseline_proposal(
             feature=feature.identity, assumptions=feature.assumptions,
             parameters=tuple(EditableParameter(str(key), value, "mm" if isinstance(value, (int, float)) else None)
                              for key, value in sorted(feature.parameters.items())),
+        ))
+    precedent = _fixture_precedent(project)
+    knowledge_by_identity = {
+        item.identity: item for item in load_fixture_knowledge().records
+    }
+    for match in precedent.selected:
+        if match.record_type not in {"fixture_pattern", "human_acceptance"}:
+            continue
+        record = knowledge_by_identity[match.record_identity]
+        recommendations.append(_recommendation(
+            "precedent-" + match.record_identity,
+            RecommendationType.BASE_STRUCTURE
+            if match.record_identity == "pattern-001-compact-continuous-base"
+            else RecommendationType.ALTERNATIVE,
+            record.title,
+            record.summary,
+            record.identity,
+            "fixture_knowledge_record",
+            "Matched fields: " + ", ".join(match.matching_fields),
+            assumptions=match.assumptions,
+            risks=match.failure_modes,
+            parameters=(
+                EditableParameter("precedent_record_identity", record.identity),
+                EditableParameter("precedent_score", match.score),
+            ),
+            confidence=0.85,
+        ))
+    for match in precedent.rejected_constraints:
+        record = knowledge_by_identity[match.record_identity]
+        recommendations.append(_recommendation(
+            "avoid-" + match.record_identity,
+            RecommendationType.UNRESOLVED_QUESTION,
+            "Avoid the rejected generic M32 arrangement",
+            record.summary,
+            record.identity,
+            "human_rejection_constraint",
+            "Abstract qualified-human rejection; no image or private geometry retained",
+            risks=match.failure_modes,
+            confidence=1.0,
         ))
     recommendations.extend((
         _recommendation(
@@ -1234,6 +1368,23 @@ def deterministic_baseline_proposal(
             risks=("Warnings remain visible until supported by deterministic or engineer-recorded evidence.",),
         ),
     ))
+    if setup.fixture_family == "linear_multi_station_weld_fixture":
+        recommendations.append(_recommendation(
+            "multi-station-alternative", RecommendationType.ALTERNATIVE,
+            "Compare the governed linear multi-station weld fixture",
+            "The proposal may recommend one-up or multi-up, but deterministic synthesis owns the exact station count, pitch, clearance, clamp reach, and fixture geometry.",
+            project.active_concept, "fixture_concept", "Current deterministic concept selected for multi-station review",
+            assumptions=(
+                f"requested_station_count={setup.requested_station_count or 'unresolved'}",
+                f"maximum_fixture_length_mm={setup.maximum_fixture_length_mm or 'unresolved'}",
+            ),
+            risks=("Unsupported fixture families fail closed; generic clamp geometry is not released vendor CAD.",),
+            parameters=(
+                EditableParameter("fixture_family", "linear_multi_station_weld_fixture"),
+                EditableParameter("station_count", setup.requested_station_count or 1, "stations"),
+                EditableParameter("maximum_fixture_length_mm", setup.maximum_fixture_length_mm or 0.0, "mm"),
+            ),
+        ))
     alternative = None
     if len(project.concepts) > 1:
         alternative = (

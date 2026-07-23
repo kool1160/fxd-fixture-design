@@ -215,14 +215,14 @@ class FabricationWorkflowTests(unittest.TestCase):
         self.assertTrue(assembly.components)
         self.assertTrue(all(item.topology.solids >= 1 for item in assembly.components))
         self.assertTrue(any(item.dxf_bytes for item in assembly.components))
-        package = build_fixture_build_package(assembly, plan)
+        package = build_fixture_build_package(assembly, plan, self.product)
         self.assertIn("bom.json", package)
         self.assertIn("nest-classification.json", package)
         self.assertIn("cleco-hole-map.json", package)
         self.assertIn("poka-yoke-map.json", package)
         self.assertTrue(any(name.startswith("step/") for name in package))
         with tempfile.TemporaryDirectory() as directory:
-            paths = write_fixture_build_package(assembly, plan, directory)
+            paths = write_fixture_build_package(assembly, plan, self.product, directory)
             step_path = next(item for item in paths if item.suffix == ".step")
             reimported = OcpKernel().import_step(step_path)
             self.assertGreaterEqual(OcpKernel().topology_counts(reimported).solids, 1)
@@ -230,7 +230,7 @@ class FabricationWorkflowTests(unittest.TestCase):
             self.assertTrue(dxf_path.read_bytes().startswith(b"0\nSECTION"))
         provisional = replace(plan.requirements, adjustment_state=AdjustmentState.PROVISIONAL)
         with self.assertRaises(FixtureBuildError):
-            build_fixture_build_package(assembly, replace(plan, requirements=provisional))
+            build_fixture_build_package(assembly, replace(plan, requirements=provisional), self.product)
         self.assertEqual(FIXTURE.read_bytes(), self.source)
 
     def test_provisional_access_or_missing_poka_yoke_cannot_export_m30_package(self):
@@ -247,7 +247,7 @@ class FabricationWorkflowTests(unittest.TestCase):
                 assembly = author_fixture_build(plan, self.product, OcpKernel())
                 self.assertEqual(assembly.validation.status, "provisional")
                 with self.assertRaisesRegex(FixtureBuildError, "validation result can be exported"):
-                    build_fixture_build_package(assembly, plan)
+                    build_fixture_build_package(assembly, plan, self.product)
 
     def test_provisional_geometry_is_never_authored_as_manufacturing(self):
         plan = self.plan()

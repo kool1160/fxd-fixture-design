@@ -1,15 +1,17 @@
 """Unified PySide6 engineering workbench with an embedded VTK viewport."""
 from __future__ import annotations
 
+import argparse
 import logging
 import os
 import sys
 import ctypes
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from hashlib import sha256
 import json
 from pathlib import Path
 from queue import Empty, Queue
+import re
 import subprocess
 import tempfile
 from threading import Thread
@@ -68,11 +70,16 @@ from fxd_geometry import (
     AiFixtureProvider,
     AnnotationRole,
     CancellationToken,
+    ConfirmedWeldIntent,
     ConstructionMethod,
     FixtureLifecycle,
     FixturePurpose,
+    FixtureFamily,
     FixtureBuildRequirements,
     FixtureBuildError,
+    FixtureBuildFinding,
+    MultiStationRequirements,
+    ProductFeatureRole,
     ExportError,
     GeometryReference,
     InteractiveWorkflow,
@@ -91,6 +98,8 @@ from fxd_geometry import (
     RenderDiagnostics,
     Vec3,
     author_fixture_build,
+    build_m32_product_feature_bindings,
+    bind_fixture_build_plan_to_proposal,
     WorkbenchDocument,
     analyze_engineering_workflow,
     apply_recommended_intent,
@@ -99,6 +108,9 @@ from fxd_geometry import (
     load_step_for_workbench,
     product_from_workbench_document,
     generate_fixture_build_plan as generate_m30_fixture_build_plan,
+    generate_multi_station_fixture_alternatives,
+    propose_multi_station_fit,
+    validate_fixture_build_plan,
     generate_fixture_proposal,
     minimal_intent_questions,
     orientation_from_face,
@@ -121,6 +133,87 @@ from fxd_geometry.project import FxdProject, ProjectFormatError, SUPPORTED_LAYER
 logger = logging.getLogger("fxd.qt_app")
 EVIDENCE_REAL = "REAL OCP source geometry"
 EVIDENCE_PROVISIONAL = "Provisional - real-kernel evidence unavailable"
+
+
+def _m32_visual_review_station_count(plan: object) -> int:
+    """Fail closed unless the bundle contains the current governed M32 concept."""
+    layout = getattr(plan, "multi_station_layout", None)
+    if layout is None:
+        raise RuntimeError("M32 visual-review project lacks a multi-station layout")
+    requirements = layout.requirements
+    station_count = len(layout.stations)
+    requested_intent = (
+        requirements.requested_intent_station_count
+        or requirements.requested_station_count
+    )
+    if (station_count != 5
+            or requirements.requested_station_count != station_count
+            or requested_intent != 5
+            or abs(requirements.maximum_fixture_length_mm - 1219.2) > 1e-6
+            or layout.proposed_smaller_station_count is not None
+            or not getattr(plan, "precedent_record_identities", ())
+            or not getattr(plan, "precedent_library_evidence_digest", None)
+            or not getattr(plan, "concept_quality_evidence_digest", None)):
+        raise RuntimeError(
+            "M32 visual-review project does not contain the governed compact "
+            "precedent-informed five-station concept"
+        )
+    return station_count
+
+
+@dataclass(frozen=True)
+class _ValidationRecord:
+    """UI-only normalized finding. It never changes engineering decisions."""
+
+    issue_id: str
+    source: str
+    severity: str
+    rule_id: str
+    message: str
+    subsystem: str
+    evidence: tuple[str, ...] = ()
+    assumptions: tuple[str, ...] = ()
+    affected_identities: tuple[str, ...] = ()
+    geometry_references: tuple[GeometryReference, ...] = ()
+    disposition: str = "informational"
+    workflow_section: str = "Manufacturing"
+    fix_target: str = "fabrication_components"
+    requires_redesign: bool = False
+
+    @property
+    def code(self) -> str:
+        return self.rule_id
+
+    @property
+    def title(self) -> str:
+        return f"{self.source}: {self.rule_id}"
+
+    @property
+    def what_is_wrong(self) -> str:
+        return self.message
+
+    @property
+    def why_it_matters(self) -> str:
+        if self.disposition == "authoring_blocker":
+            return "This deterministic prerequisite prevents safe computational authoring."
+        if self.disposition in {"review_blocker", "export_blocker"}:
+            return "This remains a deterministic engineering and release blocker."
+        return "This evidence requires engineering review before release."
+
+    @property
+    def affected_identity(self) -> str | None:
+        return self.affected_identities[0] if self.affected_identities else None
+
+    @property
+    def technical_details(self) -> tuple[str, ...]:
+        return (
+            *(f"Affected component: {value}" for value in self.affected_identities),
+            *(f"Source reference: {value.component_identity}" for value in self.geometry_references),
+            *(f"Evidence: {value}" for value in self.evidence),
+            *(f"Assumption: {value}" for value in self.assumptions),
+            f"Authoring/review disposition: {self.disposition}",
+            "Correction requires engineering redesign." if self.requires_redesign else "",
+        )
 
 FIXTURE_TYPE_OPTIONS = (
     "Full weld fixture", "Tack or Location Fixture", "Assembly fixture",
@@ -148,6 +241,12 @@ ADJUSTMENT_STATE_OPTIONS = (
     "Provisional adjustment", "Prove-out setting", "Locked production position",
     "Doweled production position", "Revalidation required",
 )
+FIXTURE_FAMILY_OPTIONS = (
+    "Existing single-station fixture workflow",
+    "Linear multi-station weld fixture",
+)
+OPERATOR_SIDE_OPTIONS = ("Operator front (+Y)", "Operator rear (-Y)", "Operator left (-X)", "Operator right (+X)")
+TABLE_MOUNTING_OPTIONS = ("Table mounting holes", "Mounting feet", "Engineer to decide")
 ORIENTATION_METHOD_OPTIONS = (
     "Auto recommend", "Select planar face", "Select reference plane", "Use source orientation",
 )
@@ -314,6 +413,27 @@ class VtkWorkerSceneProxy:
 
     def set_review_geometry(self, items: list[dict[str, object]]) -> None:
         self._send("set_review_geometry", items=items)
+
+    def set_review_geometry_verified(self, items: list[dict[str, object]]) -> dict[str, object]:
+        """Replace review actors and wait for native VTK to confirm the result."""
+        self._request_id += 1
+        request_id = self._request_id
+        self._send("set_review_geometry", items=items, request_id=request_id)
+        deadline = monotonic() + 30.0
+        while monotonic() < deadline:
+            response = self._responses.pop(request_id, None)
+            if response is not None:
+                if response.get("event") == "error":
+                    raise RuntimeError("native VTK rejected visual-review geometry")
+                return response
+            try:
+                message = self.messages.get(timeout=0.25)
+            except Empty:
+                if self.process.poll() is not None:
+                    raise RuntimeError("native VTK exited during visual-review display")
+                continue
+            self._route_message(message)
+        raise TimeoutError("native VTK did not confirm visual-review geometry")
 
     def render(self) -> None:
         self._send("render")
@@ -608,6 +728,11 @@ class FxdWorkbenchWindow(QMainWindow):
         self.project: FxdProject | None = None
         self.workflow: InteractiveWorkflow | None = None
         self.authored_fixture_build = None
+        self._multi_station_comparison_summary = ""
+        self._multi_station_comparison_plan_identity: str | None = None
+        self._pending_multi_station_fit = None
+        self._accepted_multi_station_fit_key: tuple[int, float, float] | None = None
+        self._accepted_multi_station_feasible_count: int | None = None
         self.project_path: Path | None = None
         self.selected_identity: str | None = None
         self.selected_reference: GeometryReference | None = None
@@ -621,8 +746,14 @@ class FxdWorkbenchWindow(QMainWindow):
         self._geometry_references: dict[str, GeometryReference] = {}
         self._finding_records: dict[str, object] = {}
         self._ui_active_stage: str | None = None
-        self._settings_enabled = os.environ.get("QT_QPA_PLATFORM") != "offscreen"
+        self._settings_enabled = (
+            os.environ.get("QT_QPA_PLATFORM") != "offscreen"
+            and os.environ.get("FXD_M32_VISUAL_REVIEW_SESSION") != "1"
+        )
         self.settings = QSettings("FXD", "EngineeringWorkbench")
+        self._validation_source = str(self.settings.value(
+            "review/validation_source", "Fixture Proposal"
+        ))
         self.analysis_pool = QThreadPool(self)
         self.analysis_pool.setMaxThreadCount(1)
         self._analysis_request = 0
@@ -1148,7 +1279,33 @@ class FxdWorkbenchWindow(QMainWindow):
         self.process_product_hole_justification = QLineEdit()
         self.process_product_hole_justification.setPlaceholderText("Cost, process, or customer justification")
         self.process_tack_access = QCheckBox("Reviewed")
+        self.process_weld_access = QCheckBox("Reviewed")
         self.process_unload_clearance = QCheckBox("Reviewed")
+        self.process_fixture_family = self._combo(FIXTURE_FAMILY_OPTIONS, wheel_to_parent=True)
+        self.process_station_count = QSpinBox()
+        self.process_station_count.setRange(1, 8)
+        self.process_station_count.setValue(1)
+        self.process_max_fixture_length = QDoubleSpinBox()
+        self.process_max_fixture_length.setRange(100.0, 100000.0)
+        self.process_max_fixture_length.setDecimals(1)
+        self.process_max_fixture_length.setValue(1500.0)
+        self.process_station_pitch = QDoubleSpinBox()
+        self.process_station_pitch.setRange(0.0, 100000.0)
+        self.process_station_pitch.setDecimals(1)
+        self.process_station_fit_summary = QLabel(
+            "Station reductions are proposed deterministically and require explicit acceptance."
+        )
+        self.process_station_fit_summary.setObjectName("multiStationFitSummary")
+        self.process_station_fit_summary.setWordWrap(True)
+        self.process_accept_station_fit = QPushButton("Accept proposed feasible station count")
+        self.process_accept_station_fit.setObjectName("acceptMultiStationFit")
+        self.process_accept_station_fit.setEnabled(False)
+        self.process_accept_station_fit.clicked.connect(self.accept_multi_station_fit)
+        self.process_station_pitch.setSpecialValueText("Auto from access allowances")
+        self.process_operator_loading_side = self._combo(OPERATOR_SIDE_OPTIONS, wheel_to_parent=True)
+        self.process_clamp_operating_side = self._combo(OPERATOR_SIDE_OPTIONS, wheel_to_parent=True)
+        self.process_table_mounting = self._combo(TABLE_MOUNTING_OPTIONS, wheel_to_parent=True)
+        self.process_compare_multi_up = QCheckBox("Compare one-up and multi-up")
         self.process_repeatability = QDoubleSpinBox()
         self.process_repeatability.setRange(0.0, 1000.0)
         self.process_repeatability.setDecimals(3)
@@ -1172,6 +1329,17 @@ class FxdWorkbenchWindow(QMainWindow):
             ("Product-hole approval", self.process_product_hole_approval),
             ("Product-hole justification", self.process_product_hole_justification),
             ("Tack access", self.process_tack_access), ("Unload clearance", self.process_unload_clearance),
+            ("Weld access", self.process_weld_access),
+            ("Fixture family", self.process_fixture_family),
+            ("Station count", self.process_station_count),
+            ("Maximum fixture length (mm)", self.process_max_fixture_length),
+            ("Preferred station pitch (mm)", self.process_station_pitch),
+            ("Station fit proposal", self.process_station_fit_summary),
+            ("", self.process_accept_station_fit),
+            ("Operator loading side", self.process_operator_loading_side),
+            ("Clamp operating side", self.process_clamp_operating_side),
+            ("Fixture table mounting", self.process_table_mounting),
+            ("Alternative comparison", self.process_compare_multi_up),
             ("Repeatability (mm)", self.process_repeatability),
             ("Clearance (mm)", self.process_clearance),
         ):
@@ -1209,11 +1377,53 @@ class FxdWorkbenchWindow(QMainWindow):
         self.annotation_role = self._combo(tuple(role.value.replace("_", " ").title()
                                                   for role in AnnotationRole))
         self.annotation_role.setObjectName("annotationRole")
+        self.weld_intent_state = self._combo((
+            "Unconfirmed candidate", "Confirm selected weld seam", "Reject selected candidate",
+        ))
+        self.weld_intent_side = self._combo(("Unknown", "Operator side", "Opposite operator side"))
+        self.weld_intent_length = QDoubleSpinBox()
+        self.weld_intent_length.setRange(0.0, 100000.0)
+        self.weld_intent_length.setDecimals(1)
+        self.weld_intent_length.setSpecialValueText("Unknown")
+        self.weld_intent_sequence = QSpinBox()
+        self.weld_intent_sequence.setRange(0, 999)
+        self.weld_intent_sequence.setSpecialValueText("Unknown")
+        self.weld_intent_direction = self._combo(DIRECTION_OPTIONS, wheel_to_parent=True)
+        self.weld_intent_direction.setCurrentText("Unknown")
+        self.weld_intent_approach = self._combo(DIRECTION_OPTIONS, wheel_to_parent=True)
+        self.weld_intent_approach.setCurrentText("Unknown")
+        self.weld_intent_torch_width = QDoubleSpinBox()
+        self.weld_intent_torch_height = QDoubleSpinBox()
+        self.weld_intent_torch_length = QDoubleSpinBox()
+        for widget in (self.weld_intent_torch_width, self.weld_intent_torch_height,
+                       self.weld_intent_torch_length):
+            widget.setRange(0.0, 10000.0)
+            widget.setDecimals(1)
+            widget.setSpecialValueText("Unknown")
+            widget.setToolTip(
+                "Engineer-accepted torch/body envelope dimension in millimetres; zero remains unknown."
+            )
+        self.weld_intent_note = QLineEdit()
+        self.weld_intent_note.setPlaceholderText("Engineer seam note (candidate/confirmation/rejection evidence)")
         self.annotation_apply = QPushButton("Assign selected face role")
         self.annotation_apply.clicked.connect(self.assign_selected_annotation)
         self.annotation_list = QListWidget()
         annotation_layout.addWidget(self.annotation_selection)
         annotation_layout.addWidget(self.annotation_role)
+        annotation_layout.addWidget(QLabel("Weld intent (only when recording a weld seam):"))
+        annotation_layout.addWidget(self.weld_intent_state)
+        annotation_layout.addWidget(self.weld_intent_side)
+        annotation_layout.addWidget(self.weld_intent_length)
+        annotation_layout.addWidget(self.weld_intent_sequence)
+        annotation_layout.addWidget(QLabel("Weld seam direction (manufacturing frame; explicit engineer input):"))
+        annotation_layout.addWidget(self.weld_intent_direction)
+        annotation_layout.addWidget(QLabel("Torch approach (manufacturing frame; explicit engineer input):"))
+        annotation_layout.addWidget(self.weld_intent_approach)
+        annotation_layout.addWidget(QLabel("Torch/body envelope width, height, and approach length (mm):"))
+        annotation_layout.addWidget(self.weld_intent_torch_width)
+        annotation_layout.addWidget(self.weld_intent_torch_height)
+        annotation_layout.addWidget(self.weld_intent_torch_length)
+        annotation_layout.addWidget(self.weld_intent_note)
         annotation_layout.addWidget(self.annotation_apply)
         annotation_layout.addWidget(self.annotation_list, 1)
         self.workflow_tabs.addTab(annotation_page, "Datums and intent")
@@ -1236,6 +1446,7 @@ class FxdWorkbenchWindow(QMainWindow):
         self.workflow_tabs.addTab(concepts_page, "Concepts")
 
         fabrication_page = QWidget(self.workflow_tabs)
+        self.fabrication_page = fabrication_page
         fabrication_layout = QVBoxLayout(fabrication_page)
         self.fabrication_status = QLabel(
             "Build a deterministic manufacturing plan after selecting an active fixture concept."
@@ -1246,10 +1457,13 @@ class FxdWorkbenchWindow(QMainWindow):
         self.fabrication_plan_button.clicked.connect(self.generate_fixture_build_plan)
         self.fabrication_author_button = QPushButton("Author Real Manufacturing Geometry")
         self.fabrication_author_button.clicked.connect(self.author_real_fixture_geometry)
+        self.fabrication_open_findings = QPushButton("Open Fixture Build Plan Findings")
+        self.fabrication_open_findings.clicked.connect(self.open_fixture_build_findings)
         fabrication_layout.addWidget(self.fabrication_status)
         fabrication_layout.addWidget(self.fabrication_components, 1)
         fabrication_layout.addWidget(self.fabrication_plan_button)
         fabrication_layout.addWidget(self.fabrication_author_button)
+        fabrication_layout.addWidget(self.fabrication_open_findings)
         self.workflow_tabs.addTab(fabrication_page, "Manufacturing")
 
         tooling_page = QWidget(self.workflow_tabs)
@@ -1389,10 +1603,17 @@ class FxdWorkbenchWindow(QMainWindow):
         findings_page = QWidget(tabs)
         findings_layout = QVBoxLayout(findings_page)
         filters = QHBoxLayout()
+        self.validation_source_selector = self._combo((
+            "Assembly Analysis", "Fixture Proposal", "Fixture Build Plan", "Authored Manufacturing Geometry",
+        ))
+        self.validation_source_selector.setObjectName("validationSourceSelector")
+        self.validation_source_selector.setCurrentText(self._validation_source)
         self.finding_severity = self._combo(("All severities", "error", "warning", "info"))
         self.finding_category = self._combo(("All categories",), editable=False)
+        self.validation_source_selector.currentTextChanged.connect(self._validation_source_changed)
         self.finding_severity.currentTextChanged.connect(self._populate_findings)
         self.finding_category.currentTextChanged.connect(self._populate_findings)
+        filters.addWidget(self.validation_source_selector)
         filters.addWidget(self.finding_severity)
         filters.addWidget(self.finding_category)
         self.findings = QListWidget(findings_page)
@@ -1415,6 +1636,9 @@ class FxdWorkbenchWindow(QMainWindow):
             lambda: self.record_decision("reject")
         )
         validation_layout.addWidget(self.approval_gate)
+        self.validation_source_summary = QLabel(validation_page)
+        self.validation_source_summary.setObjectName("validationSourceSummary")
+        self.validation_source_summary.setWordWrap(True)
         self.guided_validation_summary = QLabel(
             "Generate a fixture proposal to see guided validation findings.", validation_page,
         )
@@ -1438,6 +1662,7 @@ class FxdWorkbenchWindow(QMainWindow):
         self.guided_technical_details.setProperty("technical", True)
         self.guided_technical_details.setVisible(False)
         self.guided_more.toggled.connect(self.guided_technical_details.setVisible)
+        validation_layout.addWidget(self.validation_source_summary)
         validation_layout.addWidget(self.guided_validation_summary)
         validation_layout.addWidget(self.guided_issues, 1)
         validation_layout.addWidget(self.guided_issue_explanation)
@@ -1746,7 +1971,15 @@ class FxdWorkbenchWindow(QMainWindow):
             "Cost & Volume": 5, "Component Library": 7,
             "Rules & Preferences": 7, "Project History": 8,
         }
-        if stage in {"Validation", "Review & Approval", "Export"}:
+        if stage == "Manufacturing":
+            self.workflow_tabs.setCurrentIndex(self.workflow_tabs.indexOf(self.fabrication_page))
+            workflow_dock = self.findChild(QDockWidget, "workflowDock")
+            if workflow_dock is not None:
+                workflow_dock.show()
+                workflow_dock.raise_()
+        elif stage == "Fixture Build Plan":
+            self.open_fixture_build_findings()
+        elif stage in {"Validation", "Review & Approval", "Export"}:
             review = self.findChild(QDockWidget, "reviewDock")
             if review is not None:
                 review.show()
@@ -2135,24 +2368,34 @@ class FxdWorkbenchWindow(QMainWindow):
     def _populate_guided_validation(self) -> None:
         self.guided_issues.clear()
         self._guided_issue_records.clear()
-        proposal = self.project.fixture_proposal if self.project else None
-        if proposal is None:
+        source = self._validation_source
+        records = self._validation_records(source)
+        errors = sum(item.severity == "error" for item in records)
+        warnings = sum(item.severity == "warning" for item in records)
+        self.validation_source_summary.setText(
+            f"Active validation source: {source}. This source is separate from Assembly Analysis, "
+            "Fixture Proposal, Fixture Build Plan, and Authored Manufacturing Geometry."
+        )
+        if not records:
             self.guided_validation_summary.setText(
-                "Generate a fixture proposal to see guided validation findings."
+                f"{source}: no deterministic findings are available for this source."
             )
             self.guided_fix.setEnabled(False)
             return
-        if proposal.blocker_count:
-            title = "Validation failed"
-        elif proposal.warning_count:
-            title = "Validation requires engineering review"
-        else:
-            title = "Validation passed"
-        self.guided_validation_summary.setText(
-            f"{title}\n{proposal.blocker_count} blocking issues\n"
-            f"{proposal.warning_count} warnings requiring review"
+        title = "Validation blocked" if errors else (
+            "Validation requires engineering review" if warnings else "Validation available"
         )
-        for issue in proposal.guided_issues:
+        if source == "Fixture Proposal" and self.project.fixture_proposal is not None:
+            proposal = self.project.fixture_proposal
+            self.guided_validation_summary.setText(
+                f"{title}\n{proposal.blocker_count} blocking issues\n"
+                f"{proposal.warning_count} warnings requiring review"
+            )
+        else:
+            self.guided_validation_summary.setText(
+                f"{source}: {title}\n{errors} errors\n{warnings} warnings"
+            )
+        for issue in records:
             self._guided_issue_records[issue.issue_id] = issue
             item = QListWidgetItem(
                 f"{issue.severity.upper()} | {issue.title}\n"
@@ -2160,7 +2403,7 @@ class FxdWorkbenchWindow(QMainWindow):
             )
             item.setData(Qt.ItemDataRole.UserRole, issue.issue_id)
             self.guided_issues.addItem(item)
-        self.guided_fix.setEnabled(bool(proposal.guided_issues))
+        self.guided_fix.setEnabled(bool(records))
 
     def _selected_guided_issue(self):
         selected = self.guided_issues.selectedItems()
@@ -2220,9 +2463,10 @@ class FxdWorkbenchWindow(QMainWindow):
                 self._guided_fix_signal = (signal, callback)
         if issue.affected_identity and self._scene() is not None:
             self._scene().select(issue.affected_identity)
-        self.statusBar().showMessage(
-            f"Fix {issue.title} in {issue.workflow_section}; validation re-evaluates after the change."
-        )
+        next_step = ("regenerate the fixture build plan to re-evaluate deterministic build findings"
+                     if getattr(issue, "source", "") == "Fixture Build Plan"
+                     else "validation re-evaluates after the change")
+        self.statusBar().showMessage(f"Fix {issue.title} in {issue.workflow_section}; {next_step}.")
 
     def _guided_correction_changed(self, issue_identity: str) -> None:
         if self._guided_fix_signal is not None:
@@ -2232,7 +2476,8 @@ class FxdWorkbenchWindow(QMainWindow):
                 signal.disconnect(callback)
             except (RuntimeError, TypeError):
                 pass
-        if self.workflow is None or self.project is None or self.project.fixture_proposal is None:
+        if (self._validation_source != "Fixture Proposal" or self.workflow is None
+                or self.project is None or self.project.fixture_proposal is None):
             return
         setup = self._capture_process_setup(persist=False)
         self.workflow = replace(self.workflow, setup=setup)
@@ -2638,7 +2883,7 @@ class FxdWorkbenchWindow(QMainWindow):
         if name:
             self.load_project_path(Path(name))
 
-    def load_project_path(self, source: Path) -> None:
+    def load_project_path(self, source: Path, *, require_real_display: bool = False) -> None:
         self._invalidate_pending_proposal_generation()
         self._replace_project(FxdProject.load(source))
         self.workflow = self.project.workflow
@@ -2650,11 +2895,15 @@ class FxdWorkbenchWindow(QMainWindow):
                 source_name=self.project.product.source_name,
             )
             self.viewport.load_document(self.document)
-        except Exception:
+        except Exception as exc:
             # A renderer failure cannot invalidate an otherwise readable project.
             logger.exception("project source has no authoritative real-kernel display evidence")
             self.viewport.clear()
             self.document = None
+            if require_real_display:
+                raise RuntimeError(
+                    "M32 visual review requires successful real OCP and native VTK project display"
+                ) from exc
         self._refresh_all()
         self._show_active_concept_geometry()
         if self.workflow is not None and not self.workflow.has_accepted_manufacturing_orientation():
@@ -2850,12 +3099,26 @@ class FxdWorkbenchWindow(QMainWindow):
             self._add_tree_category("Welds", welds)
         if self.project and self.project.fixture_build:
             active_authored = self._active_authored_fixture_build()
+            authored_state = (
+                "PROVISIONAL / NOT APPROVED / INVALID BUILD PLAN"
+                if active_authored is not None and active_authored.provisional
+                else "normal real OCP manufacturing geometry" if active_authored is not None
+                else "persisted PROVISIONAL — NOT APPROVED — INVALID BUILD PLAN" if self.project.fixture_build.authoring_state == "provisional"
+                else "not authored"
+            )
             authored = {item.component.identity for item in (active_authored.components if active_authored else ())}
             self._add_tree_category("Manufacturing fixture components", [
                 (f"{item.part_number} | {item.role.value}", item.identity,
-                 "authored OCP B-Rep" if item.identity in authored else item.geometry_authority.value)
+                 authored_state if item.identity in authored else item.geometry_authority.value)
                 for item in self.project.fixture_build.components
             ])
+            layout = self.project.fixture_build.multi_station_layout
+            if layout is not None:
+                self._add_tree_category("Product review instances", [
+                    (f"Station {station.station_index} | immutable source instance", station.identity,
+                     "source-referenced review instance")
+                    for station in layout.stations
+                ])
         self.tree.resizeColumnToContents(1)
 
     def _populate_properties(self) -> None:
@@ -2896,6 +3159,13 @@ class FxdWorkbenchWindow(QMainWindow):
         self._set_property("Native rendering", diagnostics.native_rendering_active if diagnostics else False)
         self._set_property("Fallback", diagnostics.fallback_active if diagnostics else False)
 
+    def _validation_source_changed(self, source: str) -> None:
+        self._validation_source = source
+        if self._settings_enabled:
+            self.settings.setValue("review/validation_source", source)
+        self._populate_findings()
+        self._populate_guided_validation()
+
     @staticmethod
     def _finding_identity(finding: object) -> str:
         payload = "|".join((
@@ -2904,11 +3174,118 @@ class FxdWorkbenchWindow(QMainWindow):
         ))
         return "finding-" + sha256(payload.encode()).hexdigest()[:16]
 
+    def _build_finding_route(self, finding: FixtureBuildFinding) -> tuple[str, str, bool]:
+        """Map deterministic M32 rules only to controls visible in this workbench."""
+        message = finding.message.lower()
+        if finding.rule_id == "FXD-M32-STA":
+            if "source" in message:
+                return "Orientation", "orientation_guided_accept", False
+            if "pitch" in message:
+                return "Manufacturing Intent", "process_station_pitch", False
+            if "length" in message or "count" in message:
+                return "Manufacturing Intent", "process_max_fixture_length", False
+            return "Manufacturing", "fabrication_components", True
+        if finding.rule_id == "FXD-M32-CLP":
+            return "Component Library", "tooling_list", False
+        if finding.rule_id == "FXD-M32-ACC":
+            if "weld" in message:
+                return "Datums", "annotation_role", False
+            if "unloading" in message or "trapped" in message:
+                return "Manufacturing Intent", "process_unload", False
+            return "Manufacturing Intent", "process_operator_loading_side", False
+        if finding.rule_id == "FXD-M32-CON":
+            return "Manufacturing", "fabrication_components", True
+        if finding.rule_id == "FXD-WLD-001":
+            return "Datums", "annotation_role", False
+        if finding.rule_id == "FXD-ACC-001":
+            return "Manufacturing Intent", "process_weld_access", False
+        if finding.rule_id == "FXD-COST-001":
+            return "Manufacturing Intent", "process_job_revision", False
+        if finding.rule_id == "FXD-EXP-001":
+            return "Manufacturing Intent", "process_adjustment_state", False
+        if finding.rule_id in {"FXD-MFG-001", "FXD-LOC-001"}:
+            return "Datums", "annotation_role", True
+        if finding.rule_id in {"FXD-CLP-001", "FXD-SUP-001"}:
+            return "Component Library", "tooling_list", False
+        if finding.rule_id == "FXD-DST-001":
+            return "Manufacturing Intent", "process_unload", False
+        return "Manufacturing", "fabrication_components", True
+
+    def _validation_records(self, source: str | None = None) -> tuple[_ValidationRecord, ...]:
+        source = source or self._validation_source
+        if self.project is None:
+            return ()
+        if source == "Assembly Analysis":
+            validation = self.project.assembly_validation_for(self.project.active)
+            return tuple(_ValidationRecord(
+                self._finding_identity(finding), source, finding.severity, finding.code,
+                finding.message, finding.subsystem, tuple(finding.evidence),
+                tuple(finding.assumptions), (), (),
+                "review_blocker" if finding.severity == "error" else "warning",
+                "Validation", "findings", False,
+            ) for finding in validation.findings)
+        if source == "Fixture Proposal":
+            proposal = self.project.fixture_proposal
+            if proposal is None:
+                return ()
+            return tuple(_ValidationRecord(
+                issue.issue_id, source, issue.severity, issue.rule_id,
+                issue.what_is_wrong, "proposal", (), (),
+                (issue.affected_identity,) if issue.affected_identity else (), (),
+                "review_blocker" if issue.severity == "error" else "warning",
+                issue.workflow_section, issue.fix_target, False,
+            ) for issue in proposal.guided_issues)
+        if source == "Fixture Build Plan":
+            validation = self.project.fixture_build_validation
+            if validation is None:
+                return ()
+            records: list[_ValidationRecord] = []
+            for finding in validation.findings:
+                stage, target, redesign = self._build_finding_route(finding)
+                records.append(_ValidationRecord(
+                    finding.identity, source, finding.severity, finding.rule_id,
+                    finding.message, "fixture build", tuple(finding.evidence),
+                    tuple(finding.assumptions), tuple(finding.component_identities),
+                    tuple(finding.geometry_references), finding.disposition,
+                    stage, target, redesign,
+                ))
+            return tuple(records)
+        if source == "Authored Manufacturing Geometry":
+            authored = self._active_authored_fixture_build()
+            if authored is None:
+                if self.project.fixture_build is not None and self.project.fixture_build.authoring_state == "provisional":
+                    return (_ValidationRecord(
+                        "authored-geometry-provisional-persisted", source, "error", "FXD-AUTH-001",
+                        "PROVISIONAL / NOT APPROVED / INVALID BUILD PLAN was recorded for this build. Re-author locally to inspect real OCP review solids; approval and release export remain blocked.",
+                        "authored geometry", ("Persisted review state only; no source CAD was changed."), (), (), (), "review_blocker",
+                        "Fixture Build Plan", "fabrication_author_button", False,
+                    ),)
+                return (_ValidationRecord(
+                    "authored-geometry-not-present", source, "info", "FXD-AUTH-001",
+                    "No authored manufacturing geometry is available for the active build plan.",
+                    "authored geometry", (), (), (), (), "informational",
+                    "Manufacturing", "fabrication_author_button", False,
+                ),)
+            if authored.provisional:
+                return (_ValidationRecord(
+                    "authored-geometry-provisional", source, "error", "FXD-AUTH-001",
+                    "PROVISIONAL / NOT APPROVED / INVALID BUILD PLAN. Real OCP review solids are visible, but approval and release export remain blocked.",
+                    "authored geometry", tuple(authored.review_labels), (), (), (), "review_blocker",
+                    "Fixture Build Plan", "fabrication_components", False,
+                ),)
+            return (_ValidationRecord(
+                "authored-geometry-normal", source, "info", "FXD-AUTH-001",
+                "Real OCP manufacturing geometry is authored from the current valid build plan.",
+                "authored geometry", (), (), (), (), "informational",
+                "Manufacturing", "fabrication_components", False,
+            ),)
+        return ()
+
     def _populate_findings(self, *_args: object) -> None:
         self.findings.clear()
         self._finding_records.clear()
         if self.project:
-            all_findings = self.project.active_validation.findings
+            all_findings = self._validation_records()
             categories = sorted({finding.subsystem for finding in all_findings})
             current_category = self.finding_category.currentText()
             self.finding_category.blockSignals(True)
@@ -2924,12 +3301,12 @@ class FxdWorkbenchWindow(QMainWindow):
                     continue
                 if category != "All categories" and finding.subsystem != category:
                     continue
-                identity = self._finding_identity(finding)
+                identity = finding.issue_id
                 self._finding_records[identity] = finding
                 reviewed = bool(self.workflow and identity in self.workflow.reviewed_findings)
                 row = QListWidgetItem(
                     f"{'REVIEWED | ' if reviewed else ''}{finding.severity.upper()} | "
-                    f"{finding.subsystem} | {finding.code}\n{finding.message}"
+                    f"{finding.source} | {finding.subsystem} | {finding.code}\n{finding.message}"
                 )
                 row.setData(Qt.ItemDataRole.UserRole, identity)
                 self.findings.addItem(row)
@@ -2944,6 +3321,13 @@ class FxdWorkbenchWindow(QMainWindow):
         finding = self._finding_records.get(str(identity))
         if finding is None:
             return
+        for candidate in getattr(finding, "affected_identities", ()):
+            for mapped in (candidate, "manufacturing:" + candidate, "product-review:" + candidate):
+                if self._scene() and self._scene().select(mapped):
+                    self.selected_identity = mapped
+                    self._set_property("Selected identity", mapped)
+                    self.statusBar().showMessage(f"Finding {finding.code} linked to {mapped}.")
+                    return
         for evidence in getattr(finding, "evidence", ()):
             candidate = str(evidence).split("=", 1)[-1]
             if self._scene() and self._scene().select(candidate):
@@ -3586,6 +3970,21 @@ class FxdWorkbenchWindow(QMainWindow):
             manufacturing_build_direction=build_axis,
             manufacturing_loading_direction=load_axis,
             manufacturing_unloading_direction=unload_axis,
+            fixture_family=(FixtureFamily.LINEAR_MULTI_STATION_WELD.value
+                            if self.process_fixture_family.currentText() == "Linear multi-station weld fixture"
+                            else None),
+            requested_station_count=(self.process_station_count.value()
+                                     if self.process_fixture_family.currentText() == "Linear multi-station weld fixture"
+                                     else None),
+            maximum_fixture_length_mm=(self.process_max_fixture_length.value()
+                                       if self.process_fixture_family.currentText() == "Linear multi-station weld fixture"
+                                       else None),
+            preferred_station_pitch_mm=(self.process_station_pitch.value()
+                                        if self.process_station_pitch.value() > 0 else None),
+            operator_loading_side=self.process_operator_loading_side.currentText(),
+            clamp_operating_side=self.process_clamp_operating_side.currentText(),
+            table_mounting_preference=self.process_table_mounting.currentText(),
+            compare_one_up_and_multi_up=self.process_compare_multi_up.isChecked(),
         )
         if persist and self.workflow is not None:
             self.workflow = replace(self.workflow, setup=setup)
@@ -3636,6 +4035,23 @@ class FxdWorkbenchWindow(QMainWindow):
         self.process_job_revision.setText(setup.job_revision or "")
         self.process_repeatability.setValue(setup.required_repeatability_mm or 0.0)
         self.process_clearance.setValue(setup.required_clearance_mm or 0.0)
+        self.process_fixture_family.setCurrentText(
+            "Linear multi-station weld fixture"
+            if setup.fixture_family == FixtureFamily.LINEAR_MULTI_STATION_WELD.value
+            else "Existing single-station fixture workflow"
+        )
+        if setup.requested_station_count:
+            self.process_station_count.setValue(setup.requested_station_count)
+        if setup.maximum_fixture_length_mm:
+            self.process_max_fixture_length.setValue(setup.maximum_fixture_length_mm)
+        self.process_station_pitch.setValue(setup.preferred_station_pitch_mm or 0.0)
+        if setup.operator_loading_side:
+            self.process_operator_loading_side.setCurrentText(setup.operator_loading_side)
+        if setup.clamp_operating_side:
+            self.process_clamp_operating_side.setCurrentText(setup.clamp_operating_side)
+        if setup.table_mounting_preference:
+            self.process_table_mounting.setCurrentText(setup.table_mounting_preference)
+        self.process_compare_multi_up.setChecked(setup.compare_one_up_and_multi_up)
         self._set_orientation_controls(setup.manufacturing_orientation)
 
     def _populate_workflow(self) -> None:
@@ -3701,23 +4117,80 @@ class FxdWorkbenchWindow(QMainWindow):
         self.fabrication_components.clear()
         if self.project and self.project.fixture_build:
             build = self.project.fixture_build
-            validation = self.project.active_validation
+            validation = self.project.fixture_build_validation
+            multi_station = build.multi_station_layout
+            station_summary = (
+                f"\nMulti-station: {len(multi_station.stations)} station(s) | "
+                f"pitch {multi_station.station_pitch_mm:.1f} mm | "
+                f"axis {multi_station.primary_axis.upper()}"
+                if multi_station is not None else ""
+            )
+            reduction_summary = ""
+            if multi_station is not None and multi_station.requirements.requested_intent_station_count:
+                requested = multi_station.requirements.requested_intent_station_count
+                if requested != len(multi_station.stations):
+                    reduction_summary = (
+                        f"\nRequested {requested} station(s); engineer accepted {len(multi_station.stations)} feasible station(s). "
+                        f"Requested length {multi_station.requested_intent_required_length_mm or 0.0:.1f} mm; "
+                        f"maximum {multi_station.requirements.maximum_fixture_length_mm:.1f} mm."
+                    )
+            comparison_summary = (
+                "\n" + self._multi_station_comparison_summary
+                if self._multi_station_comparison_plan_identity == build.identity
+                else ""
+            )
             self.fabrication_status.setText(
                 f"{build.requirements.fixture_purpose.value} | {build.requirements.construction_method.value}\n"
                 f"Geometry authority: authored manufacturing geometry only after OCP authoring.\n"
-                f"Validation: {validation.status.upper()} | job revision: {build.requirements.job_revision or 'missing'}"
+                f"Fixture Build Plan validation: {validation.status.upper()} | "
+                f"authoring blockers: {sum(item.disposition == 'authoring_blocker' for item in validation.findings)} | "
+                f"job revision: {build.requirements.job_revision or 'missing'}"
+                + station_summary + reduction_summary + comparison_summary
             )
             active_authored = self._active_authored_fixture_build()
+            if active_authored is not None and active_authored.provisional:
+                self.fabrication_status.setText(
+                    self.fabrication_status.text()
+                    + "\nAuthored geometry: PROVISIONAL / NOT APPROVED / INVALID BUILD PLAN. "
+                    "Real OCP review solids are visible; approval and release export remain blocked."
+                )
+            elif active_authored is not None:
+                self.fabrication_status.setText(
+                    self.fabrication_status.text() + "\nAuthored geometry: normal real OCP manufacturing geometry."
+                )
+            elif build.authoring_state == "provisional":
+                self.fabrication_status.setText(
+                    self.fabrication_status.text()
+                    + "\nPersisted authoring state: PROVISIONAL / NOT APPROVED / INVALID BUILD PLAN. "
+                    "Re-author locally to inspect review solids; approval and release export remain blocked."
+                )
             authored = {item.component.identity for item in (active_authored.components if active_authored else ())}
             for component in build.components:
-                state = "REAL OCP B-REP" if component.identity in authored else component.geometry_authority.value
+                state = (
+                    "PROVISIONAL REAL OCP B-REP" if active_authored is not None and active_authored.provisional
+                    and component.identity in authored else
+                    "REAL OCP B-REP" if component.identity in authored else component.geometry_authority.value
+                )
                 self.fabrication_components.addItem(
                     f"{component.part_number} | {component.role.value} | {state} | {component.nest_classification.value}"
                 )
             self.process_tack_access.setChecked(build.requirements.tack_access_available is True)
+            self.process_weld_access.setChecked(build.requirements.full_weld_access_available is True)
             self.process_unload_clearance.setChecked(build.requirements.unload_clearance_evaluated is True)
             self.process_product_hole_approval.setChecked(build.requirements.product_hole_approved)
             self.process_product_hole_justification.setText(build.requirements.product_hole_justification or "")
+            if multi_station is not None:
+                self.process_fixture_family.setCurrentText("Linear multi-station weld fixture")
+                self.process_station_count.setValue(multi_station.requirements.requested_station_count)
+                self.process_max_fixture_length.setValue(multi_station.requirements.maximum_fixture_length_mm)
+                self.process_station_pitch.setValue(multi_station.requirements.preferred_station_pitch_mm or 0.0)
+                if multi_station.requirements.requested_intent_station_count is not None:
+                    self._accepted_multi_station_fit_key = (
+                        multi_station.requirements.requested_intent_station_count,
+                        multi_station.requirements.maximum_fixture_length_mm,
+                        multi_station.requirements.preferred_station_pitch_mm or 0.0,
+                    )
+                    self._accepted_multi_station_feasible_count = multi_station.requirements.requested_station_count
             self.process_adjustment_state.setCurrentText({
                 AdjustmentState.PROVISIONAL: "Provisional adjustment",
                 AdjustmentState.PROVE_OUT: "Prove-out setting",
@@ -3739,12 +4212,60 @@ class FxdWorkbenchWindow(QMainWindow):
         try:
             self._capture_process_setup()
             role = tuple(AnnotationRole)[self.annotation_role.currentIndex()]
-            annotation = face_annotation(self.document, self.selected_reference, role)
+            notes = ""
+            if role == AnnotationRole.WELD_JOINT:
+                state = self.weld_intent_state.currentText()
+                process = self.process_method.currentText().strip()
+                if state == "Confirm selected weld seam":
+                    if (self.weld_intent_side.currentText() == "Unknown"
+                            or self.weld_intent_length.value() <= 0.0
+                            or self.weld_intent_sequence.value() < 1
+                            or process in {"", "Unknown"}):
+                        QMessageBox.warning(
+                            self, "Weld intent incomplete",
+                            "Confirming a weld seam requires side, length, process, and sequence. "
+                            "STEP contact geometry alone is only an unconfirmed candidate.",
+                        )
+                        return
+                    status = "confirmed"
+                elif state == "Reject selected candidate":
+                    status = "rejected"
+                else:
+                    status = "unconfirmed"
+                notes = self.weld_intent_note.text().strip()
+                annotation = face_annotation(self.document, self.selected_reference, role, notes=notes)
+                weld_evidence = (
+                    f"weld_candidate_status={status}",
+                    f"weld_side={self.weld_intent_side.currentText()}",
+                    f"weld_length_mm={self.weld_intent_length.value():.3f}",
+                    f"weld_process={process}",
+                    f"weld_sequence={self.weld_intent_sequence.value()}",
+                )
+                if self.weld_intent_approach.currentText() != "Unknown":
+                    weld_evidence += (
+                        f"weld_approach_direction_mfg={self.weld_intent_approach.currentText()}",
+                    )
+                if self.weld_intent_direction.currentText() != "Unknown":
+                    weld_evidence += (
+                        f"weld_direction_mfg={self.weld_intent_direction.currentText()}",
+                    )
+                for key, widget in (
+                    ("torch_envelope_width_mm", self.weld_intent_torch_width),
+                    ("torch_envelope_height_mm", self.weld_intent_torch_height),
+                    ("torch_envelope_length_mm", self.weld_intent_torch_length),
+                ):
+                    if widget.value() > 0.0:
+                        weld_evidence += (f"{key}={widget.value():.3f}",)
+                annotation = replace(annotation, evidence=annotation.evidence + weld_evidence)
+            else:
+                annotation = face_annotation(self.document, self.selected_reference, role)
             self.workflow = self.workflow.with_annotation(annotation)
             self._replace_project(None)
             self._refresh_all()
             self.statusBar().showMessage(
-                f"Assigned {role.value}; prior analysis is now stale and must be rerun."
+                (f"Recorded weld seam as {status}; prior analysis is now stale and must be rerun."
+                 if role == AnnotationRole.WELD_JOINT else
+                 f"Assigned {role.value}; prior analysis is now stale and must be rerun.")
             )
         except InteractiveWorkflowError as exc:
             QMessageBox.warning(self, "Annotation blocked", str(exc))
@@ -3897,6 +4418,57 @@ class FxdWorkbenchWindow(QMainWindow):
             raise ProjectFormatError("generate a fixture concept before creating manufacturing build evidence")
         setup = self._capture_process_setup()
         purpose = self._fixture_purpose_from_ui(self.process_fixture_type.currentText())
+        orientation = setup.manufacturing_orientation
+        workflow_welds = {
+            item.identity: item for item in (self.workflow.geometry_annotations if self.workflow else ())
+            if item.role == AnnotationRole.WELD_JOINT
+        }
+        confirmed_welds: list[ConfirmedWeldIntent] = []
+        weld_evidence: list[str] = []
+        for joint in self.project.annotations.weld_joints:
+            annotation = workflow_welds.get(joint.identity)
+            if annotation is None or orientation is None:
+                continue
+            values = {}
+            for item in annotation.evidence:
+                key, separator, value = item.partition("=")
+                if separator:
+                    values[key] = value.strip()
+            approach_manufacturing = self._direction(values.get("weld_approach_direction_mfg", ""))
+            weld_direction_manufacturing = self._direction(values.get("weld_direction_mfg", ""))
+            try:
+                torch = Vec3(
+                    float(values["torch_envelope_width_mm"]),
+                    float(values["torch_envelope_height_mm"]),
+                    float(values["torch_envelope_length_mm"]),
+                )
+                length = float(values["weld_length_mm"])
+            except (KeyError, ValueError):
+                continue
+            if (approach_manufacturing is None or weld_direction_manufacturing is None
+                    or not joint.references or not values.get("weld_side")
+                    or not joint.process or joint.sequence is None
+                    or any(value <= 0.0 for value in torch.__dict__.values())):
+                continue
+            approach_source = orientation.manufacturing_vector_to_source(approach_manufacturing)
+            weld_direction_source = orientation.manufacturing_vector_to_source(
+                weld_direction_manufacturing
+            )
+            confirmed_welds.append(ConfirmedWeldIntent(
+                joint.identity, joint.references, values["weld_side"], length,
+                joint.process, joint.sequence, annotation.position_mm,
+                approach_manufacturing, approach_source, torch, orientation.identity,
+                ("Engineer-confirmed weld and torch evidence from the normal workbench.",),
+                weld_direction_manufacturing, weld_direction_source,
+            ))
+            weld_evidence.extend((
+                f"joint_reference={joint.identity}", f"weld_side={values['weld_side']}",
+                f"weld_length_mm={length:.3f}", f"weld_process={joint.process}",
+                f"weld_sequence={joint.sequence}",
+                f"approach_direction_mfg={values['weld_approach_direction_mfg']}",
+                f"weld_direction_mfg={values['weld_direction_mfg']}",
+                f"torch_envelope_mm=({torch.x:.3f},{torch.y:.3f},{torch.z:.3f})",
+            ))
         return FixtureBuildRequirements(
             self.project.product.source_sha256, purpose,
             self._construction_from_ui(self.process_construction.currentText()),
@@ -3904,14 +4476,150 @@ class FxdWorkbenchWindow(QMainWindow):
             self._optional_text(self.process_job_revision), "A", setup.production_quantity,
             self._optional_text(self.process_repeat_frequency), setup.manufacturing_process,
             setup.shop_capabilities, self.process_tack_access.isChecked() if purpose == FixturePurpose.TACK_LOCATION else None,
-            None if purpose == FixturePurpose.TACK_LOCATION else None,
+            None if purpose == FixturePurpose.TACK_LOCATION else self.process_weld_access.isChecked(),
             self.process_unload_clearance.isChecked(), self._adjustment_state_from_ui(self.process_adjustment_state.currentText()),
             ("All M30 selections are engineer-editable review inputs.",),
             ("Generated through the local FXD workbench from immutable source identity.",),
             self._cleco_strategy_from_ui(self.process_cleco_strategy.currentText()),
             self.process_product_hole_approval.isChecked(),
             self._optional_text(self.process_product_hole_justification),
+            bool(self.project.annotations.weld_joints), tuple(weld_evidence),
+            len(self.project.annotations.weld_joints), tuple(confirmed_welds),
         )
+
+    def _multi_station_requirements(self, setup: ProcessSetup) -> MultiStationRequirements:
+        if setup.fixture_family != FixtureFamily.LINEAR_MULTI_STATION_WELD.value:
+            raise FixtureBuildError("select the supported linear multi-station weld fixture family before synthesis")
+        orientation = setup.manufacturing_orientation
+        if orientation is None or self.project is None:
+            raise FixtureBuildError("multi-station synthesis requires an accepted manufacturing orientation")
+        try:
+            orientation.require_accepted_for(self.project.product.source_sha256)
+        except ManufacturingOrientationError as exc:
+            raise FixtureBuildError(str(exc)) from exc
+        load_manufacturing = setup.manufacturing_loading_direction
+        unload_manufacturing = setup.manufacturing_unloading_direction
+        if load_manufacturing is None or unload_manufacturing is None:
+            raise FixtureBuildError("loading and unloading directions must be explicit manufacturing-frame axes")
+        loading_source = orientation.manufacturing_vector_to_source(load_manufacturing)
+        unloading_source = orientation.manufacturing_vector_to_source(unload_manufacturing)
+
+        def side_source(value: str, label: str) -> Vec3:
+            match = re.search(r"([+-][XYZ])", value.upper())
+            direction = self._direction(match.group(1)) if match else None
+            if direction is None:
+                raise FixtureBuildError(f"{label} must contain an explicit manufacturing-frame axis")
+            return orientation.manufacturing_vector_to_source(direction)
+
+        operator_source = side_source(self.process_operator_loading_side.currentText(), "operator loading side")
+        clamp_source = side_source(self.process_clamp_operating_side.currentText(), "clamp operating side")
+        annotations = (
+            self.workflow.geometry_annotations if self.workflow is not None else ()
+        )
+        role_references: list[tuple[ProductFeatureRole, GeometryReference]] = []
+        annotation_roles = (
+            (AnnotationRole.PRIMARY_DATUM, ProductFeatureRole.PRIMARY_SUPPORT),
+            (AnnotationRole.SECONDARY_DATUM, ProductFeatureRole.SECONDARY_LOCATOR),
+            (AnnotationRole.TERTIARY_DATUM, ProductFeatureRole.TERTIARY_STOP),
+            (AnnotationRole.PERMITTED_LOCATOR, ProductFeatureRole.LOCATOR_HOLE),
+            (AnnotationRole.PERMITTED_SUPPORT, ProductFeatureRole.CLAMP_CONTACT),
+        )
+        for annotation_role, feature_role in annotation_roles:
+            role_references.extend(
+                (feature_role, annotation.reference)
+                for annotation in annotations
+                if annotation.role == annotation_role
+            )
+        feature_bindings = build_m32_product_feature_bindings(
+            self.project.product, tuple(role_references),
+        )
+        binding_counts = {
+            role: sum(binding.role == role for binding in feature_bindings)
+            for role in ProductFeatureRole
+        }
+        required_roles = (
+            ProductFeatureRole.PRIMARY_SUPPORT,
+            ProductFeatureRole.SECONDARY_LOCATOR,
+            ProductFeatureRole.TERTIARY_STOP,
+            ProductFeatureRole.CLAMP_CONTACT,
+        )
+        if (any(binding_counts[role] != 1 for role in required_roles)
+                or binding_counts[ProductFeatureRole.LOCATOR_HOLE] not in {0, 2}):
+            raise FixtureBuildError(
+                "M32 requires exact OCP face annotations for one primary datum, "
+                "one secondary datum, one tertiary datum, one clamp-support "
+                "contact, and either zero or two cylindrical locator holes"
+            )
+        mode = {"Manual": "manual", "Cobot": "cobot", "Robotic": "robot"}.get(
+            setup.operation_mode or "", "manual"
+        )
+        accepted_key = self._accepted_multi_station_fit_key
+        accepted_dimensions_match = (
+            accepted_key is not None
+            and abs(accepted_key[1] - self.process_max_fixture_length.value()) < 1e-7
+            and abs(accepted_key[2] - self.process_station_pitch.value()) < 1e-7
+        )
+        intent_count = (
+            accepted_key[0]
+            if accepted_dimensions_match
+            and self._accepted_multi_station_feasible_count == self.process_station_count.value()
+            else None
+        )
+        if intent_count is None and self.project is not None and self.project.fixture_build is not None:
+            layout = self.project.fixture_build.multi_station_layout
+            if (layout is not None and layout.requirements.requested_intent_station_count is not None
+                    and layout.requirements.requested_station_count == self.process_station_count.value()
+                    and abs(layout.requirements.maximum_fixture_length_mm - self.process_max_fixture_length.value()) < 1e-7
+                    and abs((layout.requirements.preferred_station_pitch_mm or 0.0) - self.process_station_pitch.value()) < 1e-7):
+                intent_count = layout.requirements.requested_intent_station_count
+        return MultiStationRequirements(
+            FixtureFamily.LINEAR_MULTI_STATION_WELD,
+            self.process_station_count.value(), self.process_max_fixture_length.value(),
+            self.process_station_pitch.value() or None,
+            self.process_operator_loading_side.currentText(), self.process_unload.currentText(),
+            self.process_clamp_operating_side.currentText(), mode,
+            self.process_table_mounting.currentText(), setup.production_quantity or 1,
+            self.process_compare_multi_up.isChecked(),
+            requested_intent_station_count=intent_count,
+            loading_direction_source=loading_source,
+            unloading_direction_source=unloading_source,
+            operator_loading_direction_source=operator_source,
+            clamp_operating_direction_source=clamp_source,
+            manufacturing_up_direction_source=orientation.manufacturing_z_source,
+            source_to_manufacturing=orientation.source_to_manufacturing,
+            manufacturing_to_source=orientation.manufacturing_to_source,
+            manufacturing_orientation_identity=orientation.identity,
+            product_feature_bindings=feature_bindings,
+        )
+
+    def _multi_station_fit_key(self, requested: int) -> tuple[int, float, float]:
+        return (requested, self.process_max_fixture_length.value(), self.process_station_pitch.value())
+
+    def _show_multi_station_fit(self, fit) -> None:
+        self.process_station_fit_summary.setText(
+            f"Requested {fit.requested_station_count} station(s); feasible {fit.feasible_station_count}; "
+            f"pitch {fit.station_pitch_mm:.1f} mm; requested length {fit.requested_required_length_mm:.1f} mm; "
+            f"maximum {fit.maximum_fixture_length_mm:.1f} mm. Limiting margin: product envelope, clamp sweep, "
+            "hand clearance, weld clearance, adjustment allowance, and end margins."
+        )
+
+    def accept_multi_station_fit(self) -> None:
+        fit = self._pending_multi_station_fit
+        if fit is None or self.project is None:
+            self.statusBar().showMessage("Generate a governed station-fit proposal before accepting it.")
+            return
+        if fit.feasible_station_count < 1:
+            QMessageBox.warning(self, "Station fit blocked", "The maximum length cannot fit one station with the stated allowances.")
+            return
+        self._accepted_multi_station_fit_key = self._multi_station_fit_key(fit.requested_station_count)
+        self._accepted_multi_station_feasible_count = fit.feasible_station_count
+        self.process_station_count.setValue(fit.feasible_station_count)
+        self._show_multi_station_fit(fit)
+        self.process_accept_station_fit.setEnabled(False)
+        self.statusBar().showMessage(
+            f"Accepted {fit.feasible_station_count}-station governed proposal; original {fit.requested_station_count}-station intent remains recorded."
+        )
+        self.generate_fixture_build_plan()
 
     def generate_fixture_build_plan(self) -> None:
         if (self.project is None or self.workflow is None or not self.workflow.concepts_generated
@@ -3919,7 +4627,59 @@ class FxdWorkbenchWindow(QMainWindow):
             self.statusBar().showMessage("Generate and select a fixture concept before creating a build plan.")
             return
         try:
-            plan = generate_m30_fixture_build_plan(self.project.product, self.project.active, self._fixture_build_requirements())
+            build_requirements = self._fixture_build_requirements()
+            setup = self._capture_process_setup()
+            if setup.fixture_family == FixtureFamily.LINEAR_MULTI_STATION_WELD.value:
+                proposal = self.project.fixture_proposal
+                if proposal is None:
+                    self.statusBar().showMessage(
+                        "Generate and accept the Fixture Proposal before multi-station synthesis."
+                    )
+                    return
+                orientation = self.workflow.setup.manufacturing_orientation
+                current_context = replace(self.project, workflow=self.workflow)
+                stale = proposal.stale_reason(
+                    self.project.product.source_sha256,
+                    orientation.identity if orientation else None,
+                    proposal_engineering_context_identity(current_context),
+                )
+                if (stale or proposal.blocker_count
+                        or proposal.proposal_decision != "accepted_for_engineering_review"):
+                    self.statusBar().showMessage(
+                        "Resolve and accept the current Fixture Proposal before multi-station synthesis."
+                    )
+                    return
+                multi_station = self._multi_station_requirements(setup)
+                fit = propose_multi_station_fit(self.project.product, multi_station)
+                request_key = self._multi_station_fit_key(fit.requested_station_count)
+                if (fit.requires_explicit_acceptance and (
+                        self._accepted_multi_station_fit_key != request_key
+                        or multi_station.requested_station_count != fit.feasible_station_count)):
+                    self._pending_multi_station_fit = fit
+                    self._show_multi_station_fit(fit)
+                    self.process_accept_station_fit.setEnabled(fit.feasible_station_count >= 1)
+                    self.statusBar().showMessage(
+                        "Station count reduction is proposed, not applied. Review the fit and accept it or change Process inputs."
+                    )
+                    return
+                self._pending_multi_station_fit = None
+                self.process_accept_station_fit.setEnabled(False)
+                alternatives = generate_multi_station_fixture_alternatives(
+                    self.project.product, self.project.active, build_requirements, multi_station,
+                )
+                plan = alternatives[-1]
+                plan = bind_fixture_build_plan_to_proposal(plan, proposal)
+                self._multi_station_comparison_summary = (
+                    f"Alternative comparison: generated {len(alternatives)} governed plan(s) "
+                    f"(one-up and {multi_station.requested_station_count}-station when requested); "
+                    f"selected {multi_station.requested_station_count}-station plan."
+                    if len(alternatives) > 1 else ""
+                )
+                self._multi_station_comparison_plan_identity = plan.identity
+            else:
+                plan = generate_m30_fixture_build_plan(self.project.product, self.project.active, build_requirements)
+                self._multi_station_comparison_summary = ""
+                self._multi_station_comparison_plan_identity = None
             self._replace_project(
                 self.project.with_workflow(self.workflow).with_fixture_build(plan)
             )
@@ -3937,16 +4697,49 @@ class FxdWorkbenchWindow(QMainWindow):
             self.statusBar().showMessage("Generate a valid fixture build plan before OCP authoring.")
             return
         try:
-            self.authored_fixture_build = author_fixture_build(
+            authored = author_fixture_build(
                 self.project.fixture_build, self.project.product, self.kernel,
             )
+            persisted_plan = replace(
+                self.project.fixture_build,
+                authoring_state="provisional" if authored.provisional else "normal",
+            )
+            self._replace_project(self.project.with_fixture_build(persisted_plan))
+            self.workflow = self.project.workflow
+            self.authored_fixture_build = authored
             self._show_active_concept_geometry()
             self._refresh_all()
+            label = "PROVISIONAL / NOT APPROVED / INVALID BUILD PLAN" if authored.provisional else "normal"
             self.statusBar().showMessage(
-                f"Authored {len(self.authored_fixture_build.components)} real OCP manufacturing components; engineering review remains required."
+                f"Authored {len(authored.components)} real OCP manufacturing components ({label}); engineering review remains required."
             )
         except (FixtureBuildError, KernelOperationError) as exc:
-            QMessageBox.warning(self, "Manufacturing geometry blocked", str(exc))
+            self.open_fixture_build_findings()
+            QMessageBox.warning(
+                self, "Manufacturing geometry blocked", self._build_authoring_block_summary(),
+            )
+
+    def _build_authoring_block_summary(self) -> str:
+        validation = self.project.fixture_build_validation if self.project else None
+        if validation is None:
+            return "Manufacturing geometry is blocked because no active fixture-build validation is available. Open Fixture Build Plan findings."
+        errors = tuple(item for item in validation.findings if item.severity == "error")
+        reasons = tuple(dict.fromkeys(item.message for item in errors))[:3]
+        detail = "; ".join(reasons) or "deterministic authoring prerequisites are incomplete"
+        return (
+            f"Manufacturing geometry is blocked by {len(errors)} fixture-build error(s). "
+            f"Open Fixture Build Plan findings to review: {detail}. "
+            "No geometry was authored and no safety or release claim is made."
+        )
+
+    def open_fixture_build_findings(self) -> None:
+        if hasattr(self, "validation_source_selector"):
+            self.validation_source_selector.setCurrentText("Fixture Build Plan")
+        review = self.findChild(QDockWidget, "reviewDock")
+        if review is not None:
+            review.show()
+            review.raise_()
+        self.review_tabs.setCurrentIndex(1)
 
     def _review_geometry_items(self) -> list[dict[str, object]]:
         orientation_items = self._orientation_review_items()
@@ -3972,16 +4765,161 @@ class FxdWorkbenchWindow(QMainWindow):
                 and "provisional" not in self.project.hidden_layers]
         active_authored = self._active_authored_fixture_build()
         if active_authored is not None:
+            semantic_styles = {
+                "baseplate": ("fixture_backbone", [0.26, 0.34, 0.44]),
+                "local_station_plate": ("fixture_station_plate", [0.34, 0.43, 0.54]),
+                "datum_rail_or_backplate": ("fixture_datum_structure", [0.42, 0.52, 0.62]),
+                "end_brace": ("fixture_structure", [0.42, 0.52, 0.62]),
+                "support_pad": ("replaceable_support", [0.24, 0.68, 0.43]),
+                "shim_pack": ("replaceable_wear_item", [0.42, 0.78, 0.55]),
+                "locator_plate": ("locator", [0.10, 0.67, 0.76]),
+                "hard_stop": ("hard_stop", [0.08, 0.58, 0.70]),
+                "toggle_clamp_mounting_bracket": ("clamp_mount", [0.58, 0.42, 0.76]),
+            }
+            finding_components = {
+                identity
+                for finding in active_authored.validation.findings
+                for identity in finding.component_identities
+            }
             for authored in active_authored.components:
                 bounds = authored.component.bounds
+                layer = (
+                    "clamps" if authored.component.role.value in {"toggle_clamp_mounting_bracket", "vendor_neutral_toggle_clamp"}
+                    else "locators" if authored.component.role.value in {"locator_plate", "hard_stop"}
+                    else "supports" if authored.component.role.value in {"support_pad", "shim_pack"}
+                    else "fixture"
+                )
+                if layer in self.project.hidden_layers:
+                    continue
+                vertices: list[list[float]] = []
+                triangles: list[list[int]] = []
+                try:
+                    for mesh in self.kernel.tessellate(authored.shape, linear_deflection_mm=0.8):
+                        offset = len(vertices)
+                        vertices.extend([list(point) for point in mesh.vertices_mm])
+                        triangles.extend([[offset + index for index in triangle] for triangle in mesh.triangles])
+                except KernelOperationError:
+                    # A bounds item is retained only as an explicitly labelled debug fallback;
+                    # successful authoring normally supplies the tessellated OCP solid above.
+                    items.append({
+                        "identity": "manufacturing-debug-bounds:" + authored.component.identity,
+                        "kind": "authored_manufacturing_debug_bounds",
+                        "minimum": list(bounds.minimum.__dict__.values()),
+                        "maximum": list(bounds.maximum.__dict__.values()),
+                        "status": "provisional",
+                        "evidence": "debug fallback bounds after authored OCP tessellation failure; not fixture geometry",
+                    })
+                    continue
+                semantic, color = semantic_styles.get(
+                    authored.component.role.value, ("authored_fixture", [0.37, 0.47, 0.58])
+                )
+                selected = self.selected_identity == authored.component.identity
+                affected = authored.component.identity in finding_components
                 items.append({
                     "identity": "manufacturing:" + authored.component.identity,
-                    "kind": "authored_manufacturing_component",
-                    "minimum": list(bounds.minimum.__dict__.values()),
-                    "maximum": list(bounds.maximum.__dict__.values()),
-                    "status": self.project.active_validation.status,
-                    "evidence": "authored manufacturing OCP B-Rep review proxy; never source CAD",
+                    "kind": "authored_mesh", "vertices": vertices, "triangles": triangles,
+                    "status": "provisional" if active_authored.provisional else "valid",
+                    "color": ([1.0, 0.86, 0.20] if selected else [0.90, 0.24, 0.24] if affected else color),
+                    "representation": "surface", "opacity": 0.96,
+                    "semantic": "selected_component" if selected else "finding_component" if affected else semantic,
+                    "evidence": (
+                        "PROVISIONAL / NOT APPROVED / INVALID BUILD PLAN; tessellated real OCP review solid; never source CAD"
+                        if active_authored.provisional else
+                        "tessellated authored OCP manufacturing component; never source CAD"
+                    ),
                 })
+            layout = self.project.fixture_build.multi_station_layout
+            if layout is not None and self.document is not None:
+                hidden_layers = self.project.hidden_layers
+                for component in self.project.fixture_build.components:
+                    if component.geometry_authority.value != "purchased_component_geometry":
+                        continue
+                    is_open = component.role.value == "vendor_neutral_clamp_open_envelope"
+                    if "clamps" in hidden_layers:
+                        continue
+                    if is_open and "access_envelopes" in hidden_layers:
+                        continue
+                    if not is_open and "purchased_tooling" in hidden_layers:
+                        continue
+                    items.append({
+                        "identity": "tooling-review:" + component.identity,
+                        "kind": "clamp_open_envelope" if is_open else "purchased_tooling_closed",
+                        "minimum": list(component.bounds.minimum.__dict__.values()),
+                        "maximum": list(component.bounds.maximum.__dict__.values()),
+                        "status": "provisional",
+                        "color": [0.91, 0.32, 0.76] if is_open else [0.95, 0.76, 0.22],
+                        "representation": "wireframe" if is_open else "surface",
+                        "opacity": 0.40 if is_open else 0.82,
+                        "semantic": "clamp_open_sweep" if is_open else "provisional_purchased_tooling_closed",
+                        "evidence": "; ".join(component.evidence),
+                    })
+                if "product_instances" not in hidden_layers:
+                    source_vertices = tuple((mesh.vertices_mm, mesh.triangles) for mesh in self.document.meshes)
+                    for station in layout.stations:
+                        vertices = []
+                        triangles = []
+                        transform = station.source_to_station_manufacturing
+                        for mesh_vertices, mesh_triangles in source_vertices:
+                            offset = len(vertices)
+                            if transform:
+                                vertices.extend([[
+                                    transform[0] * point[0] + transform[1] * point[1]
+                                    + transform[2] * point[2] + transform[3],
+                                    transform[4] * point[0] + transform[5] * point[1]
+                                    + transform[6] * point[2] + transform[7],
+                                    transform[8] * point[0] + transform[9] * point[1]
+                                    + transform[10] * point[2] + transform[11],
+                                ] for point in mesh_vertices])
+                            else:
+                                vertices.extend([[point[0] + station.translation_mm.x,
+                                                  point[1] + station.translation_mm.y,
+                                                  point[2] + station.translation_mm.z]
+                                                 for point in mesh_vertices])
+                            triangles.extend([[offset + index for index in triangle] for triangle in mesh_triangles])
+                        items.append({
+                            "identity": "product-review:" + station.identity,
+                            "kind": "product_review_mesh", "vertices": vertices, "triangles": triangles,
+                            "status": "valid", "color": [0.30, 0.61, 0.96],
+                            "representation": "surface", "opacity": 0.58,
+                            "semantic": "immutable_source_product_instance",
+                            "evidence": "immutable source-product review instance with deterministic station transform",
+                        })
+                if "access_envelopes" not in hidden_layers and "access" not in hidden_layers:
+                    for station in layout.stations:
+                        center = [
+                            (station.product_bounds.minimum.x + station.product_bounds.maximum.x) * 0.5,
+                            (station.product_bounds.minimum.y + station.product_bounds.maximum.y) * 0.5,
+                            station.product_bounds.maximum.z + 26.0,
+                        ]
+                        for label, token, direction, color in (
+                            ("load", station.loading_direction, station.loading_direction_source,
+                             [1.0, 0.48, 0.0]),
+                            ("unload", station.unloading_direction, station.unloading_direction_source,
+                             [0.72, 0.54, 0.97]),
+                        ):
+                            source_to_manufacturing = layout.requirements.source_to_manufacturing
+                            if direction is None or len(source_to_manufacturing) != 16:
+                                continue
+                            rendered_direction = [
+                                source_to_manufacturing[0] * direction.x
+                                + source_to_manufacturing[1] * direction.y
+                                + source_to_manufacturing[2] * direction.z,
+                                source_to_manufacturing[4] * direction.x
+                                + source_to_manufacturing[5] * direction.y
+                                + source_to_manufacturing[6] * direction.z,
+                                source_to_manufacturing[8] * direction.x
+                                + source_to_manufacturing[9] * direction.y
+                                + source_to_manufacturing[10] * direction.z,
+                            ]
+                            items.append({
+                                "identity": f"m32-{label}:{station.identity}",
+                                "kind": "orientation_arrow", "origin": center,
+                                "direction": rendered_direction,
+                                "length": max(28.0, layout.requirements.hand_clearance_mm * 0.72),
+                                "status": "provisional", "color": color, "opacity": 0.98,
+                                "representation": "surface", "semantic": f"{label}_direction",
+                                "evidence": f"{label} direction {token}; source evidence transformed into the manufacturing review frame",
+                            })
         return items + orientation_items
 
     def _orientation_review_items(self) -> list[dict[str, object]]:
@@ -4062,6 +5000,63 @@ class FxdWorkbenchWindow(QMainWindow):
         scene = self._scene()
         if scene is not None:
             scene.set_review_geometry(self._review_geometry_items())
+
+    def prepare_m32_visual_review(self, screenshot_path: Path) -> None:
+        """Re-author and verify the governed provisional M32 review display."""
+        if self.project is None or self.document is None or self.project.fixture_build is None:
+            raise RuntimeError("M32 visual-review project is incomplete")
+        plan = self.project.fixture_build
+        layout = plan.multi_station_layout
+        station_count = _m32_visual_review_station_count(plan)
+        assert layout is not None
+        if self.workflow is None or not self.workflow.has_accepted_manufacturing_orientation():
+            raise RuntimeError("M32 visual-review project lacks accepted manufacturing orientation")
+        authored = author_fixture_build(plan, self.project.product, self.kernel)
+        if (not authored.provisional
+                or authored.review_labels != ("PROVISIONAL", "NOT APPROVED", "INVALID BUILD PLAN")
+                or not authored.components
+                or not all(component.topology.solids >= 1 for component in authored.components)):
+            raise RuntimeError("M32 visual-review OCP authoring evidence is invalid")
+        self.authored_fixture_build = authored
+        items = self._review_geometry_items()
+        authored_items = [item for item in items if item.get("kind") == "authored_mesh"]
+        product_items = [item for item in items if item.get("kind") == "product_review_mesh"]
+        closed_clamps = [item for item in items if item.get("kind") == "purchased_tooling_closed"]
+        open_clamps = [item for item in items if item.get("kind") == "clamp_open_envelope"]
+        load_arrows = [item for item in items if item.get("semantic") == "load_direction"]
+        unload_arrows = [item for item in items if item.get("semantic") == "unload_direction"]
+        if (len(authored_items) != len(authored.components)
+                or len(product_items) != station_count
+                or len(closed_clamps) != station_count
+                or len(open_clamps) != station_count
+                or len(load_arrows) != station_count
+                or len(unload_arrows) != station_count
+                or any(not item.get("triangles") for item in authored_items)
+                or len({tuple(item["color"]) for item in authored_items}) < 4
+                or any(item.get("kind") == "authored_manufacturing_debug_bounds" for item in items)):
+            raise RuntimeError("M32 visual review requires tessellated OCP geometry and deterministic product/fixture/tooling/access semantics")
+        scene = self._scene()
+        if scene is None or not hasattr(scene, "set_review_geometry_verified"):
+            raise RuntimeError("M32 visual review requires the native VTK scene")
+        confirmation = scene.set_review_geometry_verified(items)
+        if (int(confirmation.get("review_actor_count", 0)) < len(authored_items) + len(product_items)
+                or not bool(confirmation.get("rendered"))):
+            raise RuntimeError("native VTK did not confirm the governed review actors")
+        self._navigate_stage("Manufacturing")
+        if hasattr(self, "validation_source_selector"):
+            self.validation_source_selector.setCurrentText("Fixture Build Plan")
+        self.setWindowTitle(
+            "FXD M32 VISUAL REVIEW - PROVISIONAL / NOT APPROVED / INVALID BUILD PLAN"
+        )
+        self.statusBar().showMessage(
+            "M32 compact precedent-informed five-station review loaded with real OCP "
+            "solids; qualified engineering review remains required."
+        )
+        QApplication.processEvents()
+        screenshot_path.parent.mkdir(parents=True, exist_ok=True)
+        screen = self.screen()
+        if screen is None or not screen.grabWindow(int(self.winId())).save(str(screenshot_path), "PNG"):
+            raise RuntimeError("M32 visual-review application screenshot could not be captured")
 
     def _populate_concept_comparison(self) -> None:
         self.concept_table.setRowCount(0)
@@ -4350,15 +5345,49 @@ def create_application(argv: list[str] | None = None) -> QApplication:
     return application
 
 
-def main(step_path: Path | None = None) -> int:
+def main(step_path: Path | None = None, *, project_path: Path | None = None,
+         require_m32_visual_review: bool = False,
+         screenshot_path: Path | None = None) -> int:
     logging.basicConfig(level=logging.INFO)
     application = create_application()
     window = FxdWorkbenchWindow()
     window.show()
-    if step_path is not None:
+    if step_path is not None and project_path is not None:
+        raise ValueError("load either a STEP source or an FXD project, not both")
+    if project_path is not None:
+        def load_project() -> None:
+            try:
+                window.load_project_path(
+                    project_path, require_real_display=require_m32_visual_review,
+                )
+                if require_m32_visual_review:
+                    if screenshot_path is None:
+                        raise RuntimeError("M32 visual review requires an external screenshot path")
+                    window.prepare_m32_visual_review(screenshot_path)
+                    print("FXD_M32_VISUAL_REVIEW=ready", flush=True)
+            except Exception:
+                logger.exception("M32 visual-review application launch failed closed")
+                print("FXD_M32_VISUAL_REVIEW=failed", flush=True)
+                application.exit(1)
+        QTimer.singleShot(0, load_project)
+    elif step_path is not None:
         QTimer.singleShot(0, lambda: window.load_step_path(step_path))
     return application.exec()
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    parser = argparse.ArgumentParser(description="Launch the FXD local engineering workbench.")
+    source = parser.add_mutually_exclusive_group()
+    source.add_argument("--step", type=Path)
+    source.add_argument("--project", type=Path)
+    parser.add_argument("--require-m32-visual-review", action="store_true")
+    parser.add_argument("--screenshot", type=Path)
+    args = parser.parse_args()
+    if args.require_m32_visual_review and args.project is None:
+        parser.error("--require-m32-visual-review requires --project")
+    raise SystemExit(main(
+        args.step,
+        project_path=args.project,
+        require_m32_visual_review=args.require_m32_visual_review,
+        screenshot_path=args.screenshot,
+    ))

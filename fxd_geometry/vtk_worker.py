@@ -118,6 +118,16 @@ def run(source: Path, expected_sha256: str, title: str) -> int:
                     if not isinstance(raw_items, list):
                         raise ValueError("review geometry items must be a list")
                     scene.set_review_geometry(tuple(raw_items))
+                    if isinstance(request_id, int):
+                        # The fixture is much larger than the synthetic source
+                        # product. Fit after installing every review actor so
+                        # the first accepted visual-review frame is inspectable.
+                        scene.fit()
+                        _write({
+                            "event": "response", "request_id": request_id,
+                            "review_actor_count": len(scene.review_actor_identities),
+                            "rendered": True,
+                        })
                 elif command == "set_orbit":
                     scene.set_orbit(bool(request["enabled"]))
                 elif command == "set_navigation_mode":
@@ -158,7 +168,7 @@ def run(source: Path, expected_sha256: str, title: str) -> int:
                     return
                 else:
                     raise ValueError(f"unsupported worker command {command!r}")
-                if request_id is not None and command != "benchmark":
+                if request_id is not None and command not in {"benchmark", "set_review_geometry"}:
                     _write({"event": "response", "request_id": request_id})
             except Exception as exc:
                 logger.exception("VTK worker command failed")

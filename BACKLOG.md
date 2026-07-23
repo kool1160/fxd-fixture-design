@@ -3,6 +3,15 @@
 
 This is a derived record of Milestones 1 through 20. Current sequence and status come only from `docs/MILESTONE_STATE.json`; the Foreman must not select work from this file.
 
+## Forward-queue reconciliation
+
+Milestones after 20 are governed by `docs/ROADMAP_QUEUE.md`. Milestone 31 was
+accepted and merged through PR #53 at
+`ac1e7a1799ef9be674f6ab5739e48d178fa2f1dc`; Milestone 32 has passed its
+hosted acceptance workflow and awaits engineering acceptance on its unmerged
+review PR. This legacy backlog preserves its historical M1–M20
+evidence and does not supersede the forward queue.
+
 ## Milestone 1 — Establish the runnable technical baseline
 
 **Status:** Complete

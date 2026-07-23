@@ -74,11 +74,16 @@ process environment:
 Credentials are not written to projects, diagnostics, prompts, or repository
 files. Requests contain compact structured identities, bounds, intent,
 orientation axes, annotations, sanitized customer-tooling evidence, placements,
-deterministic candidates, findings, and alternatives. Tooling source paths, STEP
-bytes, base64 source geometry, unrestricted project dumps, customer credentials,
-and hidden chain-of-thought are excluded. Unverified customer-tooling records are
-excluded from the provider payload and strict identity set; only verified records
-may be cited by provider recommendations.
+deterministic candidates, findings, alternatives, and the highest-ranked public
+fixture-precedent identities with match evidence, failure modes, abstract human
+rejection constraints, and unresolved questions. They do not contain complete
+knowledge documents or source-page content. Tooling source paths, STEP bytes,
+base64 source geometry, unrestricted project dumps, customer credentials,
+customer geometry, user fixture images, and hidden chain-of-thought are
+excluded. Unverified customer-tooling records are excluded from the provider
+payload and strict identity set; only verified records may be cited by provider
+recommendations. The offline deterministic baseline consumes the same retrieved
+records and remains fully functional without a provider.
 
 Provider calls are bounded by a caller-visible timeout and cooperative
 cancellation. Missing configuration produces the explicit state `ai_unavailable`.

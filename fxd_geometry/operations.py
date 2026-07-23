@@ -122,6 +122,10 @@ def project_export_block_reason(project: FxdProject) -> str | None:
             return "fixture proposal has deterministic blockers and cannot be exported"
         if proposal.proposal_decision != "accepted_for_engineering_review":
             return "fixture proposal must be accepted for engineering review before export"
+    build_proposal_gate = getattr(project, "fixture_build_proposal_block_reason", None)
+    build_proposal_reason = build_proposal_gate() if callable(build_proposal_gate) else None
+    if build_proposal_reason:
+        return build_proposal_reason + " before export"
     if project.active_validation.blocked:
         return "invalid deterministic validation result cannot be exported"
     if project.suppressed_features:
@@ -204,8 +208,10 @@ def export_project_package(project: FxdProject, destination: str | Path,
         from .fabrication_workflow import FixtureBuildError, write_fixture_build_package
         try:
             paths.extend(write_fixture_build_package(
-                fixture_build_assembly, project.fixture_build, Path(destination) / "m30-manufacturing",
+                fixture_build_assembly, project.fixture_build, project.product,
+                Path(destination) / "m30-manufacturing",
                 project_validation=project.active_validation,
+                accepted_proposal=getattr(project, "fixture_proposal", None),
             ))
         except FixtureBuildError as exc:
             raise ExportError(f"fixture-build package failed closed: {exc}") from exc

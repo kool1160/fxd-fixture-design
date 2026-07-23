@@ -71,6 +71,18 @@ validation APIs. It does not own geometry rules and may not convert unknown
 evidence into a pass. The PySide6 shell invokes this boundary; it does not
 duplicate engineering policy.
 
+### Multi-station weld-fixture synthesis
+
+`fxd_geometry.fabrication_workflow` owns the first supported
+`linear_multi_station_weld_fixture` family. It extends the existing
+`FixtureBuildPlan` rather than creating a second fixture assembly model. Typed
+multi-station requirements and layouts persist stable source-referenced product
+review-instance transforms, pitch and length rationale, and access evidence.
+The deterministic generator creates the existing authored manufacturing
+components; `author_fixture_build` remains the only OCP B-Rep authoring
+boundary. VTK review uses tessellated authored OCP shapes and transformed
+immutable product review meshes. See `docs/M32_MULTI_STATION_WELD_FIXTURE.md`.
+
 ### Manufacturing coordinate system
 
 `fxd_geometry.manufacturing_orientation` persists an accepted source-SHA-linked

@@ -1267,6 +1267,15 @@ class MilestoneGovernanceTests(unittest.TestCase):
         predicate = '[[ "$issue_body" =~ [^[:space:]] ]]'
         self.assertIn('if [[ ! "$issue_body" =~ [^[:space:]] ]]; then', validation_script)
 
+        bash = shutil.which("bash")
+        if bash is None:
+            git = shutil.which("git")
+            if git is not None:
+                git_bash = Path(git).resolve().parent.parent / "bin" / "bash.exe"
+                if git_bash.is_file():
+                    bash = str(git_bash)
+        self.assertIsNotNone(bash, "Git Bash is required to verify the Foreman shell predicate")
+
         for label, body in {
             "empty": "",
             "spaces": "   ",
@@ -1276,14 +1285,14 @@ class MilestoneGovernanceTests(unittest.TestCase):
         }.items():
             with self.subTest(label=label):
                 result = subprocess.run(
-                    ["bash", "-c", f'issue_body="$1"; {predicate}', "bash", body],
+                    [bash, "-c", f'issue_body="$1"; {predicate}', "bash", body],
                     capture_output=True,
                     check=False,
                 )
                 self.assertNotEqual(0, result.returncode)
 
         meaningful = subprocess.run(
-            ["bash", "-c", f'issue_body="$1"; {predicate}', "bash", "Milestone 32 scope"],
+            [bash, "-c", f'issue_body="$1"; {predicate}', "bash", "Milestone 32 scope"],
             capture_output=True,
             check=False,
         )

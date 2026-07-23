@@ -7,7 +7,7 @@ from pathlib import Path
 
 import logging
 
-from .kernel import KernelAssembly, KernelOperationError, KernelTriangleMesh
+from .kernel import KernelAssembly, KernelFace, KernelOperationError, KernelTriangleMesh
 from .review_kernel import OcpKernel
 
 
@@ -25,6 +25,7 @@ class WorkbenchDocument:
     assembly: KernelAssembly
     meshes: tuple[KernelTriangleMesh, ...]
     source_path: Path | None = None
+    kernel_faces: tuple[KernelFace, ...] = ()
 
     @property
     def units(self) -> str:
@@ -68,4 +69,5 @@ def load_step_for_workbench(source: str | Path | bytes, *, kernel: OcpKernel | N
     return WorkbenchDocument(
         source_name or (path.name if path else "<memory>"), sha256(data).hexdigest(),
         data, shape, assembly, meshes, path.resolve() if path is not None else None,
+        active_kernel.face_records(shape),
     )

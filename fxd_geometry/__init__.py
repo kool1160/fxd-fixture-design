@@ -21,6 +21,13 @@ from .export import (ExportError, FabricationPackage, build_fabrication_package,
                      write_fabrication_package)
 from .knowledge import (CorrectionRecord, KnowledgeError, KnowledgeStore,
                         ProposedFeature, digest_text, private_knowledge_path)
+from .fixture_knowledge import (
+    FIXTURE_KNOWLEDGE_RECORD_TYPES, FIXTURE_KNOWLEDGE_SCHEMA,
+    FIXTURE_KNOWLEDGE_SOURCE_SCHEMA, FixtureKnowledgeError,
+    FixtureKnowledgeLibrary, FixtureKnowledgeRecord, FixtureKnowledgeSource,
+    PrecedentMatch, PrecedentQuery, PrecedentRetrievalResult,
+    knowledge_record_counts, load_fixture_knowledge, retrieve_precedent,
+)
 from .connectors import (ApprovalRequired, CompatibilityProbe, ConnectorCapabilities,
                          ConnectorDescriptor, ConnectorError, NeutralStepConnector,
                          connector_registry, probe_solidworks,
@@ -87,14 +94,26 @@ from .manufacturing_orientation import (
     source_orientation,
 )
 from .fabrication_workflow import (
-    M30_SCHEMA, RULE_CATALOG, RULES_BY_ID, AdjustmentState, AuthoredFixtureAssembly,
+    M30_SCHEMA, M32_SCHEMA, RULE_CATALOG, RULES_BY_ID, AdjustmentState, AuthoredFixtureAssembly,
     AuthoredFixtureComponent, BuildComponentRole, ClecoSpec, ClecoStrategy,
-    ConstructionMethod, FixtureBuildComparison, FixtureBuildComponent, FixtureBuildError,
+    ConfirmedWeldIntent, ConstructionMethod, FixtureBuildComparison, FixtureBuildComponent, FixtureBuildError,
     FixtureBuildFinding, FixtureBuildPlan, FixtureBuildRequirements, FixtureBuildValidation,
-    FixtureLifecycle, FixturePurpose, GeometryAuthority, HoleProcess, HoleProcessSpec,
-    M30Rule, NestClassification, PokaYokeSpec, TabSlotJoint, author_fixture_build,
-    build_fixture_build_package, compare_fixture_build_plans, generate_fixture_build_plan,
-    validate_fixture_build_plan, write_fixture_build_package,
+    FixtureFamily, FixtureLifecycle, FixturePurpose, GeometryAuthority, HoleProcess, HoleProcessSpec,
+    MultiStationFitProposal, MultiStationLayout, MultiStationRequirements, ProductFeatureBinding,
+    ProductFeatureRole, SlotProcessSpec, StationTransform,
+    WeldJointAccessResult,
+    M30Rule, NestClassification, PokaYokeSpec, TabSlotJoint, author_fixture_build, propose_multi_station_fit,
+    bind_fixture_build_plan_to_proposal, build_fixture_build_package, compare_fixture_build_plans, generate_fixture_build_plan,
+    generate_multi_station_fixture_alternatives, generate_multi_station_fixture_build_plan,
+    build_m32_product_feature_bindings, generate_multi_station_layout,
+    propose_multi_station_count, validate_fixture_build_plan, write_fixture_build_package,
+)
+from .fixture_quality import (
+    FIXTURE_CONCEPT_QUALITY_SCHEMA, FixtureConceptQualityEvidence,
+    FixtureConceptQualityFinding, FixtureConceptQualityMetric,
+    FixtureConceptQualityReport, evaluate_fixture_concept_evidence,
+    evaluate_fixture_concept_quality, evidence_from_fixture_build,
+    rejected_generic_m32_evidence,
 )
 from .ai_fixture_engineer import (
     PROMPT_CONTRACT_VERSION, PROPOSAL_REQUEST_SCHEMA, PROPOSAL_SCHEMA,
@@ -165,14 +184,31 @@ __all__ += ["CoordinateSystem", "ManufacturingOrientation", "ManufacturingOrient
             "OrientationMethod", "OrientationRecommendation", "ReferencePlane",
             "orientation_from_face", "orientation_from_faces", "orientation_from_plane", "recommend_orientations",
             "reference_plane_orientation", "source_orientation"]
-__all__ += ["M30_SCHEMA", "RULE_CATALOG", "RULES_BY_ID", "AdjustmentState", "AuthoredFixtureAssembly",
+__all__ += ["M30_SCHEMA", "M32_SCHEMA", "RULE_CATALOG", "RULES_BY_ID", "AdjustmentState", "AuthoredFixtureAssembly",
             "AuthoredFixtureComponent", "BuildComponentRole", "ClecoSpec", "ClecoStrategy",
-            "ConstructionMethod", "FixtureBuildComparison", "FixtureBuildComponent", "FixtureBuildError",
+            "ConfirmedWeldIntent", "ConstructionMethod", "FixtureBuildComparison", "FixtureBuildComponent", "FixtureBuildError",
             "FixtureBuildFinding", "FixtureBuildPlan", "FixtureBuildRequirements", "FixtureBuildValidation",
-            "FixtureLifecycle", "FixturePurpose", "GeometryAuthority", "HoleProcess", "HoleProcessSpec",
-            "M30Rule", "NestClassification", "PokaYokeSpec", "TabSlotJoint", "author_fixture_build",
-            "build_fixture_build_package", "compare_fixture_build_plans", "generate_fixture_build_plan",
-            "validate_fixture_build_plan", "write_fixture_build_package"]
+            "FixtureFamily", "FixtureLifecycle", "FixturePurpose", "GeometryAuthority", "HoleProcess", "HoleProcessSpec",
+            "MultiStationFitProposal", "MultiStationLayout", "MultiStationRequirements",
+            "ProductFeatureBinding", "ProductFeatureRole", "SlotProcessSpec", "StationTransform",
+            "WeldJointAccessResult",
+            "M30Rule", "NestClassification", "PokaYokeSpec", "TabSlotJoint", "author_fixture_build", "propose_multi_station_fit",
+            "bind_fixture_build_plan_to_proposal", "build_fixture_build_package", "compare_fixture_build_plans", "generate_fixture_build_plan",
+            "generate_multi_station_fixture_alternatives", "generate_multi_station_fixture_build_plan",
+            "build_m32_product_feature_bindings", "generate_multi_station_layout",
+            "propose_multi_station_count", "validate_fixture_build_plan", "write_fixture_build_package"]
+__all__ += [
+    "FIXTURE_KNOWLEDGE_RECORD_TYPES", "FIXTURE_KNOWLEDGE_SCHEMA",
+    "FIXTURE_KNOWLEDGE_SOURCE_SCHEMA", "FixtureKnowledgeError",
+    "FixtureKnowledgeLibrary", "FixtureKnowledgeRecord", "FixtureKnowledgeSource",
+    "PrecedentMatch", "PrecedentQuery", "PrecedentRetrievalResult",
+    "knowledge_record_counts", "load_fixture_knowledge", "retrieve_precedent",
+    "FIXTURE_CONCEPT_QUALITY_SCHEMA", "FixtureConceptQualityEvidence",
+    "FixtureConceptQualityFinding", "FixtureConceptQualityMetric",
+    "FixtureConceptQualityReport", "evaluate_fixture_concept_evidence",
+    "evaluate_fixture_concept_quality", "evidence_from_fixture_build",
+    "rejected_generic_m32_evidence",
+]
 __all__ += ["PROMPT_CONTRACT_VERSION", "PROPOSAL_REQUEST_SCHEMA", "PROPOSAL_SCHEMA",
             "AiFixtureProvider", "AiProposalRequest", "CancellationToken", "EditableParameter",
             "FixtureProposal", "FixtureProposalError", "GuidedValidationIssue", "HttpJsonAiProvider",
