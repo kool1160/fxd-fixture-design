@@ -65,7 +65,9 @@ feature definitions are representations attached to that identity.
 - schema and item identity;
 - human-readable name and category;
 - exactly one authority level;
-- supplier or author, model/internal number, and immutable revision;
+- supplier or author, model/internal number, and a structured immutable
+  revision containing content digest, parent, author, timestamp, concurrency
+  token, publication, deprecation, and rollback provenance;
 - explicit units;
 - source-file identity and SHA-256 where a file exists;
 - source, licensing, and privacy notes;
@@ -78,12 +80,15 @@ feature definitions are representations attached to that identity.
 - contact, movement, open/closed, keep-out, and maintenance states;
 - material and manufacturing intent;
 - BOM, export, and validation participation;
-- variants, replacement classes, revision history, and deprecation;
+- variants, placement-versus-functional replacement classes, and deprecation;
 - missing-link behavior and downstream dependencies.
 
-The schema permits compact research knowledge records while the complete
-synthetic item demonstrates the full contract. A future runtime schema may
-tighten conditional requirements per category only through a new version.
+The schema enforces authority-specific conditionals for all eleven authority
+levels. Compact principles and application patterns are
+`public_engineering_knowledge`: they carry no geometry, BOM, or manufacturing
+authority. The complete parametric example demonstrates the stronger component
+contract. A future runtime may only weaken or change these boundaries through
+a reviewed new schema version.
 
 ### Source record
 
@@ -125,7 +130,10 @@ tie-breaker or engineer decision resolves them.
 
 A private benchmark case is an annotation and disposition record that may link
 to private local assets. It is not itself the asset and never embeds the
-fixture, screenshot, path, dimension set, or proprietary rule.
+fixture, screenshot, path, dimension set, or proprietary rule. Its structured
+rights record identifies the grantor, rights basis, permitted uses, exact
+metadata and asset scope, approval/expiry, revocation, deletion, backup,
+export, retention, access-control, encryption, and audit disposition.
 
 ### Process-context asset
 
@@ -133,6 +141,13 @@ A context asset is loaded only when needed to answer the engineering question.
 It records geometry authority, frames, movement states, keep-out and maintenance
 envelopes, functional interfaces, required validation packs, and limitations.
 Robot assets are optional; they are not the foundation of the architecture.
+Every context asset has an explicit deliverable scope. The default
+`reference_context_only` scope is excluded from the fixture BOM, component and
+assembly STEP, DXF, and fixture release. Separately delivered equipment needs
+exact geometry, license permission, a named engineer decision, separate
+manifest and BOM identity, delivery intent, validation, and reconciliation.
+An exact context also references a separately governed exact library item; its
+geometry authority cannot exceed that source item's authority.
 
 ## Storage architecture
 
@@ -197,6 +212,33 @@ Project references do not silently float to the newest library revision.
 Editing a library definition creates a new revision. The old revision remains
 addressable while any project depends on it. Deprecation changes selection
 guidance, not historical project content.
+
+Each revision contains `revision_id`, canonical content SHA-256, parent
+revision, author, creation timestamp, reason, optional upstream source
+revision, optimistic concurrency token, publication state, deprecation state,
+and optional restored-content identity. The content digest is calculated over
+the canonical record excluding the revision envelope; the concurrency token is
+derived from revision identity, expected parent, and content digest.
+
+### Concurrent publication
+
+Two writers may create draft children of one parent. Publication compares the
+writer's optimistic token with the still-current parent. Once one successor is
+published, the other is a visible branch conflict and cannot silently replace
+it. Conflict disposition is one of: abandon, retain as an explicit branch, or
+create a reconciled child whose reason identifies both inputs. A supplier
+revision update follows the same rule and never mutates the prior imported
+revision.
+
+### Rollback
+
+Rollback creates a new child revision whose
+`restores_content_from_revision_id` names the prior content being restored.
+It never rewrites or deletes history. The new revision receives a new digest
+and concurrency token, invalidates dependent analysis and output evidence, and
+requires explicit engineer acceptance. Restoring a missing private file is a
+relink only when its digest matches the pinned source; otherwise it is a new
+revision and explicit migration.
 
 ### Linked updates
 
@@ -424,7 +466,8 @@ paraphrase only. Private and supplier-controlled assets remain excluded.
    layered hybrid for parametric dependencies and undo?
 3. What stable subshape strategy is acceptable for regenerated fixture-native
    features?
-4. Which exact item fields become required per category in schema v2?
+4. Which future implementation fields, beyond the authority-specific v1
+   requirements, need a governed schema v2?
 5. How are large private libraries indexed without leaking metadata or requiring
    cloud storage?
 6. How are supplier-license policies represented and enforced at export time?
@@ -438,6 +481,9 @@ paraphrase only. Private and supplier-controlled assets remain excluded.
 ## Validation evidence
 
 `scripts/validate_fixture_library_research.py` validates the bounded Draft
-2020-12 vocabulary used by the eight schemas, every reference instance,
-cross-file source identities, minimum corpus counts, privacy invariants, and
-forbidden binary/CAD extensions using only the Python standard library.
+2020-12 vocabulary used by the ten schemas, every reference instance,
+authority/output consistency, immutable revision evidence, coordinate-frame
+semantics, typed interface closure, process-context deliverable separation,
+cross-file identities, ranges, calendar dates, semantic duplication, minimum
+corpus counts, structured rights, private-path/CAD leakage, and forbidden
+binary/CAD assets using only the Python standard library.

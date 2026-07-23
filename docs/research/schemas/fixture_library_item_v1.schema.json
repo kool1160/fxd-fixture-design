@@ -11,13 +11,39 @@
     "record_type",
     "category",
     "authority_level",
+    "supplier_or_author",
+    "model_or_internal_number",
     "revision",
     "units",
-    "privacy_classification",
-    "summary",
+    "source_file",
     "source_ids",
+    "provenance",
+    "privacy_classification",
+    "storage_policy",
+    "edit_authority",
+    "local_coordinate_system",
+    "preview_representation",
+    "feature_definition",
+    "mounting_interfaces",
+    "functional_interfaces",
+    "contact_points",
+    "movement_states",
+    "open_closed_states",
+    "keep_out_envelopes",
+    "maintenance_envelopes",
+    "material_manufacturing_intent",
+    "bom_participation",
+    "export_participation",
+    "validation_participation",
+    "configurable_variants",
+    "replacement_compatibility",
+    "missing_link_behavior",
+    "downstream_dependencies",
+    "summary",
     "applicability",
-    "limitations"
+    "limitations",
+    "engineering_details",
+    "tags"
   ],
   "properties": {
     "schema_version": {
@@ -68,8 +94,7 @@
       ]
     },
     "revision": {
-      "type": "string",
-      "minLength": 1
+      "$ref": "library_revision_v1.schema.json"
     },
     "units": {
       "enum": [
@@ -87,24 +112,28 @@
       "required": [
         "identity",
         "sha256",
-        "licensing_notes"
+        "source_classification",
+        "licensing_usage_evidence"
       ],
       "properties": {
         "identity": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": "string",
+          "minLength": 1
         },
         "sha256": {
-          "type": [
-            "string",
-            "null"
-          ],
+          "type": "string",
           "pattern": "^[a-f0-9]{64}$"
         },
-        "licensing_notes": {
-          "type": "string"
+        "source_classification": {
+          "enum": [
+            "private_owner_authorized",
+            "supplier_authorized_exact",
+            "user_authored_exact"
+          ]
+        },
+        "licensing_usage_evidence": {
+          "type": "string",
+          "minLength": 1
         }
       }
     },
@@ -115,6 +144,29 @@
         "minLength": 1
       },
       "uniqueItems": true
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "record_identity",
+        "author_or_grantor",
+        "usage_note"
+      ],
+      "properties": {
+        "record_identity": {
+          "type": "string",
+          "minLength": 1
+        },
+        "author_or_grantor": {
+          "type": "string",
+          "minLength": 1
+        },
+        "usage_note": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
     },
     "privacy_classification": {
       "enum": [
@@ -142,24 +194,14 @@
       ]
     },
     "local_coordinate_system": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "frame_id",
-        "origin_mm",
-        "axis_convention"
-      ],
-      "properties": {
-        "frame_id": {
-          "type": "string"
+      "oneOf": [
+        {
+          "type": "null"
         },
-        "origin_mm": {
-          "$ref": "#/$defs/vector3"
-        },
-        "axis_convention": {
-          "type": "string"
+        {
+          "$ref": "owned_coordinate_frame_v1.schema.json"
         }
-      }
+      ]
     },
     "preview_representation": {
       "type": "object",
@@ -167,7 +209,8 @@
       "required": [
         "kind",
         "authority",
-        "asset_identity"
+        "asset_identity",
+        "visible_classification"
       ],
       "properties": {
         "kind": {
@@ -176,7 +219,8 @@
             "parametric_preview",
             "exact_tessellation",
             "provisional_envelope",
-            "metadata_card"
+            "metadata_card",
+            "template_diagram"
           ]
         },
         "authority": {
@@ -192,6 +236,18 @@
             "string",
             "null"
           ]
+        },
+        "visible_classification": {
+          "enum": [
+            "exact_private",
+            "exact_supplier_authorized",
+            "exact_parametric",
+            "provisional_not_exact",
+            "metadata_only_not_geometry",
+            "template_not_completed_fixture",
+            "knowledge_not_geometry",
+            "none"
+          ]
         }
       }
     },
@@ -199,7 +255,8 @@
       "type": [
         "object",
         "null"
-      ]
+      ],
+      "minProperties": 1
     },
     "mounting_interfaces": {
       "type": "array",
@@ -216,19 +273,66 @@
     "contact_points": {
       "type": "array",
       "items": {
-        "type": "string"
-      }
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
     },
     "movement_states": {
       "type": "array",
       "items": {
-        "type": "string"
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "state_id",
+          "state_kind",
+          "description"
+        ],
+        "properties": {
+          "state_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "state_kind": {
+            "enum": [
+              "fixed",
+              "open",
+              "closed",
+              "moving",
+              "service"
+            ]
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
       }
     },
     "open_closed_states": {
-      "type": "array",
-      "items": {
-        "type": "string"
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "claimed",
+        "open_state_id",
+        "closed_state_id"
+      ],
+      "properties": {
+        "claimed": {
+          "type": "boolean"
+        },
+        "open_state_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "closed_state_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
       }
     },
     "keep_out_envelopes": {
@@ -247,22 +351,17 @@
       "type": [
         "object",
         "null"
-      ]
+      ],
+      "minProperties": 1
     },
     "bom_participation": {
       "$ref": "#/$defs/participation"
     },
     "export_participation": {
-      "type": "object",
-      "additionalProperties": {
-        "$ref": "#/$defs/participation"
-      }
+      "$ref": "#/$defs/output_participation"
     },
     "validation_participation": {
-      "type": "object",
-      "additionalProperties": {
-        "$ref": "#/$defs/participation"
-      }
+      "$ref": "#/$defs/validation_participation"
     },
     "configurable_variants": {
       "type": "array",
@@ -271,37 +370,39 @@
       }
     },
     "replacement_compatibility": {
-      "type": "object"
-    },
-    "revision_history": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": [
-          "revision",
-          "created",
-          "reason"
-        ],
-        "properties": {
-          "revision": {
-            "type": "string"
-          },
-          "created": {
-            "type": "string"
-          },
-          "reason": {
-            "type": "string"
-          }
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "replacement_class",
+        "placement_compatible",
+        "functionally_equivalent",
+        "requires_interface_match",
+        "requires_revalidation",
+        "stale_evidence_after_replacement"
+      ],
+      "properties": {
+        "replacement_class": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "placement_compatible": {
+          "type": "boolean"
+        },
+        "functionally_equivalent": {
+          "type": "boolean"
+        },
+        "requires_interface_match": {
+          "type": "boolean"
+        },
+        "requires_revalidation": {
+          "type": "boolean"
+        },
+        "stale_evidence_after_replacement": {
+          "type": "boolean"
         }
       }
-    },
-    "deprecation_state": {
-      "enum": [
-        "active",
-        "deprecated",
-        "withdrawn",
-        "superseded"
-      ]
     },
     "missing_link_behavior": {
       "enum": [
@@ -322,20 +423,10 @@
       "minLength": 20
     },
     "applicability": {
-      "type": "array",
-      "items": {
-        "type": "string",
-        "minLength": 1
-      },
-      "minItems": 1
+      "$ref": "#/$defs/string_array"
     },
     "limitations": {
-      "type": "array",
-      "items": {
-        "type": "string",
-        "minLength": 1
-      },
-      "minItems": 1
+      "$ref": "#/$defs/string_array"
     },
     "engineering_details": {
       "type": "object"
@@ -348,6 +439,562 @@
       "uniqueItems": true
     }
   },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "authority_level": {
+            "const": "fxd_parametric_component"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "category": {
+            "const": "fxd_standard_parametric_primitive"
+          },
+          "units": {
+            "enum": [
+              "mm",
+              "inch"
+            ]
+          },
+          "edit_authority": {
+            "enum": [
+              "editable",
+              "editable_new_revision_only"
+            ]
+          },
+          "preview_representation": {
+            "properties": {
+              "kind": {
+                "const": "parametric_preview"
+              },
+              "authority": {
+                "const": "exact"
+              },
+              "visible_classification": {
+                "const": "exact_parametric"
+              }
+            }
+          },
+          "feature_definition": {
+            "type": "object",
+            "minProperties": 1
+          },
+          "local_coordinate_system": {
+            "type": "object"
+          },
+          "material_manufacturing_intent": {
+            "type": "object",
+            "minProperties": 1
+          },
+          "validation_participation": {
+            "properties": {
+              "exact_collision": {
+                "const": "required"
+              },
+              "exact_clearance": {
+                "const": "required"
+              },
+              "deterministic_validation": {
+                "const": "required"
+              },
+              "manufacturing_release": {
+                "const": "human confirmation required"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "authority_level": {
+            "const": "exact_private_imported_cad"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "source_file": {
+            "type": "object",
+            "properties": {
+              "source_classification": {
+                "const": "private_owner_authorized"
+              }
+            }
+          },
+          "privacy_classification": {
+            "enum": [
+              "private_local",
+              "organization_confidential"
+            ]
+          },
+          "storage_policy": {
+            "enum": [
+              "embedded",
+              "linked"
+            ]
+          },
+          "edit_authority": {
+            "const": "read_only"
+          },
+          "units": {
+            "enum": [
+              "mm",
+              "inch"
+            ]
+          },
+          "local_coordinate_system": {
+            "type": "object"
+          },
+          "preview_representation": {
+            "properties": {
+              "kind": {
+                "const": "exact_tessellation"
+              },
+              "authority": {
+                "const": "exact"
+              },
+              "visible_classification": {
+                "const": "exact_private"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "authority_level": {
+            "const": "supplier_authorized_exact_cad"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "supplier_or_author": {
+            "type": "string",
+            "minLength": 1
+          },
+          "model_or_internal_number": {
+            "type": "string",
+            "minLength": 1
+          },
+          "source_file": {
+            "type": "object",
+            "properties": {
+              "source_classification": {
+                "const": "supplier_authorized_exact"
+              }
+            }
+          },
+          "privacy_classification": {
+            "const": "supplier_restricted"
+          },
+          "storage_policy": {
+            "enum": [
+              "embedded",
+              "linked"
+            ]
+          },
+          "edit_authority": {
+            "const": "read_only"
+          },
+          "units": {
+            "enum": [
+              "mm",
+              "inch"
+            ]
+          },
+          "local_coordinate_system": {
+            "type": "object"
+          },
+          "preview_representation": {
+            "properties": {
+              "kind": {
+                "const": "exact_tessellation"
+              },
+              "authority": {
+                "const": "exact"
+              },
+              "visible_classification": {
+                "const": "exact_supplier_authorized"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "authority_level": {
+            "const": "metadata_only_commercial_component"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "category": {
+            "const": "private_purchased_tooling"
+          },
+          "storage_policy": {
+            "const": "metadata_only"
+          },
+          "edit_authority": {
+            "const": "read_only"
+          },
+          "preview_representation": {
+            "properties": {
+              "kind": {
+                "const": "metadata_card"
+              },
+              "authority": {
+                "const": "informational"
+              },
+              "visible_classification": {
+                "const": "metadata_only_not_geometry"
+              }
+            }
+          },
+          "export_participation": {
+            "$ref": "#/$defs/no_manufacturing_output"
+          },
+          "validation_participation": {
+            "properties": {
+              "exact_collision": {
+                "const": "excluded"
+              },
+              "exact_clearance": {
+                "const": "excluded"
+              },
+              "manufacturing_release": {
+                "const": "excluded"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "authority_level": {
+            "const": "provisional_review_envelope"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "preview_representation": {
+            "properties": {
+              "kind": {
+                "const": "provisional_envelope"
+              },
+              "authority": {
+                "const": "provisional"
+              },
+              "visible_classification": {
+                "const": "provisional_not_exact"
+              }
+            }
+          },
+          "export_participation": {
+            "$ref": "#/$defs/no_manufacturing_output"
+          },
+          "validation_participation": {
+            "properties": {
+              "exact_collision": {
+                "const": "excluded"
+              },
+              "exact_clearance": {
+                "const": "excluded"
+              },
+              "manufacturing_release": {
+                "const": "excluded"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "authority_level": {
+            "const": "user_authored_reusable_component"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "category": {
+            "const": "user_created_reusable_component"
+          },
+          "supplier_or_author": {
+            "type": "string",
+            "minLength": 1
+          },
+          "local_coordinate_system": {
+            "type": "object"
+          },
+          "mounting_interfaces": {
+            "minItems": 1
+          },
+          "edit_authority": {
+            "enum": [
+              "editable",
+              "editable_new_revision_only"
+            ]
+          }
+        },
+        "oneOf": [
+          {
+            "properties": {
+              "feature_definition": {
+                "type": "object",
+                "minProperties": 1
+              },
+              "source_file": {
+                "type": "null"
+              }
+            }
+          },
+          {
+            "properties": {
+              "source_file": {
+                "type": "object",
+                "properties": {
+                  "source_classification": {
+                    "const": "user_authored_exact"
+                  }
+                }
+              },
+              "feature_definition": {
+                "type": "null"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "authority_level": {
+            "const": "fixture_family_template"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "category": {
+            "const": "fixture_family_template"
+          },
+          "preview_representation": {
+            "properties": {
+              "kind": {
+                "const": "template_diagram"
+              },
+              "authority": {
+                "const": "informational"
+              },
+              "visible_classification": {
+                "const": "template_not_completed_fixture"
+              }
+            }
+          },
+          "export_participation": {
+            "$ref": "#/$defs/no_manufacturing_output",
+            "properties": {
+              "drawings": {
+                "const": "excluded"
+              }
+            }
+          },
+          "engineering_details": {
+            "required": [
+              "configuration_parameters",
+              "unsupported_conditions",
+              "deterministic_validations_required",
+              "required_human_review_questions"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "authority_level": {
+            "const": "shop_standard"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "category": {
+            "const": "shop_standard_pack"
+          },
+          "preview_representation": {
+            "properties": {
+              "authority": {
+                "const": "informational"
+              }
+            }
+          },
+          "export_participation": {
+            "$ref": "#/$defs/no_manufacturing_output"
+          },
+          "engineering_details": {
+            "required": [
+              "scope",
+              "precedence_level",
+              "conflict_behavior"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "authority_level": {
+            "const": "process_context_asset"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "category": {
+            "const": "process_context_asset"
+          },
+          "bom_participation": {
+            "const": "excluded"
+          },
+          "export_participation": {
+            "$ref": "#/$defs/no_manufacturing_output"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "authority_level": {
+            "const": "private_benchmark_reference"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "category": {
+            "const": "private_benchmark_reference"
+          },
+          "bom_participation": {
+            "const": "excluded"
+          },
+          "preview_representation": {
+            "properties": {
+              "authority": {
+                "const": "informational"
+              }
+            }
+          },
+          "export_participation": {
+            "$ref": "#/$defs/no_manufacturing_output",
+            "properties": {
+              "drawings": {
+                "const": "excluded"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "authority_level": {
+            "const": "public_engineering_knowledge"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "category": {
+            "const": "public_engineering_knowledge"
+          },
+          "units": {
+            "const": "unitless"
+          },
+          "storage_policy": {
+            "const": "not_applicable"
+          },
+          "edit_authority": {
+            "const": "not_applicable"
+          },
+          "local_coordinate_system": {
+            "type": "null"
+          },
+          "preview_representation": {
+            "properties": {
+              "kind": {
+                "const": "none"
+              },
+              "authority": {
+                "const": "none"
+              },
+              "visible_classification": {
+                "const": "knowledge_not_geometry"
+              }
+            }
+          },
+          "feature_definition": {
+            "type": "null"
+          },
+          "mounting_interfaces": {
+            "maxItems": 0
+          },
+          "functional_interfaces": {
+            "maxItems": 0
+          },
+          "bom_participation": {
+            "const": "excluded"
+          },
+          "export_participation": {
+            "$ref": "#/$defs/no_manufacturing_output"
+          },
+          "validation_participation": {
+            "properties": {
+              "broad_phase_collision": {
+                "const": "excluded"
+              },
+              "exact_collision": {
+                "const": "excluded"
+              },
+              "exact_clearance": {
+                "const": "excluded"
+              },
+              "manufacturing_release": {
+                "const": "excluded"
+              },
+              "ai_context": {
+                "enum": [
+                  "permitted",
+                  "human confirmation required"
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
   "$defs": {
     "authority": {
       "enum": [
@@ -374,22 +1021,102 @@
         "human confirmation required"
       ]
     },
-    "vector3": {
+    "string_array": {
       "type": "array",
-      "prefixItems": [
-        {
-          "type": "number"
-        },
-        {
-          "type": "number"
-        },
-        {
-          "type": "number"
-        }
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "minItems": 1
+    },
+    "output_participation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "fixture_component_step",
+        "fixture_assembly_step",
+        "fixture_dxf",
+        "drawings",
+        "review_reports",
+        "manufacturing_release"
       ],
-      "items": false,
-      "minItems": 3,
-      "maxItems": 3
+      "properties": {
+        "fixture_component_step": {
+          "$ref": "#/$defs/participation"
+        },
+        "fixture_assembly_step": {
+          "$ref": "#/$defs/participation"
+        },
+        "fixture_dxf": {
+          "$ref": "#/$defs/participation"
+        },
+        "drawings": {
+          "$ref": "#/$defs/participation"
+        },
+        "review_reports": {
+          "$ref": "#/$defs/participation"
+        },
+        "manufacturing_release": {
+          "$ref": "#/$defs/participation"
+        }
+      }
+    },
+    "no_manufacturing_output": {
+      "type": "object",
+      "properties": {
+        "fixture_component_step": {
+          "const": "excluded"
+        },
+        "fixture_assembly_step": {
+          "const": "excluded"
+        },
+        "fixture_dxf": {
+          "const": "excluded"
+        },
+        "manufacturing_release": {
+          "const": "excluded"
+        }
+      }
+    },
+    "validation_participation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "visual_review",
+        "broad_phase_collision",
+        "exact_collision",
+        "exact_clearance",
+        "access",
+        "ai_context",
+        "deterministic_validation",
+        "manufacturing_release"
+      ],
+      "properties": {
+        "visual_review": {
+          "$ref": "#/$defs/participation"
+        },
+        "broad_phase_collision": {
+          "$ref": "#/$defs/participation"
+        },
+        "exact_collision": {
+          "$ref": "#/$defs/participation"
+        },
+        "exact_clearance": {
+          "$ref": "#/$defs/participation"
+        },
+        "access": {
+          "$ref": "#/$defs/participation"
+        },
+        "ai_context": {
+          "$ref": "#/$defs/participation"
+        },
+        "deterministic_validation": {
+          "$ref": "#/$defs/participation"
+        },
+        "manufacturing_release": {
+          "$ref": "#/$defs/participation"
+        }
+      }
     }
   }
 }

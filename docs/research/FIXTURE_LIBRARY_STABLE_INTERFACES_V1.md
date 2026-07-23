@@ -11,13 +11,22 @@ may realize the interface, but the interface record owns its engineering role.
 
 ## Frame rules
 
-Every interface references a named local frame with:
+Every interface uses or references the reusable
+`owned_coordinate_frame_v1.schema.json` contract with:
 
 - explicit origin;
 - orthonormal X, Y, and Z directions;
 - declared units;
 - stable frame identity; and
+- owner identity;
+- handedness;
+- frame purpose; and
 - relationship to the library item's local coordinate system.
+
+The semantic validator rejects missing or duplicate axes, non-finite values,
+zero vectors, non-normalized vectors, non-orthogonal bases, declared
+left/right-handedness that disagrees with the basis, missing owners, and frame
+units that disagree with the owner.
 
 Project placement composes:
 
@@ -85,7 +94,12 @@ Every mounting interface captures:
 - interface identity and type;
 - frame identity;
 - origin and axes;
-- hole, slot, face, rail, pin, or custom feature identities;
+- tagged `hole`, `slot`, `pin`, `bushing`, `rail`, `planar_face`,
+  `weld_mount`, `table_grid_mount`, or `custom_datum_frame` features;
+- each feature's stable identity, owning-interface reference, local position,
+  normalized axis, applicable dimensions, adjustment range, tolerance or
+  clearance intent, mating role, datum responsibility, and allowed replacement
+  class;
 - fastener intent;
 - mating authority;
 - tolerance or clearance classification and values where known;
@@ -114,7 +128,8 @@ Every functional interface captures:
 - role;
 - frame;
 - direction;
-- point, axis, plane, or region representation;
+- a tagged point, axis, plane, bounded region, contact patch, envelope,
+  tool-center point, or sensor field representation;
 - movement state;
 - permissible-contact status; and
 - dependent validation packs.
@@ -130,7 +145,8 @@ Contact geometry may be:
 - a point;
 - an axis;
 - a plane; or
-- a bounded region.
+- a bounded region; or
+- a contact patch.
 
 The interface records permissible contact as required, permitted, forbidden,
 not applicable, or human confirmation required.
@@ -202,6 +218,9 @@ compatible. Even then:
 - source or revision changes make output evidence stale.
 
 The project creates an explicit replacement event. It never swaps silently.
+Placement compatibility is a separate result from functional equivalence.
+Preserving a transform only means the mounting contract can be aligned; it
+cannot preserve contact, force-reaction, motion, access, or release evidence.
 
 ## Regeneration and stable references
 
@@ -226,6 +245,15 @@ support explanation and relinking but not exact geometry operations.
 
 A provisional replacement interface never inherits exact status from the
 missing source. The UI must show degraded authority and blocked operations.
+
+## Movement-state closure
+
+State identities are unique within the owning item or context asset. Every
+functional interface and envelope state reference resolves to that owner.
+Items that claim open/closed behavior must name both an open and closed state;
+fixed items must not carry hidden open/closed references. Contact references
+resolve to existing functional interfaces. These closure rules are semantic
+validator requirements, not UI conventions.
 
 ## Interface review questions
 

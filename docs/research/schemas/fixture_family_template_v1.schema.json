@@ -50,8 +50,7 @@
       "const": "fixture_family_template"
     },
     "revision": {
-      "type": "string",
-      "minLength": 1
+      "$ref": "library_revision_v1.schema.json"
     },
     "intended_product_family": {
       "$ref": "#/$defs/string_array"
@@ -85,6 +84,27 @@
         "basis": {
           "type": "string",
           "minLength": 1
+        }
+      }
+    },
+    "station_count_range": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "required": [
+        "minimum",
+        "maximum"
+      ],
+      "properties": {
+        "minimum": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "maximum": {
+          "type": "integer",
+          "minimum": 1
         }
       }
     },

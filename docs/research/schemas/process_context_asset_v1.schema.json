@@ -13,7 +13,8 @@
     "revision",
     "units",
     "geometry_authority",
-    "frame_id",
+    "geometry_source_item_id",
+    "frame",
     "movement_states",
     "keep_out_envelopes",
     "maintenance_envelopes",
@@ -21,7 +22,10 @@
     "required_for_validation_packs",
     "validation_limitations",
     "source_ids",
-    "privacy_classification"
+    "privacy_classification",
+    "deliverable_scope",
+    "output_participation",
+    "delivery_authorization"
   ],
   "properties": {
     "schema_version": {
@@ -57,14 +61,12 @@
       "const": "process_context_asset"
     },
     "revision": {
-      "type": "string",
-      "minLength": 1
+      "$ref": "library_revision_v1.schema.json"
     },
     "units": {
       "enum": [
         "mm",
-        "inch",
-        "unitless"
+        "inch"
       ]
     },
     "geometry_authority": {
@@ -72,12 +74,17 @@
         "exact_private_imported_cad",
         "supplier_authorized_exact_cad",
         "provisional_review_envelope",
-        "metadata_only"
+        "metadata_only_commercial_component"
       ]
     },
-    "frame_id": {
-      "type": "string",
-      "minLength": 1
+    "geometry_source_item_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "frame": {
+      "$ref": "owned_coordinate_frame_v1.schema.json"
     },
     "movement_states": {
       "type": "array",
@@ -86,6 +93,7 @@
         "additionalProperties": false,
         "required": [
           "state_id",
+          "state_kind",
           "description",
           "authoritative_for_collision"
         ],
@@ -93,6 +101,15 @@
           "state_id": {
             "type": "string",
             "minLength": 1
+          },
+          "state_kind": {
+            "enum": [
+              "fixed",
+              "open",
+              "closed",
+              "moving",
+              "service"
+            ]
           },
           "description": {
             "type": "string",
@@ -130,7 +147,8 @@
       "items": {
         "type": "string",
         "minLength": 1
-      }
+      },
+      "minItems": 1
     },
     "source_ids": {
       "type": "array",
@@ -147,9 +165,269 @@
         "private_local",
         "supplier_restricted"
       ]
+    },
+    "deliverable_scope": {
+      "enum": [
+        "reference_context_only",
+        "fixture_manufacturing_deliverable",
+        "separate_equipment_deliverable",
+        "excluded_from_deliverables"
+      ]
+    },
+    "output_participation": {
+      "$ref": "#/$defs/output_participation"
+    },
+    "delivery_authorization": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "required": [
+        "licensing_permission",
+        "engineer_decision_id",
+        "decision_timestamp",
+        "output_manifest_scope",
+        "separate_deliverable_identity",
+        "bom_classification",
+        "project_customer_delivery_intent",
+        "validation_evidence_ids",
+        "reconciliation_evidence_id"
+      ],
+      "properties": {
+        "licensing_permission": {
+          "const": true
+        },
+        "engineer_decision_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "decision_timestamp": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+        },
+        "output_manifest_scope": {
+          "const": "separate_equipment_manifest_only"
+        },
+        "separate_deliverable_identity": {
+          "type": "string",
+          "minLength": 1
+        },
+        "bom_classification": {
+          "const": "separate_equipment_bom"
+        },
+        "project_customer_delivery_intent": {
+          "type": "string",
+          "minLength": 1
+        },
+        "validation_evidence_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "reconciliation_evidence_id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
     }
   },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "geometry_authority": {
+            "enum": [
+              "exact_private_imported_cad",
+              "supplier_authorized_exact_cad"
+            ]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "geometry_source_item_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "geometry_authority": {
+            "const": "provisional_review_envelope"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "movement_states": {
+            "items": {
+              "properties": {
+                "authoritative_for_collision": {
+                  "const": false
+                }
+              }
+            }
+          },
+          "deliverable_scope": {
+            "enum": [
+              "reference_context_only",
+              "excluded_from_deliverables"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "deliverable_scope": {
+            "enum": [
+              "reference_context_only",
+              "excluded_from_deliverables"
+            ]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "output_participation": {
+            "$ref": "#/$defs/excluded_fixture_outputs"
+          },
+          "delivery_authorization": {
+            "type": "null"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "deliverable_scope": {
+            "const": "separate_equipment_deliverable"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "geometry_authority": {
+            "enum": [
+              "exact_private_imported_cad",
+              "supplier_authorized_exact_cad"
+            ]
+          },
+          "delivery_authorization": {
+            "type": "object"
+          },
+          "output_participation": {
+            "properties": {
+              "fixture_bom": {
+                "const": "excluded"
+              },
+              "fixture_component_step": {
+                "const": "excluded"
+              },
+              "fixture_assembly_step": {
+                "const": "excluded"
+              },
+              "fixture_dxf": {
+                "const": "excluded"
+              },
+              "fixture_manufacturing_release": {
+                "const": "excluded"
+              },
+              "separate_equipment_manifest": {
+                "const": "human confirmation required"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "deliverable_scope": {
+            "const": "fixture_manufacturing_deliverable"
+          }
+        }
+      },
+      "then": false
+    }
+  ],
   "$defs": {
+    "participation": {
+      "enum": [
+        "required",
+        "permitted",
+        "provisional only",
+        "excluded",
+        "blocks when missing",
+        "human confirmation required"
+      ]
+    },
+    "output_participation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "fixture_bom",
+        "fixture_component_step",
+        "fixture_assembly_step",
+        "fixture_dxf",
+        "fixture_manufacturing_release",
+        "separate_equipment_manifest"
+      ],
+      "properties": {
+        "fixture_bom": {
+          "$ref": "#/$defs/participation"
+        },
+        "fixture_component_step": {
+          "$ref": "#/$defs/participation"
+        },
+        "fixture_assembly_step": {
+          "$ref": "#/$defs/participation"
+        },
+        "fixture_dxf": {
+          "$ref": "#/$defs/participation"
+        },
+        "fixture_manufacturing_release": {
+          "$ref": "#/$defs/participation"
+        },
+        "separate_equipment_manifest": {
+          "$ref": "#/$defs/participation"
+        }
+      }
+    },
+    "excluded_fixture_outputs": {
+      "type": "object",
+      "properties": {
+        "fixture_bom": {
+          "const": "excluded"
+        },
+        "fixture_component_step": {
+          "const": "excluded"
+        },
+        "fixture_assembly_step": {
+          "const": "excluded"
+        },
+        "fixture_dxf": {
+          "const": "excluded"
+        },
+        "fixture_manufacturing_release": {
+          "const": "excluded"
+        },
+        "separate_equipment_manifest": {
+          "const": "excluded"
+        }
+      }
+    },
     "envelope_array": {
       "type": "array",
       "items": {
@@ -157,7 +435,7 @@
         "additionalProperties": false,
         "required": [
           "envelope_id",
-          "representation",
+          "geometry",
           "state_id",
           "provisional"
         ],
@@ -166,9 +444,8 @@
             "type": "string",
             "minLength": 1
           },
-          "representation": {
-            "type": "string",
-            "minLength": 1
+          "geometry": {
+            "$ref": "functional_interface_v1.schema.json#/$defs/functional_geometry"
           },
           "state_id": {
             "type": "string",

@@ -65,7 +65,7 @@ deterministic blocker.
 | `user_authored_reusable_component` | required when placed | permitted after project validation | permitted for supported manufactured profiles | permitted | required | human confirmation required |
 | `fixture_family_template` | excluded | excluded | excluded | excluded | permitted as planning context | excluded |
 | `shop_standard` | permitted as provenance | excluded | excluded | permitted as attributed notes | required when it affects a decision | human confirmation required |
-| `process_context_asset` | permitted when it is part of delivered equipment | permitted only if authority and license allow | excluded | permitted as reference | required when selected | human confirmation required |
+| `process_context_asset` | excluded from fixture BOM; separate equipment BOM requires explicit delivery authorization | excluded from fixture STEP; separate equipment uses its own authorized manifest | excluded from fixture DXF | permitted as visibly labeled reference | required when selected | excluded from fixture release; separate equipment requires human confirmation |
 | `private_benchmark_reference` | excluded | excluded | excluded | excluded | excluded from public reports; permitted in controlled private evaluation | excluded |
 | `public_engineering_knowledge` | excluded | excluded | excluded | permitted as attributed rationale | permitted | excluded |
 
@@ -105,7 +105,7 @@ weaker authority controls.
 | Private purchased tooling | required when selected; unresolved if metadata-only | permitted only for authorized exact geometry | excluded | permitted subject to source terms | required | human confirmation required |
 | User-created reusable components | required when used | permitted after validation | permitted for supported manufactured profiles | permitted | required | human confirmation required |
 | Fixture-family templates | excluded | excluded | excluded | excluded | permitted as planning context | excluded |
-| Process-context assets | permitted when delivered with the project equipment | permitted only when authority and license allow | excluded | permitted as reference | required when selected | human confirmation required |
+| Process-context assets | excluded from fixture BOM; separately authorized equipment has a separate BOM | excluded from fixture STEP; separately authorized equipment has a separate manifest | excluded from fixture DXF | permitted as visibly labeled reference | required when selected | excluded from fixture release |
 | Private benchmark references | excluded | excluded | excluded | excluded | excluded from public reports; permitted in controlled private reports | excluded |
 | Public engineering knowledge | excluded | excluded | excluded | permitted as rationale only | permitted | excluded |
 
@@ -120,6 +120,26 @@ weaker authority controls.
 5. Missing linked exact geometry blocks exact operations and cannot fall back
    silently to a preview.
 6. A changed digest or revision makes prior exact evidence stale.
+
+## Process-context deliverable scope
+
+Every process-context asset declares exactly one scope:
+
+- `reference_context_only` (the default);
+- `separate_equipment_deliverable`;
+- `excluded_from_deliverables`; or
+- `fixture_manufacturing_deliverable`, which schema v1 rejects because context
+  cannot silently become fixture manufacturing content.
+
+Reference-only and excluded context are `excluded` from fixture BOM, fixture
+component STEP, fixture assembly STEP, fixture DXF, fixture manufacturing
+release, and any separate-equipment manifest. A separate-equipment deliverable
+requires exact private or supplier-authorized geometry, licensing permission,
+a named engineer decision and timestamp, a separate output-manifest identity,
+separate BOM classification, project/customer delivery intent, validation
+evidence, and reconciliation evidence. It remains excluded from every fixture
+manufacturing output. Geometry authority still bounds collision and access
+authority.
 
 ## Loading and unloading rules
 

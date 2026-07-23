@@ -7,7 +7,19 @@
       "template_id": "family-001-flat-base-weld-fixture",
       "name": "Flat-base weld fixture",
       "authority_level": "fixture_family_template",
-      "revision": "1",
+      "revision": {
+        "revision_id": "r1",
+        "content_sha256": "a25fcaf8e20fe3fd2c893f4e28e5c2750da556b0ddd910e3bdd3074b6fb0ac67",
+        "parent_revision_id": null,
+        "author_identity": "FXD synthetic research",
+        "created_at": "2026-07-23T00:00:00Z",
+        "change_reason": "Initial non-authorizing research reference revision.",
+        "source_revision": null,
+        "optimistic_concurrency_token": "01373e67035790bf37f056b68617e99a693f6995a458b245432c097bc2990255",
+        "publication_state": "published_research",
+        "deprecation_state": "active",
+        "restores_content_from_revision_id": null
+      },
       "intended_product_family": [
         "fabricated assemblies with a defensible primary support orientation"
       ],
@@ -117,14 +129,27 @@
         "Can every required weld and unload action be completed?",
         "Is the structure practical to build and maintain?"
       ],
-      "template_boundary": "starting_structure_not_completed_fixture"
+      "template_boundary": "starting_structure_not_completed_fixture",
+      "station_count_range": null
     },
     {
       "schema_version": "fxd-fixture-family-template-v1",
       "template_id": "family-002-tack-location-fixture",
       "name": "Tack and location fixture",
       "authority_level": "fixture_family_template",
-      "revision": "1",
+      "revision": {
+        "revision_id": "r1",
+        "content_sha256": "2712707834a62900225231f747a19ea65acec6a6a3f24001142b54dd53abc5cf",
+        "parent_revision_id": null,
+        "author_identity": "FXD synthetic research",
+        "created_at": "2026-07-23T00:00:00Z",
+        "change_reason": "Initial non-authorizing research reference revision.",
+        "source_revision": null,
+        "optimistic_concurrency_token": "76aaee0b4ae5157f6a08ebe21410a696f051211832bbaddca6314d7a9676c5fa",
+        "publication_state": "published_research",
+        "deprecation_state": "active",
+        "restores_content_from_revision_id": null
+      },
       "intended_product_family": [
         "assemblies that transfer to another process after initial location and tack"
       ],
@@ -217,14 +242,27 @@
         "Will the tacked assembly retain required relationship during transfer?",
         "Are tack locations and release sequence practical?"
       ],
-      "template_boundary": "starting_structure_not_completed_fixture"
+      "template_boundary": "starting_structure_not_completed_fixture",
+      "station_count_range": null
     },
     {
       "schema_version": "fxd-fixture-family-template-v1",
       "template_id": "family-003-multi-station-weld-fixture",
       "name": "Multi-station weld fixture",
       "authority_level": "fixture_family_template",
-      "revision": "1",
+      "revision": {
+        "revision_id": "r1",
+        "content_sha256": "e148330b990d575be83e4c87e906ad3815d7623208b0caac7620b408442d667c",
+        "parent_revision_id": null,
+        "author_identity": "FXD synthetic research",
+        "created_at": "2026-07-23T00:00:00Z",
+        "change_reason": "Initial non-authorizing research reference revision.",
+        "source_revision": null,
+        "optimistic_concurrency_token": "4d6f6e32d3f26ea3d33a139d8c207021ba6cf813636ff9a7cf738d54956ba6dd",
+        "publication_state": "published_research",
+        "deprecation_state": "active",
+        "restores_content_from_revision_id": null
+      },
       "intended_product_family": [
         "small repeatable fabricated assemblies suited to repeated product-specific nests"
       ],
@@ -332,14 +370,30 @@
         "Does the connected base remain manufacturable and serviceable?",
         "Are all stations reachable without unsafe or awkward handling?"
       ],
-      "template_boundary": "starting_structure_not_completed_fixture"
+      "template_boundary": "starting_structure_not_completed_fixture",
+      "station_count_range": {
+        "minimum": 2,
+        "maximum": 8
+      }
     },
     {
       "schema_version": "fxd-fixture-family-template-v1",
       "template_id": "family-004-assembly-fixture",
       "name": "Assembly fixture",
       "authority_level": "fixture_family_template",
-      "revision": "1",
+      "revision": {
+        "revision_id": "r1",
+        "content_sha256": "33be12a2a3c428d755434735e92335a965363f2d4a7f0b20583cd98628dce65c",
+        "parent_revision_id": null,
+        "author_identity": "FXD synthetic research",
+        "created_at": "2026-07-23T00:00:00Z",
+        "change_reason": "Initial non-authorizing research reference revision.",
+        "source_revision": null,
+        "optimistic_concurrency_token": "7ec4ffffd3f504bc10afd7803bdec4c16f296ee8e41d6026d6601cb09517d19a",
+        "publication_state": "published_research",
+        "deprecation_state": "active",
+        "restores_content_from_revision_id": null
+      },
       "intended_product_family": [
         "mechanical assemblies requiring controlled relationship during fastening, bonding, or insertion"
       ],
@@ -432,14 +486,27 @@
         "Can each component and tool enter in sequence?",
         "How is complete seating verified?"
       ],
-      "template_boundary": "starting_structure_not_completed_fixture"
+      "template_boundary": "starting_structure_not_completed_fixture",
+      "station_count_range": null
     },
     {
       "schema_version": "fxd-fixture-family-template-v1",
       "template_id": "family-005-inspection-fixture",
       "name": "Inspection fixture",
       "authority_level": "fixture_family_template",
-      "revision": "1",
+      "revision": {
+        "revision_id": "r1",
+        "content_sha256": "e6329fab281d14d00ef58f0bf65c869f3984546ac4e5c0294ed104af41df7442",
+        "parent_revision_id": null,
+        "author_identity": "FXD synthetic research",
+        "created_at": "2026-07-23T00:00:00Z",
+        "change_reason": "Initial non-authorizing research reference revision.",
+        "source_revision": null,
+        "optimistic_concurrency_token": "9daf90047aeb01157e530482e396b76fe5ab156d1a8b19e61a6ffc81c7d3e362",
+        "publication_state": "published_research",
+        "deprecation_state": "active",
+        "restores_content_from_revision_id": null
+      },
       "intended_product_family": [
         "parts and assemblies needing repeatable presentation to measurement equipment"
       ],
@@ -535,14 +602,27 @@
         "Could fixture force bias the measurement?",
         "Are calibration and uncertainty responsibilities explicit?"
       ],
-      "template_boundary": "starting_structure_not_completed_fixture"
+      "template_boundary": "starting_structure_not_completed_fixture",
+      "station_count_range": null
     },
     {
       "schema_version": "fxd-fixture-family-template-v1",
       "template_id": "family-006-profile-check-fixture",
       "name": "Profile-check fixture",
       "authority_level": "fixture_family_template",
-      "revision": "1",
+      "revision": {
+        "revision_id": "r1",
+        "content_sha256": "aefa6a5b5f300bdeec7eae5be1c696cda4de0519702e54d7990c39748e828dc3",
+        "parent_revision_id": null,
+        "author_identity": "FXD synthetic research",
+        "created_at": "2026-07-23T00:00:00Z",
+        "change_reason": "Initial non-authorizing research reference revision.",
+        "source_revision": null,
+        "optimistic_concurrency_token": "a46e224c9c0d198ebe8fd71c9bbba05e6d67bed8e2406a8a649eb84a53e76d26",
+        "publication_state": "published_research",
+        "deprecation_state": "active",
+        "restores_content_from_revision_id": null
+      },
       "intended_product_family": [
         "formed or fabricated products reviewed against bounded profile regions"
       ],
@@ -627,14 +707,27 @@
         "Can the product be evaluated without being forced?",
         "Are the profile reference and wear strategy maintainable?"
       ],
-      "template_boundary": "starting_structure_not_completed_fixture"
+      "template_boundary": "starting_structure_not_completed_fixture",
+      "station_count_range": null
     },
     {
       "schema_version": "fxd-fixture-family-template-v1",
       "template_id": "family-007-go-no-go-gauge",
       "name": "Go/no-go gauge",
       "authority_level": "fixture_family_template",
-      "revision": "1",
+      "revision": {
+        "revision_id": "r1",
+        "content_sha256": "453333dfb815baa303581a04c4d5e0e6ea32c7e2da2309e28f558bfeacf06fc9",
+        "parent_revision_id": null,
+        "author_identity": "FXD synthetic research",
+        "created_at": "2026-07-23T00:00:00Z",
+        "change_reason": "Initial non-authorizing research reference revision.",
+        "source_revision": null,
+        "optimistic_concurrency_token": "ea67a3f6cc3bb9dadd9688b389d60d6fb1364b9954401134afcb93fcaa185581",
+        "publication_state": "published_research",
+        "deprecation_state": "active",
+        "restores_content_from_revision_id": null
+      },
       "intended_product_family": [
         "products with an approved attribute suitable for bounded comparative gauging"
       ],
@@ -718,14 +811,27 @@
         "Who owns gauge design, calibration, and acceptance?",
         "Can misuse or excessive force produce a false result?"
       ],
-      "template_boundary": "starting_structure_not_completed_fixture"
+      "template_boundary": "starting_structure_not_completed_fixture",
+      "station_count_range": null
     },
     {
       "schema_version": "fxd-fixture-family-template-v1",
       "template_id": "family-008-rework-fixture",
       "name": "Rework fixture",
       "authority_level": "fixture_family_template",
-      "revision": "1",
+      "revision": {
+        "revision_id": "r1",
+        "content_sha256": "64ae5ae51f05b8742a71aead0f3ca6d102bf851f8fe24d7860d6cc191e446fd5",
+        "parent_revision_id": null,
+        "author_identity": "FXD synthetic research",
+        "created_at": "2026-07-23T00:00:00Z",
+        "change_reason": "Initial non-authorizing research reference revision.",
+        "source_revision": null,
+        "optimistic_concurrency_token": "59b24c1af7bdbd4ca9a01562a43f5f1e2699f32315b527999684bcfab9f94240",
+        "publication_state": "published_research",
+        "deprecation_state": "active",
+        "restores_content_from_revision_id": null
+      },
       "intended_product_family": [
         "nonconforming or service products requiring controlled access to a defined repair"
       ],
@@ -815,14 +921,27 @@
         "Does the fixture accommodate the actual nonconforming condition?",
         "Can repair proceed without creating additional damage?"
       ],
-      "template_boundary": "starting_structure_not_completed_fixture"
+      "template_boundary": "starting_structure_not_completed_fixture",
+      "station_count_range": null
     },
     {
       "schema_version": "fxd-fixture-family-template-v1",
       "template_id": "family-009-machining-workholding",
       "name": "Machining and workholding setup",
       "authority_level": "fixture_family_template",
-      "revision": "1",
+      "revision": {
+        "revision_id": "r1",
+        "content_sha256": "334773d39d59b09397862968967432d90e66f59dde06b5f3c2b3b0d389253181",
+        "parent_revision_id": null,
+        "author_identity": "FXD synthetic research",
+        "created_at": "2026-07-23T00:00:00Z",
+        "change_reason": "Initial non-authorizing research reference revision.",
+        "source_revision": null,
+        "optimistic_concurrency_token": "a62d70eb4b1b843f1991fcd6e2f9f3658a9cf7382713acc2f863add77c385fe2",
+        "publication_state": "published_research",
+        "deprecation_state": "active",
+        "restores_content_from_revision_id": null
+      },
       "intended_product_family": [
         "parts needing bounded workholding and machine-context fit review"
       ],
@@ -920,14 +1039,27 @@
         "Is the workholding compatible with the actual machine and process?",
         "Are cutting reactions and tool access acceptable?"
       ],
-      "template_boundary": "starting_structure_not_completed_fixture"
+      "template_boundary": "starting_structure_not_completed_fixture",
+      "station_count_range": null
     },
     {
       "schema_version": "fxd-fixture-family-template-v1",
       "template_id": "family-010-nest",
       "name": "Product nest",
       "authority_level": "fixture_family_template",
-      "revision": "1",
+      "revision": {
+        "revision_id": "r1",
+        "content_sha256": "c16ccab803a0113c3b62a0ffa1a51b7d7b0dbf831f8b6a695cdc2e7a2f6fe947",
+        "parent_revision_id": null,
+        "author_identity": "FXD synthetic research",
+        "created_at": "2026-07-23T00:00:00Z",
+        "change_reason": "Initial non-authorizing research reference revision.",
+        "source_revision": null,
+        "optimistic_concurrency_token": "573b4e78f8adc60db05dc9f8932834fca657ab01b95b87aac48b7e3cc4e5b1bd",
+        "publication_state": "published_research",
+        "deprecation_state": "active",
+        "restores_content_from_revision_id": null
+      },
       "intended_product_family": [
         "parts or assemblies needing repeatable support without necessarily full six-DOF restraint"
       ],
@@ -1016,14 +1148,27 @@
         "Does the nest control only the motion needed?",
         "Can the product be handled without damage or trapping?"
       ],
-      "template_boundary": "starting_structure_not_completed_fixture"
+      "template_boundary": "starting_structure_not_completed_fixture",
+      "station_count_range": null
     },
     {
       "schema_version": "fxd-fixture-family-template-v1",
       "template_id": "family-011-combined-build-check",
       "name": "Combined build-and-check tooling",
       "authority_level": "fixture_family_template",
-      "revision": "1",
+      "revision": {
+        "revision_id": "r1",
+        "content_sha256": "2bcf14d8c68e4a3e335a939a92875dc7a07c64fb021d8640259af260ffaaa287",
+        "parent_revision_id": null,
+        "author_identity": "FXD synthetic research",
+        "created_at": "2026-07-23T00:00:00Z",
+        "change_reason": "Initial non-authorizing research reference revision.",
+        "source_revision": null,
+        "optimistic_concurrency_token": "5da3e4d7cd7a3e987881c89d729028505b76b41ebc0b8a4cd6300fc4e9378127",
+        "publication_state": "published_research",
+        "deprecation_state": "active",
+        "restores_content_from_revision_id": null
+      },
       "intended_product_family": [
         "assemblies where selected in-process checks are intentionally integrated with build tooling"
       ],
@@ -1118,7 +1263,8 @@
         "Does clamp or process state bias the result?",
         "How are check features calibrated and maintained?"
       ],
-      "template_boundary": "starting_structure_not_completed_fixture"
+      "template_boundary": "starting_structure_not_completed_fixture",
+      "station_count_range": null
     }
   ]
 }

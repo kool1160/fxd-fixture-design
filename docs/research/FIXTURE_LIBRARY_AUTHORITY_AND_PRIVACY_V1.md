@@ -10,6 +10,14 @@ Every library item has exactly one authority level. Authority is immutable
 within an item revision. Upgrading authority creates a new revision and makes
 dependent evidence stale.
 
+The common schema enforces these distinctions with conditional requirements,
+not prose alone. Exact private and supplier CAD require source identity,
+SHA-256, units, storage, read-only authority, an owned frame, licensing/usage
+evidence, and exact visible classification. Supplier exact CAD additionally
+requires supplier and model identity. Metadata, provisional, template,
+standard, benchmark, context, and knowledge authorities are denied
+manufacturing geometry outputs. A preview can never upgrade authority.
+
 ## Authority levels
 
 ### `fxd_parametric_component`
@@ -91,7 +99,8 @@ A private annotation and disposition record that may link to private local
 assets. It supports evaluation and human-acceptance research.
 
 It cannot be published, used as universal policy, or treated as production
-approval. Public release requires explicit selection and owner approval.
+approval. Public release fails closed unless the structured rights contract
+permits the exact metadata fields and asset identities being released.
 
 ### `public_engineering_knowledge`
 
@@ -179,6 +188,38 @@ proprietary rules unless separately authorized.
 
 Deterministic retrieval over private records should run locally. Retrieval logs
 must not expose private titles, paths, or geometry in public telemetry.
+
+## Rights, consent, revocation, and retention
+
+Every private benchmark records:
+
+- rights holder or grantor and authorship identities;
+- rights basis;
+- permitted use, asset, and metadata-field scope;
+- approval timestamp and optional expiry;
+- revocation state, timestamp, and reason;
+- deletion and backup disposition;
+- export and public-release permission;
+- audit-record identity and retention class;
+- controlled-storage and access-control assumptions; and
+- encryption expectation.
+
+`public_release_permission` defaults conceptually to false: absence, unknown
+rights, pending review, expiry, or revocation cannot be interpreted as consent.
+A selected public release must be a field-by-field and asset-by-asset subset of
+the recorded permission. Revocation blocks further export and release, records
+the audit disposition, and drives deletion/backup handling in the future
+private store. Public history may retain only already-authorized public
+material and non-sensitive audit evidence as applicable law and policy allow.
+
+The public validator recursively rejects likely Windows paths, Unix home or
+private paths, UNC paths, `file://` references, CAD/native-model filenames,
+image filenames, and obvious customer/employer asset-path strings in every
+public research JSON value. Ordinary public HTTP(S) source URLs remain allowed.
+This scanning is defense in depth; a future private implementation still
+requires separately controlled local storage, access control, encryption
+policy, backup boundaries, export controls, and qualified rights review before
+authorization.
 
 ## Authority transitions
 

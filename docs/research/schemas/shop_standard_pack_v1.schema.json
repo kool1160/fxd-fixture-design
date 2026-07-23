@@ -26,8 +26,7 @@
       "minLength": 1
     },
     "revision": {
-      "type": "string",
-      "minLength": 1
+      "$ref": "library_revision_v1.schema.json"
     },
     "authority_level": {
       "const": "shop_standard"
@@ -151,6 +150,104 @@
       "type": "boolean"
     }
   },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "scope": {
+            "const": "fxd_default"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "precedence_level": {
+            "const": 1
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "scope": {
+            "const": "organization"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "precedence_level": {
+            "const": 2
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "scope": {
+            "const": "shop"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "precedence_level": {
+            "const": 3
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "scope": {
+            "const": "machine_process"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "precedence_level": {
+            "const": 4
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "scope": {
+            "const": "project"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "precedence_level": {
+            "const": 5
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "scope": {
+            "const": "engineer_decision"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "precedence_level": {
+            "const": 6
+          }
+        }
+      }
+    }
+  ],
   "$defs": {
     "string_array": {
       "type": "array",

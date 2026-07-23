@@ -43,7 +43,7 @@ The machine-readable source records are in
 
 ### DESTACO
 
-- Title: [Welding applications](https://www.destaco.com/en/applications/welding)
+- Title: [Welding applications](https://www.destaco.com/applications/welding)
 - Category: official product documentation
 - Original FXD paraphrase: commercial clamp use requires explicit motion,
   contact, mounting, and access interfaces; exactness requires authorized CAD.
@@ -155,7 +155,7 @@ The machine-readable source records are in
 - Category: official schema specification
 - Original FXD paraphrase: the dialect provides a versioned vocabulary for
   structural constraints and reusable definitions.
-- Applicability: dialect for the eight research schemas.
+- Applicability: dialect for the ten research schemas.
 - Limitations: schema conformance does not prove engineering validity.
 - Reuse: `specification_metadata_and_schema_uri`.
 - Licensing: public schema URI and metadata only; specification text is not
@@ -221,3 +221,14 @@ The sources support architecture-level distinctions:
 
 They do not supply exact vendor data, universal dimensions, proprietary
 heuristics, certified rules, or production approval.
+
+## Original FXD hypothesis boundary
+
+The tab-and-slot riser pattern and application record are explicitly classified
+as original FXD engineering hypotheses requiring human validation. JSON Schema
+Draft 2020-12 supports only the machine-readable structure; it is not
+engineering provenance for tab engagement, clearance, insertion, fit-up, weld
+access, or fabrication practice. The records therefore carry no engineering
+source identity and assert no universal dimension or rule. Any future
+implementation needs project material/process evidence, shop allowances,
+manufacturing validation, and qualified engineer review.

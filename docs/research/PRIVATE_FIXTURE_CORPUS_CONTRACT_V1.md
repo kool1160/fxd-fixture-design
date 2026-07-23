@@ -87,7 +87,7 @@ Every benchmark case supports:
 - authorship;
 - provenance;
 - privacy;
-- selected public-release permission; and
+- structured rights and release scope; and
 - linked private asset identities.
 
 Annotations describe evidence and judgment. They must distinguish observation,
@@ -177,8 +177,19 @@ Selected release is a protected action. Before release:
    research question;
 7. exact release files and license are approved explicitly.
 
-The boolean in the schema records permission status; it does not grant
-permission by itself.
+The schema does not use a standalone permission boolean. Its structured
+rights-and-release record must identify the grantor, authorship, rights basis,
+permitted use, permitted asset identities, permitted metadata fields, approval
+and expiry, revocation, deletion/backup disposition, export/public permissions,
+audit identity, retention, access control, controlled storage, and encryption
+expectation. Public release fails closed unless every released field and asset
+is an explicit subset of this record.
+
+Revocation immediately blocks new release and export, records timestamp and
+reason, and invokes the recorded deletion and backup disposition. Expiry and
+pending rights review likewise block release. A prior public disclosure cannot
+be assumed retractable; the audit record must distinguish prevention of future
+use from any separately governed removal obligation.
 
 ## Evaluation controls
 
@@ -196,12 +207,27 @@ Benchmark comparisons should report:
 One scalar similarity score is insufficient. A generated fixture may look
 similar while failing access, restraint, manufacture, or release.
 
-## Retention and deletion
+## Retention, deletion, backup, and controlled storage
 
-Retention policy belongs to the private store owner. Removing a private asset
-must leave public history untouched and mark private benchmark links missing.
-The public schema and synthetic examples remain usable without any private
-asset.
+Retention policy belongs to the rights holder and controlled-store owner.
+Removing a private asset marks benchmark links missing and blocks
+geometry-dependent use. Deletion, backup expiry, legal hold, and revocation
+disposition are independently recorded; a backup must not silently restore an
+asset whose permission is revoked.
+
+Before any private implementation can be authorized, FXD needs a separately
+controlled local store with authenticated access, least-privilege indexing,
+encryption policy, audit records, export controls, backup boundaries, deletion
+execution, and link-failure behavior. Public telemetry and indexes must not
+contain private titles, paths, customer/employer identities, geometry-derived
+fingerprints, or proprietary annotations. The public schema and synthetic
+examples remain usable without any private asset.
+
+The public validator scans all research JSON string values and rejects likely
+Windows local paths, Unix home/private paths, UNC/network paths, `file://`
+references, CAD/native-model filenames, image filenames, and obvious
+customer/employer asset paths. This is a public-repository guard, not a claim
+that regular expressions replace rights review or controlled storage.
 
 ## Synthetic examples
 

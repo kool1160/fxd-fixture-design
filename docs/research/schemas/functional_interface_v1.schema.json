@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://fxd.invalid/research/functional_interface_v1.schema.json",
-  "title": "FXD functional interface v1",
+  "title": "FXD typed functional interface v1",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -51,36 +51,7 @@
       "$ref": "#/$defs/vector3"
     },
     "geometry": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "kind",
-        "values",
-        "units"
-      ],
-      "properties": {
-        "kind": {
-          "enum": [
-            "point",
-            "axis",
-            "plane",
-            "region"
-          ]
-        },
-        "values": {
-          "type": "array",
-          "items": {
-            "type": "number"
-          },
-          "minItems": 3
-        },
-        "units": {
-          "enum": [
-            "mm",
-            "unitless"
-          ]
-        }
-      }
+      "$ref": "#/$defs/functional_geometry"
     },
     "movement_state": {
       "type": "string",
@@ -121,6 +92,147 @@
       "items": false,
       "minItems": 3,
       "maxItems": 3
+    },
+    "functional_geometry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "units",
+        "point",
+        "axis",
+        "normal",
+        "bounds_min",
+        "bounds_max",
+        "radius"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "point",
+            "axis",
+            "plane",
+            "bounded_region",
+            "contact_patch",
+            "envelope",
+            "tool_center_point",
+            "sensor_field"
+          ]
+        },
+        "units": {
+          "enum": [
+            "mm",
+            "inch"
+          ]
+        },
+        "point": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "items": false,
+          "minItems": 3,
+          "maxItems": 3
+        },
+        "axis": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "items": false,
+          "minItems": 3,
+          "maxItems": 3
+        },
+        "normal": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "items": false,
+          "minItems": 3,
+          "maxItems": 3
+        },
+        "bounds_min": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "items": false,
+          "minItems": 3,
+          "maxItems": 3
+        },
+        "bounds_max": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "items": false,
+          "minItems": 3,
+          "maxItems": 3
+        },
+        "radius": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        }
+      }
     }
   }
 }
