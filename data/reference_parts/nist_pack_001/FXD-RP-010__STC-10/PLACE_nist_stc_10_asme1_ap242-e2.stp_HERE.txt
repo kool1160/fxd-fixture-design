@@ -1,0 +1,5 @@
+Upload this exact NIST STEP file into this directory:
+
+nist_stc_10_asme1_ap242-e2.stp
+
+Keep the original filename unchanged.
