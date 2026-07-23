@@ -1,4 +1,0 @@
-Place this exact STEP file in this folder:
-nist_ctc_01_asme1_ap242-e1.stp
-
-Keep the original filename unchanged. Delete this placeholder after upload.
