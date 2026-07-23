@@ -133,6 +133,32 @@ EVIDENCE_REAL = "REAL OCP source geometry"
 EVIDENCE_PROVISIONAL = "Provisional - real-kernel evidence unavailable"
 
 
+def _m32_visual_review_station_count(plan: object) -> int:
+    """Fail closed unless the bundle contains the current governed M32 concept."""
+    layout = getattr(plan, "multi_station_layout", None)
+    if layout is None:
+        raise RuntimeError("M32 visual-review project lacks a multi-station layout")
+    requirements = layout.requirements
+    station_count = len(layout.stations)
+    requested_intent = (
+        requirements.requested_intent_station_count
+        or requirements.requested_station_count
+    )
+    if (station_count != 5
+            or requirements.requested_station_count != station_count
+            or requested_intent != 5
+            or abs(requirements.maximum_fixture_length_mm - 1219.2) > 1e-6
+            or layout.proposed_smaller_station_count is not None
+            or not getattr(plan, "precedent_record_identities", ())
+            or not getattr(plan, "precedent_library_evidence_digest", None)
+            or not getattr(plan, "concept_quality_evidence_digest", None)):
+        raise RuntimeError(
+            "M32 visual-review project does not contain the governed compact "
+            "precedent-informed five-station concept"
+        )
+    return station_count
+
+
 @dataclass(frozen=True)
 class _ValidationRecord:
     """UI-only normalized finding. It never changes engineering decisions."""
@@ -4941,10 +4967,8 @@ class FxdWorkbenchWindow(QMainWindow):
             raise RuntimeError("M32 visual-review project is incomplete")
         plan = self.project.fixture_build
         layout = plan.multi_station_layout
-        if (layout is None or len(layout.stations) != 4
-                or layout.requirements.requested_intent_station_count != 5
-                or abs(layout.requirements.maximum_fixture_length_mm - 1219.2) > 1e-6):
-            raise RuntimeError("M32 visual-review project does not contain the governed 5-to-4 scenario")
+        station_count = _m32_visual_review_station_count(plan)
+        assert layout is not None
         if self.workflow is None or not self.workflow.has_accepted_manufacturing_orientation():
             raise RuntimeError("M32 visual-review project lacks accepted manufacturing orientation")
         authored = author_fixture_build(plan, self.project.product, self.kernel)
@@ -4961,9 +4985,12 @@ class FxdWorkbenchWindow(QMainWindow):
         open_clamps = [item for item in items if item.get("kind") == "clamp_open_envelope"]
         load_arrows = [item for item in items if item.get("semantic") == "load_direction"]
         unload_arrows = [item for item in items if item.get("semantic") == "unload_direction"]
-        if (len(authored_items) != len(authored.components) or len(product_items) != 4
-                or len(closed_clamps) != 4 or len(open_clamps) != 4
-                or len(load_arrows) != 4 or len(unload_arrows) != 4
+        if (len(authored_items) != len(authored.components)
+                or len(product_items) != station_count
+                or len(closed_clamps) != station_count
+                or len(open_clamps) != station_count
+                or len(load_arrows) != station_count
+                or len(unload_arrows) != station_count
                 or any(not item.get("triangles") for item in authored_items)
                 or len({tuple(item["color"]) for item in authored_items}) < 4
                 or any(item.get("kind") == "authored_manufacturing_debug_bounds" for item in items)):
@@ -4982,7 +5009,8 @@ class FxdWorkbenchWindow(QMainWindow):
             "FXD M32 VISUAL REVIEW - PROVISIONAL / NOT APPROVED / INVALID BUILD PLAN"
         )
         self.statusBar().showMessage(
-            "M32 synthetic 5-to-4 review loaded with real OCP solids; qualified engineering review remains required."
+            "M32 compact precedent-informed five-station review loaded with real OCP "
+            "solids; qualified engineering review remains required."
         )
         QApplication.processEvents()
         screenshot_path.parent.mkdir(parents=True, exist_ok=True)

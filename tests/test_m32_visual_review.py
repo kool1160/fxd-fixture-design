@@ -4,9 +4,11 @@ from __future__ import annotations
 import json
 import tempfile
 import unittest
+from dataclasses import replace
 from hashlib import sha256
 from pathlib import Path
 
+from fxd_qt_app import _m32_visual_review_station_count
 from fxd_geometry.project import FxdProject
 from scripts.m32_self_check import VISUAL_REVIEW_SCHEMA
 from scripts.m32_visual_review import (
@@ -52,6 +54,30 @@ class M32VisualReviewBundleTests(unittest.TestCase):
             for name in (REPORT_NAME, CHECKLIST_NAME, SOFTWARE_SCREENSHOT_NAME):
                 self.assertTrue((bundle / name).is_file())
             self.assertFalse((bundle / APPLICATION_SCREENSHOT_NAME).exists())
+
+    def test_strict_application_uses_compact_five_station_visual_review_contract(self):
+        with tempfile.TemporaryDirectory() as parent:
+            bundle = Path(parent) / "strict-application-review"
+            report = create_visual_review_bundle(bundle)
+            restored = FxdProject.load(
+                bundle / report["visual_review_bundle"]["reloadable_project"]
+            )
+            plan = restored.fixture_build
+            assert plan is not None and plan.multi_station_layout is not None
+
+            self.assertEqual(_m32_visual_review_station_count(plan), 5)
+
+            layout = plan.multi_station_layout
+            old_reduced_layout = replace(
+                layout,
+                requirements=replace(layout.requirements, requested_station_count=4),
+                stations=layout.stations[:4],
+                proposed_smaller_station_count=4,
+            )
+            with self.assertRaisesRegex(RuntimeError, "compact precedent-informed"):
+                _m32_visual_review_station_count(
+                    replace(plan, multi_station_layout=old_reduced_layout)
+                )
 
     def test_persisted_reports_are_redacted_and_contain_no_private_absolute_path(self):
         with tempfile.TemporaryDirectory() as parent:
