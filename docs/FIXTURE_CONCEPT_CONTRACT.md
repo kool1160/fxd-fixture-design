@@ -19,6 +19,16 @@ the imported `ProductModel` or its source bytes. AI may eventually suggest
 these corrections through a restricted command contract, but this milestone
 contains no AI execution path.
 
+Milestone 32 adds `fxd-fixture-concept-quality-v1` for the supported
+`linear_multi_station_weld_fixture` build plan. The report measures
+product-specific contacts, datum and degree-of-freedom evidence, clamp/support
+reaction pairs, connected base structure, mounting points, excess empty span,
+handling sequence, weld-review intent, and manufacturable component forms. It
+records public precedent identities and abstract human-rejection rules. Its
+score is only a ranking aid: any quality blocker makes the concept fail
+regardless of score. Existing access, collision, manufacturing, approval, and
+export gates remain independently authoritative.
+
 Milestone 12 adds an optional explicit `LocatingStrategy` to concept
 generation. Its contacts carry stable product references, millimetre points,
 normals, roles, and tolerance/repeatability/datum assumptions. The deterministic

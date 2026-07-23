@@ -30,6 +30,12 @@ from .manufacturing_orientation import ManufacturingOrientationError
 from .placement import PlacementRole
 from .project import FxdProject, ProjectFormatError
 from .workbench import WorkbenchDocument
+from .fixture_knowledge import (
+    PrecedentQuery,
+    PrecedentRetrievalResult,
+    load_fixture_knowledge,
+    retrieve_precedent,
+)
 
 
 PROPOSAL_SCHEMA = "fxd-fixture-proposal-v1"
@@ -1027,7 +1033,59 @@ def _known_identities(project: FxdProject) -> frozenset[str]:
     orientation = project.workflow.setup.manufacturing_orientation if project.workflow else None
     if orientation:
         values.add(orientation.identity)
+    precedent = _fixture_precedent(project)
+    values.update(precedent.selected_record_identities)
+    values.update(item.record_identity for item in precedent.rejected_constraints)
     return frozenset(values)
+
+
+def _fixture_precedent(project: FxdProject) -> PrecedentRetrievalResult:
+    workflow = project.workflow
+    if workflow is None:
+        raise FixtureProposalError("fixture precedent requires manufacturing intent")
+    setup = workflow.setup
+    datum_roles = tuple(sorted(
+        item.role.value for item in workflow.geometry_annotations
+        if item.role in {
+            AnnotationRole.PRIMARY_DATUM,
+            AnnotationRole.SECONDARY_DATUM,
+            AnnotationRole.TERTIARY_DATUM,
+        }
+    ))
+    quantity = setup.production_quantity or 1
+    return retrieve_precedent(
+        load_fixture_knowledge(),
+        PrecedentQuery(
+            setup.fixture_family or "unsupported",
+            "sheet-metal and fabricated weldments",
+            setup.material_assumptions or "plate",
+            setup.manufacturing_process or "unresolved",
+            setup.volume_category or ("repeat production" if quantity > 20 else "low volume"),
+            setup.operation_mode or "unresolved",
+            "accepted manufacturing orientation",
+            setup.construction_method or "laser_cut_fabricated",
+            setup.requested_station_count,
+            datum_opportunities=datum_roles,
+            support_opportunities=tuple(
+                item.reference.face_identity or "" for item in workflow.geometry_annotations
+                if item.role == AnnotationRole.PRIMARY_DATUM
+            ),
+            locator_opportunities=tuple(
+                item.reference.face_identity or "" for item in workflow.geometry_annotations
+                if item.role in {AnnotationRole.SECONDARY_DATUM, AnnotationRole.TERTIARY_DATUM}
+            ),
+            clamp_direction=setup.clamp_operating_side or "",
+            load_unload_intent=tuple(
+                value for value in (
+                    str(setup.manufacturing_loading_direction or ""),
+                    str(setup.manufacturing_unloading_direction or ""),
+                ) if value
+            ),
+            weld_access=("qualified weld-access review required",),
+            changeover_needs=(setup.fixture_lifecycle or "unresolved",),
+        ),
+        limit=10,
+    )
 
 
 def build_ai_request(project: FxdProject) -> AiProposalRequest:
@@ -1036,6 +1094,7 @@ def build_ai_request(project: FxdProject) -> AiProposalRequest:
         raise FixtureProposalError("AI proposal requires an accepted current manufacturing orientation")
     orientation = workflow.setup.manufacturing_orientation
     assert orientation is not None
+    precedent = _fixture_precedent(project)
     context = {
         "source": {"name": project.product.source_name,
                    "sha256": project.product.source_sha256, "units": project.product.units},
@@ -1086,6 +1145,7 @@ def build_ai_request(project: FxdProject) -> AiProposalRequest:
         "alternatives": [{"identity": item.identity, "objective": item.objective,
                           "validation": project.validation_for(item).status}
                          for item in project.concepts],
+        "fixture_precedent": precedent.compact_context(),
     }
     encoded = json.dumps(context, sort_keys=True)
     if "source_step_base64" in encoded or "source_bytes" in encoded:
@@ -1213,6 +1273,45 @@ def deterministic_baseline_proposal(
             feature=feature.identity, assumptions=feature.assumptions,
             parameters=tuple(EditableParameter(str(key), value, "mm" if isinstance(value, (int, float)) else None)
                              for key, value in sorted(feature.parameters.items())),
+        ))
+    precedent = _fixture_precedent(project)
+    knowledge_by_identity = {
+        item.identity: item for item in load_fixture_knowledge().records
+    }
+    for match in precedent.selected:
+        if match.record_type not in {"fixture_pattern", "human_acceptance"}:
+            continue
+        record = knowledge_by_identity[match.record_identity]
+        recommendations.append(_recommendation(
+            "precedent-" + match.record_identity,
+            RecommendationType.BASE_STRUCTURE
+            if match.record_identity == "pattern-001-compact-continuous-base"
+            else RecommendationType.ALTERNATIVE,
+            record.title,
+            record.summary,
+            record.identity,
+            "fixture_knowledge_record",
+            "Matched fields: " + ", ".join(match.matching_fields),
+            assumptions=match.assumptions,
+            risks=match.failure_modes,
+            parameters=(
+                EditableParameter("precedent_record_identity", record.identity),
+                EditableParameter("precedent_score", match.score),
+            ),
+            confidence=0.85,
+        ))
+    for match in precedent.rejected_constraints:
+        record = knowledge_by_identity[match.record_identity]
+        recommendations.append(_recommendation(
+            "avoid-" + match.record_identity,
+            RecommendationType.UNRESOLVED_QUESTION,
+            "Avoid the rejected generic M32 arrangement",
+            record.summary,
+            record.identity,
+            "human_rejection_constraint",
+            "Abstract qualified-human rejection; no image or private geometry retained",
+            risks=match.failure_modes,
+            confidence=1.0,
         ))
     recommendations.extend((
         _recommendation(

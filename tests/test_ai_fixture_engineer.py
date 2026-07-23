@@ -19,6 +19,7 @@ from fxd_geometry import (
     PROPOSAL_CONTRACT_REJECTION_CATEGORIES, RecommendationType, RecommendationValidation,
     StaticAiProvider, Vec3, ai_response_from_proposal,
     analyze_engineering_workflow, apply_recommended_intent, build_ai_request,
+    deterministic_baseline_proposal,
     generate_fixture_proposal,
     generate_fixture_build_plan, load_step_for_workbench, minimal_intent_questions,
     orientation_from_faces, proposal_engineering_context_identity,
@@ -133,6 +134,45 @@ class AiFixtureEngineerTests(unittest.TestCase):
         } <= request.known_identities)
         self.assertNotIn(self.original[:24].decode("ascii", errors="ignore"), encoded)
         self.assertEqual(request.source_sha256, sha256(self.original).hexdigest())
+
+    def test_m32_proposal_context_and_offline_baseline_use_same_public_precedent(self):
+        workflow = self.fallback.project.workflow
+        setup = replace(
+            workflow.setup,
+            fixture_family="linear_multi_station_weld_fixture",
+            requested_station_count=5,
+            maximum_fixture_length_mm=1219.2,
+            construction_method="laser_cut_fabricated",
+            material_assumptions="synthetic low-carbon steel plate",
+            operator_loading_side="Operator front (+Y)",
+            clamp_operating_side="Operator front (+Y)",
+            table_mounting_preference="Table mounting holes",
+        )
+        project = self.fallback.project.with_workflow(replace(workflow, setup=setup))
+        request = build_ai_request(project)
+        precedent = request.context["fixture_precedent"]
+        selected_ids = {
+            item["record_identity"] for item in precedent["selected"]
+        }
+        rejected_ids = {
+            item["record_identity"]
+            for item in precedent["human_rejection_constraints"]
+        }
+        self.assertIn("pattern-001-compact-continuous-base", selected_ids)
+        self.assertIn("pattern-002-discrete-product-nest", selected_ids)
+        self.assertIn("human-rejected-001-generic-m32", rejected_ids)
+        encoded = json.dumps(request.to_dict(), sort_keys=True)
+        self.assertNotIn("carrlane.com", encoded)
+        self.assertNotIn("stronghandtools.com", encoded)
+        self.assertNotIn("source_step_base64", encoded)
+        proposal = deterministic_baseline_proposal(project)
+        evidence_ids = {
+            evidence.identity
+            for recommendation in proposal.recommendations
+            for evidence in recommendation.source_evidence
+        }
+        self.assertTrue(selected_ids & evidence_ids)
+        self.assertIn("human-rejected-001-generic-m32", evidence_ids)
 
     def test_valid_mock_ai_response_is_versioned_and_provider_neutral(self):
         response = ai_response_from_proposal(self.fallback.proposal)

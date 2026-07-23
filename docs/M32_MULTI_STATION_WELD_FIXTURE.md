@@ -94,8 +94,8 @@ powershell.exe -ExecutionPolicy Bypass -File ".\scripts\run_m32_visual_review.ps
 ```
 
 The command creates a persistent, redacted bundle outside the repository and
-opens the actual FXD Qt/VTK application on the governed synthetic five-requested
-to four-feasible project. The application stays open until the reviewer closes
+opens the actual FXD Qt/VTK application on the governed synthetic compact
+five-station project. The application stays open until the reviewer closes
 it. The bundle retains its synthetic STEP, reloadable FXD project, reports,
 initial screenshots, and qualified-engineering checklist after closure. Provider
 configuration is removed only from child processes; no network provider request
@@ -116,7 +116,9 @@ The runner requires a clean worktree and the repository `.venv`. It creates a
 legally shareable synthetic STEP assembly only in a temporary directory, then
 automates STEP import, exact planar bottom/front orientation acceptance,
 deterministic analysis, concept generation, the explicit 5-to-4 station-fit
-acceptance at a 1219.2 mm maximum length, build validation, real OCP authoring,
+probe at a tighter 900 mm limit, a five-station 960 mm precedent-informed
+concept within the 1219.2 mm project limit, frozen rejection benchmarking,
+concept-quality evaluation, build validation, real OCP authoring,
 provisional labels, and approval/export release gates. It also runs focused M32
 and Qt controller coverage, PowerShell runner regression coverage,
 `compileall`, the full Python suite, and the governed offline/real-kernel CI

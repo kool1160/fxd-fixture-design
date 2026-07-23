@@ -1018,6 +1018,9 @@ class FixtureBuildPlan:
     authoring_state: str = "not_authored"
     fixture_proposal_identity: str | None = None
     fixture_proposal_evidence_digest: str | None = None
+    precedent_record_identities: tuple[str, ...] = ()
+    precedent_library_evidence_digest: str | None = None
+    concept_quality_evidence_digest: str | None = None
 
     def __post_init__(self) -> None:
         if not self.identity.strip() or not self.concept_identity.strip():
@@ -1039,6 +1042,15 @@ class FixtureBuildPlan:
         if (self.fixture_proposal_evidence_digest is not None
                 and not re.fullmatch(r"[0-9a-f]{64}", self.fixture_proposal_evidence_digest)):
             raise FixtureBuildError("fixture proposal evidence digest is malformed")
+        if (self.concept_quality_evidence_digest is not None
+                and not re.fullmatch(r"[0-9a-f]{64}", self.concept_quality_evidence_digest)):
+            raise FixtureBuildError("fixture concept-quality evidence digest is malformed")
+        if (self.precedent_library_evidence_digest is not None
+                and not re.fullmatch(r"[0-9a-f]{64}", self.precedent_library_evidence_digest)):
+            raise FixtureBuildError("fixture precedent-library evidence digest is malformed")
+        if (len(set(self.precedent_record_identities)) != len(self.precedent_record_identities)
+                or tuple(sorted(self.precedent_record_identities)) != self.precedent_record_identities):
+            raise FixtureBuildError("fixture precedent identities must be unique and stably ordered")
 
     @property
     def evidence_digest(self) -> str:
@@ -1061,6 +1073,9 @@ class FixtureBuildPlan:
             "authoring_state": self.authoring_state,
             "fixture_proposal_identity": self.fixture_proposal_identity,
             "fixture_proposal_evidence_digest": self.fixture_proposal_evidence_digest,
+            "precedent_record_identities": list(self.precedent_record_identities),
+            "precedent_library_evidence_digest": self.precedent_library_evidence_digest,
+            "concept_quality_evidence_digest": self.concept_quality_evidence_digest,
         }
 
     @classmethod
@@ -1083,6 +1098,9 @@ class FixtureBuildPlan:
             str(data.get("authoring_state", "not_authored")),
             data.get("fixture_proposal_identity"),
             data.get("fixture_proposal_evidence_digest"),
+            tuple(data.get("precedent_record_identities", ())),
+            data.get("precedent_library_evidence_digest"),
+            data.get("concept_quality_evidence_digest"),
         )
 
 
@@ -1244,6 +1262,32 @@ def _component_reference(product: ProductModel) -> GeometryReference:
             return GeometryReference(component.identity, component.bodies[0].identity)
         return GeometryReference(component.identity)
     raise FixtureBuildError("product has no component available for source traceability")
+
+
+def _product_feature_references(
+    product: ProductModel,
+) -> tuple[GeometryReference, GeometryReference, GeometryReference]:
+    """Return three stable, distinct source faces for primary/secondary/tertiary evidence."""
+    references = tuple(sorted(
+        (
+            GeometryReference(
+                component.identity, body.identity, face.identity,
+            )
+            for component in product.components
+            for body in component.bodies
+            for face in body.faces
+        ),
+        key=lambda item: (
+            item.component_identity,
+            item.body_identity or "",
+            item.face_identity or "",
+        ),
+    ))
+    if len(references) < 3:
+        raise FixtureBuildError(
+            "multi-station product-specific nests require three distinct immutable source faces"
+        )
+    return references[0], references[1], references[2]
 
 
 def _product_bounds(product: ProductModel) -> Aabb:
@@ -1834,7 +1878,7 @@ class MultiStationFitProposal:
             f"requested_required_length_mm={self.requested_required_length_mm:.3f}",
             f"feasible_required_length_mm={self.feasible_required_length_mm:.3f}",
             f"maximum_fixture_length_mm={self.maximum_fixture_length_mm:.3f}",
-            "limiting_margin=product envelope + clamp sweep + hand clearance + weld clearance + adjustment allowance + end margins",
+            "limiting_margin=product envelope + maximum concurrent clamp/hand/weld/adjustment service envelope + compact end margins",
         )
 
 
@@ -1845,10 +1889,19 @@ def _multi_station_fit(product: ProductModel,
     station_span = _axis_span(bounds, axis)
     secondary = _axis_span(bounds, "y" if axis == "x" else "x")
     clamp_sweep = requirements.clamp_sweep_mm or max(30.0, secondary * 0.60)
-    pitch = max(requirements.preferred_station_pitch_mm or 0.0,
-                station_span + clamp_sweep + requirements.hand_clearance_mm
-                + requirements.weld_clearance_mm + requirements.adjustment_allowance_mm)
-    end_allowance = max(45.0, requirements.hand_clearance_mm * 0.5)
+    # Clamp sweep, hand clearance, and weld clearance occupy the same
+    # inter-station service region.  Adding all three creates unsupported
+    # empty rail, so include the explicit prove-out allowance in the largest
+    # concurrent envelope.
+    service_envelope = max(
+        clamp_sweep, requirements.hand_clearance_mm,
+        requirements.weld_clearance_mm, requirements.adjustment_allowance_mm,
+    )
+    pitch = max(
+        requirements.preferred_station_pitch_mm or 0.0,
+        station_span + service_envelope,
+    )
+    end_allowance = max(30.0, requirements.hand_clearance_mm * 0.4)
     usable = requirements.maximum_fixture_length_mm - (2.0 * end_allowance) - station_span
     feasible = max(0, min(8, int(math.floor(usable / pitch)) + 1))
     requested_intent = requirements.requested_intent_station_count or requirements.requested_station_count
@@ -1915,7 +1968,7 @@ def generate_multi_station_layout(product: ProductModel,
         proposed if proposed < (requirements.requested_intent_station_count or requirements.requested_station_count) else None, tuple(stations),
         (
             f"primary_axis={axis} derived from the largest product horizontal envelope span.",
-            f"pitch={pitch:.3f} mm combines product envelope, clamp sweep, hand clearance, weld clearance, and adjustment allowance.",
+            f"pitch={pitch:.3f} mm combines product envelope with the largest concurrent clamp/hand/weld/adjustment service envelope.",
             *fit.explanation,
             "Product stations apply the accepted full source-to-manufacturing transform plus manufacturing-frame pitch while referencing immutable source identities.",
         ),
@@ -1962,6 +2015,34 @@ def generate_multi_station_fixture_build_plan(
                     f"confirmed weld {label} source and manufacturing vectors do not match the accepted orientation"
                 )
     layout = generate_multi_station_layout(product, multi_station)
+    from .fixture_knowledge import (
+        PrecedentQuery,
+        load_fixture_knowledge,
+        retrieve_precedent,
+    )
+    precedent = retrieve_precedent(
+        load_fixture_knowledge(),
+        PrecedentQuery(
+            multi_station.fixture_family.value,
+            "sheet-metal and fabricated weldments",
+            "plate",
+            requirements.weld_process or "welding",
+            "repeat production" if multi_station.expected_production_quantity > 20 else "low volume",
+            multi_station.operation_mode,
+            "accepted manufacturing orientation",
+            requirements.construction_method.value,
+            multi_station.requested_station_count,
+            datum_opportunities=("accepted immutable source face",),
+            support_opportunities=("lower product surface",),
+            locator_opportunities=("end face", "side face"),
+            clamp_direction=multi_station.clamp_operating_side,
+            load_unload_intent=(multi_station.operator_loading_side, multi_station.unloading_direction),
+            weld_access=("confirmed weld corridor" if requirements.confirmed_weld_intent
+                         else "qualified review required",),
+            changeover_needs=("replaceable wear contacts",),
+        ),
+        limit=10,
+    )
     manufacturing_bounds = _manufacturing_product_bounds(product, multi_station)
     primary = layout.primary_axis
     product_height = _axis_span(manufacturing_bounds, "z")
@@ -1974,7 +2055,27 @@ def generate_multi_station_fixture_build_plan(
     base = _oriented_bounds(primary, 0.0, base_length, 0.0, 24.0, -plate, 0.0)
     rail = _oriented_bounds(primary, 0.0, base_length, 12.0, 24.0, 0.0,
                             min(24.0, product_height * 0.45 + 6.0))
+    station_secondary_max = max(
+        (station.product_bounds.maximum.y if primary == "x"
+         else station.product_bounds.maximum.x)
+        for station in layout.stations
+    )
+    front_rail_start = station_secondary_max + 28.0
+    front_base_rail = _oriented_bounds(
+        primary, 0.0, base_length, front_rail_start, front_rail_start + 24.0,
+        -plate, 0.0,
+    )
+    base_crossmembers = (
+        _oriented_bounds(primary, 0.0, 24.0, 24.0, front_rail_start, -plate, 0.0),
+        _oriented_bounds(
+            primary, base_length - 24.0, base_length, 24.0,
+            front_rail_start, -plate, 0.0,
+        ),
+    )
     reference = _component_reference(product)
+    primary_reference, secondary_reference, tertiary_reference = (
+        _product_feature_references(product)
+    )
     mount_holes = tuple(
         HoleProcessSpec(
             f"m32-table-mount-{index}", _oriented_point(primary, along, across, base.minimum.z), 12.0,
@@ -1982,6 +2083,20 @@ def generate_multi_station_fixture_build_plan(
         )
         for index, (along, across) in enumerate(((18.0, 6.0), (base_length - 18.0, 6.0),
                                                   (18.0, 18.0), (base_length - 18.0, 18.0)), 1)
+    )
+    front_mount_holes = tuple(
+        HoleProcessSpec(
+            f"m32-front-table-mount-{index}",
+            _oriented_point(primary, along, across, front_base_rail.minimum.z),
+            12.0, HoleProcess.LASER_CLEARANCE,
+            evidence=("Operator-side table-mount review hole; fastener and table standard require engineer confirmation.",),
+        )
+        for index, (along, across) in enumerate((
+            (18.0, front_rail_start + 6.0),
+            (base_length - 18.0, front_rail_start + 6.0),
+            (18.0, front_rail_start + 18.0),
+            (base_length - 18.0, front_rail_start + 18.0),
+        ), 1)
     )
     rail_slots = tuple(
         SlotProcessSpec(
@@ -2004,7 +2119,35 @@ def generate_multi_station_fixture_build_plan(
                    thickness=12.0, rule_ids=("FXD-MFG-001", "FXD-TAB-001", "FXD-M32-CON"),
                    evidence=(f"Low common rail is selected because {len(layout.stations)} repeated local plate(s) need one table-mounted load path.",
                              "Rail height is limited by product height and operator/weld access; no structural capacity is claimed.")),
+        _component(
+            "m32-operator-base-rail", "FXD-M32-005",
+            "low operator-side base rail with table mounting holes",
+            BuildComponentRole.BASEPLATE, front_base_rail, reference,
+            parent="m32-base-crossmember-1",
+            process="laser cut low base rail and drill as required",
+            thickness=plate,
+            rule_ids=("FXD-MFG-001", "FXD-M32-STA", "FXD-M32-CON", "FXD-EXP-001"),
+            holes=front_mount_holes,
+            evidence=(
+                "precedent=pattern-001-compact-continuous-base",
+                "The paired low base rails connect every product-bounded station plate without blocking the product-height loading corridor.",
+                "Table mounting remains explicit review geometry; no universal table standard or certified capacity is claimed.",
+            ),
+        ),
     ]
+    for index, crossmember in enumerate(base_crossmembers, 1):
+        components.append(_component(
+            f"m32-base-crossmember-{index}", f"FXD-M32-00{index + 5}",
+            f"low base end crossmember {index}",
+            BuildComponentRole.GUSSET, crossmember, reference,
+            parent="m32-backbone", process="laser cut and weld",
+            thickness=plate, rule_ids=("FXD-MFG-001", "FXD-M32-CON"),
+            evidence=(
+                "precedent=pattern-001-compact-continuous-base",
+                "End crossmember closes the paired-rail load path below the product loading corridor.",
+                "Structural adequacy remains qualified engineering review work.",
+            ),
+        ))
     tab_slots = tuple(TabSlotJoint(
         f"m32-rail-tab-{index}", "m32-datum-rail", "m32-backbone", 12.0, 12.5, 12.0, 0.5,
         Vec3(0.0, 0.0, -1.0), True, True, False, index,
@@ -2088,6 +2231,8 @@ def generate_multi_station_fixture_build_plan(
             holes=station_mount_holes,
             evidence=(f"station={station.identity}",
                       "Local plate extent follows product bounds plus explicit locating and operator-side margins.",
+                      "precedent=pattern-001-compact-continuous-base",
+                      "The local plate shares weldable boundary faces with both low base rails.",
                       "Assembly sequence: locate plate on backbone, verify access, tack, inspect, then finish weld."),
         ))
         support_points = ((x0 + (x1 - x0) * 0.22, y0 + (y1 - y0) * 0.30),
@@ -2097,11 +2242,24 @@ def generate_multi_station_fixture_build_plan(
             support = Aabb(Vec3(x - 7.0, y - 7.0, 0.0), Vec3(x + 7.0, y + 7.0, 12.0))
             components.append(_component(
                 f"{prefix}-support-{support_index}", f"FXD-M32-{station.station_index:02d}1{support_index}",
-                f"station {station.station_index} replaceable support rest {support_index}",
-                BuildComponentRole.SUPPORT_PAD, support, reference, parent=station_plate_id, process="machined replaceable rest",
+                f"station {station.station_index} product-bound primary support rest {support_index}",
+                BuildComponentRole.SUPPORT_PAD, support, primary_reference,
+                parent=station_plate_id, process="machined replaceable rest",
                 thickness=12.0, rule_ids=("FXD-DAT-001", "FXD-SUP-001", "FXD-M32-STA"), fixed=True,
                 locating=True, replaceable=True, maintenance_access=True,
-                evidence=(f"station={station.identity}", "Three-point primary support arrangement."),
+                contact_condition="discrete_primary_datum_contact",
+                evidence=(
+                    f"station={station.identity}",
+                    f"product_feature=immutable_primary_face:{primary_reference.face_identity}",
+                    f"datum={station.identity}:primary_support_{support_index}",
+                    f"dof={station.identity}:"
+                    + ("translation_-Z" if support_index == 1 else
+                       "rotation_Rx" if support_index == 2 else "rotation_Ry"),
+                    "precedent=pattern-002-discrete-product-nest",
+                    "deterministic_check=FXD-DAT-001+FXD-SUP-001",
+                    "human_review=contact_location_and_product_deformation",
+                    "Three-point primary support arrangement uses discrete contacts, not a contour skeleton.",
+                ),
             ))
         locator = _oriented_bounds(primary, p0 + 8.0, p0 + 30.0, s0 - 12.0, s0,
                                    0.0, min(z1 + 18.0, product_height + 42.0))
@@ -2113,43 +2271,85 @@ def generate_multi_station_fixture_build_plan(
         )
         components.append(_component(
             f"{prefix}-locator-plate", f"FXD-M32-{station.station_index:02d}20",
-            f"station {station.station_index} secondary locator plate with adjustment slot",
-            BuildComponentRole.LOCATOR_PLATE, locator, reference, parent=station_plate_id, process="laser cut and machine locator face",
+            f"station {station.station_index} relieved product-specific secondary locator plate",
+            BuildComponentRole.LOCATOR_PLATE, locator, secondary_reference,
+            parent=station_plate_id, process="laser cut and machine locator face",
             thickness=12.0, rule_ids=("FXD-LOC-001", "FXD-TAB-001", "FXD-M32-STA"), fixed=True,
             locating=True, contact_condition="functional_face", replaceable=True, maintenance_access=True,
-            slots=(locator_slot,), evidence=(f"station={station.identity}", "Relieved contact and adjustment slot remain editable."),
+            slots=(locator_slot,), evidence=(
+                f"station={station.identity}",
+                f"product_feature=immutable_secondary_face:{secondary_reference.face_identity}",
+                f"datum={station.identity}:secondary_locator",
+                f"dof={station.identity}:lateral_translation",
+                f"dof={station.identity}:yaw_Rz",
+                "precedent=component-003-relieved-locator",
+                "deterministic_check=FXD-LOC-001+FXD-TAB-001",
+                "human_review=locator_relief_and_locking_after_prove_out",
+                "Relieved contact and adjustment slot remain editable.",
+            ),
         ))
         stop = _oriented_bounds(primary, p1, p1 + 12.0, s0 + 8.0, s0 + 30.0,
                                 0.0, min(z1 + 12.0, product_height + 34.0))
         components.append(_component(
             f"{prefix}-hard-stop", f"FXD-M32-{station.station_index:02d}30",
-            f"station {station.station_index} longitudinal hard stop", BuildComponentRole.HARD_STOP,
-            stop, reference, parent=station_plate_id, process="laser cut replaceable stop", thickness=12.0,
+            f"station {station.station_index} product-bound longitudinal hard stop", BuildComponentRole.HARD_STOP,
+            stop, tertiary_reference, parent=station_plate_id,
+            process="laser cut replaceable stop", thickness=12.0,
             rule_ids=("FXD-LOC-001", "FXD-DST-001", "FXD-M32-STA"), fixed=True, locating=True,
-            replaceable=True, maintenance_access=True, evidence=(f"station={station.identity}", "Longitudinal location is explicit and replaceable."),
+            replaceable=True, maintenance_access=True, contact_condition="tertiary_end_stop_contact",
+            evidence=(
+                f"station={station.identity}",
+                f"product_feature=immutable_tertiary_face:{tertiary_reference.face_identity}",
+                f"datum={station.identity}:tertiary_stop",
+                f"dof={station.identity}:longitudinal_translation",
+                "precedent=component-004-tertiary-stop",
+                "deterministic_check=FXD-LOC-001+FXD-DST-001",
+                "human_review=stop_contact_and_unload_clearance",
+                "Longitudinal location is explicit and replaceable.",
+            ),
         ))
         bracket, clamp, open_envelope = _clamp_review_bounds(box, clamp_outward, manufacturing_up)
         components.append(_component(
             f"{prefix}-clamp-bracket", f"FXD-M32-{station.station_index:02d}40",
             f"station {station.station_index} toggle-clamp mounting bracket", BuildComponentRole.CLAMP_BRACKET,
-            bracket, reference, parent=station_plate_id, process="laser cut, weld, drill and tap", thickness=12.0,
+            bracket, primary_reference, parent=station_plate_id,
+            process="laser cut, weld, drill and tap", thickness=12.0,
             rule_ids=("FXD-CLP-001", "FXD-SUP-001", "FXD-THR-001", "FXD-M32-CLP"),
             reaction_support=f"{prefix}-support-2", replaceable=True, maintenance_access=True,
             holes=(HoleProcessSpec(f"{prefix}-clamp-mount", Vec3(bracket.minimum.x + 14.0, bracket.minimum.y + 8.0, 0.0),
                                    6.8, HoleProcess.LASER_PILOT, False, "M8x1.25", 12.0, HoleProcess.TAPPED,
                                    evidence=("Generic clamp mounting pattern is review evidence, not released vendor CAD.",)),),
-            evidence=(f"station={station.identity}", "Clamp bracket has an explicit base-to-support reaction path."),
+            evidence=(
+                f"station={station.identity}",
+                f"product_feature=clamp_target_above:{prefix}-support-2",
+                f"reaction_support={prefix}-support-2",
+                "precedent=pattern-003-clamp-into-support",
+                "deterministic_check=FXD-CLP-001+FXD-SUP-001",
+                "human_review=clamp_force_and_product_deformation",
+                "Clamp bracket has an explicit base-to-support reaction path.",
+            ),
         ))
         components.append(_component(
             f"{prefix}-toggle-clamp", f"FXD-M32-{station.station_index:02d}50",
             f"station {station.station_index} vendor-neutral toggle-clamp review geometry", BuildComponentRole.TOGGLE_CLAMP,
-            clamp, reference, parent=f"{prefix}-clamp-bracket", process="generic purchased-clamp review representation",
+            clamp, primary_reference, parent=f"{prefix}-clamp-bracket",
+            process="generic purchased-clamp review representation",
             thickness=8.0, rule_ids=("FXD-CLP-001", "FXD-M32-CLP", "FXD-M32-ACC"),
             authority=GeometryAuthority.PURCHASED_COMPONENT, nest=NestClassification.PURCHASED_TOOLING,
             reaction_support=f"{prefix}-support-2", replaceable=True, maintenance_access=True,
-            evidence=(f"station={station.identity}", "generic_vendor_neutral=true", "clamp_state=closed",
-                      "clamp_tip_target=intended clamp surface", f"clamp_operating_side={multi_station.clamp_operating_side}",
-                      "provisional purchased tooling review geometry; excluded from manufacturing release outputs"),
+            evidence=(
+                f"station={station.identity}",
+                f"product_feature=supported_clamp_region:{primary_reference.face_identity}",
+                f"floating_dof={station.identity}:release_after_clamp_open",
+                f"reaction_support={prefix}-support-2",
+                "precedent=component-001-toggle-clamp-envelope",
+                "deterministic_check=FXD-CLP-001+FXD-M32-ACC",
+                "human_review=vendor_selection_force_stroke_and_safety",
+                "generic_vendor_neutral=true", "clamp_state=closed",
+                f"clamp_tip_target={prefix}-support-2-region",
+                f"clamp_operating_side={multi_station.clamp_operating_side}",
+                "provisional purchased tooling review geometry; excluded from manufacturing release outputs",
+            ),
         ))
         components.append(_component(
             f"{prefix}-clamp-open-envelope", f"FXD-M32-{station.station_index:02d}51",
@@ -2338,28 +2538,51 @@ def generate_multi_station_fixture_build_plan(
             ),
         ))
     layout = replace(layout, stations=tuple(evaluated_stations), rationale=layout.rationale + (
-        "structure=low common backbone plus product-bounded local laser-cut station plates; a tall full-length wall is not emitted.",
-        f"construction_rationale={len(layout.stations)} repeated station(s) share a table load path while local plates preserve loading, clamp, and weld review access.",
-        "stiffness_intent=low rail and end gussets provide review load-path continuity; no certified capacity is claimed.",
+        "structure=paired low table-mounted base rails plus product-bounded local laser-cut station plates; a tall full-length wall is not emitted.",
+        f"construction_rationale={len(layout.stations)} repeated station(s) share a compact two-edge table load path while local plates preserve loading, clamp, and weld review access.",
+        "stiffness_intent=paired low rails and compact end gussets provide review load-path continuity; no certified capacity is claimed.",
+        "precedent=pattern-001-compact-continuous-base+pattern-002-discrete-product-nest+pattern-003-clamp-into-support",
     ))
     identity_payload = json.dumps({"concept": concept.identity, "requirements": requirements.to_dict(),
                                    "layout": layout.to_dict(), "components": [item.identity for item in components]},
                                   sort_keys=True, separators=(",", ":"))
-    return FixtureBuildPlan(
+    plan = FixtureBuildPlan(
         "m32-build-" + hashlib.sha256(identity_payload.encode("utf-8")).hexdigest()[:20], concept.identity,
         requirements, tuple(components), tab_slots, (),
-        ("open clamp envelopes", "load immutable product review instances", "seat on three supports", "locate against rail and stop", "close toggle clamps"),
-        (), ("open toggle clamps", "release removable contact items"),
-        ("remove completed assembly along the recorded unload direction",),
-        "Weld process, clamp force, and structural adequacy remain qualified engineering review work.",
+        (
+            "open every vendor-neutral clamp envelope away from the product loading corridor",
+            "load each immutable product review instance from the recorded operator direction",
+            "seat the product on three named primary supports",
+            "engage the relieved secondary locator and then the product-bound tertiary stop",
+            "close each clamp toward its named reaction support and verify seating",
+        ),
+        (
+            "apply only engineer-confirmed tack sequence while preserving the recorded weld corridor",
+            "full-weld sequence remains a qualified weld-process decision",
+        ),
+        ("open toggle clamps", "verify all locator and stop contacts are released"),
+        (
+            "remove the completed assembly along the recorded unload direction",
+            "inspect supports, locators, stop, and clamp tips for spatter or wear before reloading",
+        ),
+        "Tack/full-weld process, clamp force, distortion response, and structural adequacy remain qualified engineering review work.",
         ("M32 geometry is deterministic review geometry authored from explicit station intent.",
-         "No source CAD bytes or source topology are modified by product review instances."),
+         "No source CAD bytes or source topology are modified by product review instances.",
+         "Heat, spatter, cleaning, and replaceable-contact maintenance remain explicit review items."),
         (f"source_sha256={product.source_sha256}", f"fixture_family={multi_station.fixture_family.value}",
          f"station_count={multi_station.requested_station_count}"),
         (PokaYokeSpec("m32-rail-key", "m32-datum-rail", "asymmetric rail tab pattern", True, True, True, True,
                       ("Asymmetric rail tab pattern prevents backplate reversal while preserving visible seating and unload direction.",)),),
         layout,
+        precedent_record_identities=tuple(sorted(precedent.selected_record_identities)),
+        precedent_library_evidence_digest=precedent.library_evidence_digest,
     )
+    from .fixture_quality import evaluate_fixture_concept_quality
+    quality = evaluate_fixture_concept_quality(plan, precedent)
+    if quality.blockers:
+        rules = ", ".join(item.identity for item in quality.blockers)
+        raise FixtureBuildError(f"fixture concept-quality blockers prevent synthesis: {rules}")
+    return replace(plan, concept_quality_evidence_digest=quality.evidence_digest)
 
 
 def generate_multi_station_fixture_alternatives(

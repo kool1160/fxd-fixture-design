@@ -21,6 +21,13 @@ from .export import (ExportError, FabricationPackage, build_fabrication_package,
                      write_fabrication_package)
 from .knowledge import (CorrectionRecord, KnowledgeError, KnowledgeStore,
                         ProposedFeature, digest_text, private_knowledge_path)
+from .fixture_knowledge import (
+    FIXTURE_KNOWLEDGE_RECORD_TYPES, FIXTURE_KNOWLEDGE_SCHEMA,
+    FIXTURE_KNOWLEDGE_SOURCE_SCHEMA, FixtureKnowledgeError,
+    FixtureKnowledgeLibrary, FixtureKnowledgeRecord, FixtureKnowledgeSource,
+    PrecedentMatch, PrecedentQuery, PrecedentRetrievalResult,
+    knowledge_record_counts, load_fixture_knowledge, retrieve_precedent,
+)
 from .connectors import (ApprovalRequired, CompatibilityProbe, ConnectorCapabilities,
                          ConnectorDescriptor, ConnectorError, NeutralStepConnector,
                          connector_registry, probe_solidworks,
@@ -99,6 +106,13 @@ from .fabrication_workflow import (
     generate_multi_station_fixture_alternatives, generate_multi_station_fixture_build_plan,
     generate_multi_station_layout,
     propose_multi_station_count, validate_fixture_build_plan, write_fixture_build_package,
+)
+from .fixture_quality import (
+    FIXTURE_CONCEPT_QUALITY_SCHEMA, FixtureConceptQualityEvidence,
+    FixtureConceptQualityFinding, FixtureConceptQualityMetric,
+    FixtureConceptQualityReport, evaluate_fixture_concept_evidence,
+    evaluate_fixture_concept_quality, evidence_from_fixture_build,
+    rejected_generic_m32_evidence,
 )
 from .ai_fixture_engineer import (
     PROMPT_CONTRACT_VERSION, PROPOSAL_REQUEST_SCHEMA, PROPOSAL_SCHEMA,
@@ -181,6 +195,18 @@ __all__ += ["M30_SCHEMA", "M32_SCHEMA", "RULE_CATALOG", "RULES_BY_ID", "Adjustme
             "generate_multi_station_fixture_alternatives", "generate_multi_station_fixture_build_plan",
             "generate_multi_station_layout",
             "propose_multi_station_count", "validate_fixture_build_plan", "write_fixture_build_package"]
+__all__ += [
+    "FIXTURE_KNOWLEDGE_RECORD_TYPES", "FIXTURE_KNOWLEDGE_SCHEMA",
+    "FIXTURE_KNOWLEDGE_SOURCE_SCHEMA", "FixtureKnowledgeError",
+    "FixtureKnowledgeLibrary", "FixtureKnowledgeRecord", "FixtureKnowledgeSource",
+    "PrecedentMatch", "PrecedentQuery", "PrecedentRetrievalResult",
+    "knowledge_record_counts", "load_fixture_knowledge", "retrieve_precedent",
+    "FIXTURE_CONCEPT_QUALITY_SCHEMA", "FixtureConceptQualityEvidence",
+    "FixtureConceptQualityFinding", "FixtureConceptQualityMetric",
+    "FixtureConceptQualityReport", "evaluate_fixture_concept_evidence",
+    "evaluate_fixture_concept_quality", "evidence_from_fixture_build",
+    "rejected_generic_m32_evidence",
+]
 __all__ += ["PROMPT_CONTRACT_VERSION", "PROPOSAL_REQUEST_SCHEMA", "PROPOSAL_SCHEMA",
             "AiFixtureProvider", "AiProposalRequest", "CancellationToken", "EditableParameter",
             "FixtureProposal", "FixtureProposalError", "GuidedValidationIssue", "HttpJsonAiProvider",

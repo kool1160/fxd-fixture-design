@@ -1,0 +1,75 @@
+{
+  "schema_version": "fxd-fixture-knowledge-sources-v1",
+  "sources": [
+    {
+      "accessed": "2026-07-23",
+      "identity": "carr-lane-fixture-design-principles",
+      "licensing_note": "Metadata and original FXD paraphrase only; no page text, images, tables, or CAD redistributed.",
+      "publisher": "Carr Lane Manufacturing",
+      "reuse_classification": "official-public-principles-metadata-and-paraphrase",
+      "source_type": "official_public_web",
+      "title": "Fixture Design Principles",
+      "url": "https://www.carrlane.com/engineering-resources/fixture-design-principles"
+    },
+    {
+      "accessed": "2026-07-23",
+      "identity": "demmeler-3d-welding-tables",
+      "licensing_note": "Metadata and original FXD interpretation only; no product imagery, catalog content, dimensions, or CAD redistributed.",
+      "publisher": "DEMMELER Maschinenbau GmbH & Co. KG",
+      "reuse_classification": "official-public-product-family-metadata-and-paraphrase",
+      "source_type": "official_public_web",
+      "title": "Original 3D Clamping Systems and Welding Tables",
+      "url": "https://www.demmeler.com/products-shop/original-3d-clamping-systems/3d-welding-tables/"
+    },
+    {
+      "accessed": "2026-07-23",
+      "identity": "destaco-welding-clamping",
+      "licensing_note": "Metadata and original FXD application interpretation only; no vendor geometry, performance claim, image, or catalog excerpt redistributed.",
+      "publisher": "DESTACO",
+      "reuse_classification": "official-public-application-metadata-and-paraphrase",
+      "source_type": "official_public_web",
+      "title": "Welding Applications and Manual Clamping",
+      "url": "https://www.destaco.com/en/applications/welding"
+    },
+    {
+      "accessed": "2026-07-23",
+      "identity": "fixtureworks-components",
+      "licensing_note": "Metadata and original FXD component-role interpretation only; no catalog pages, images, specifications, or CAD redistributed.",
+      "publisher": "Fixtureworks",
+      "reuse_classification": "official-public-component-category-metadata-and-paraphrase",
+      "source_type": "official_public_web",
+      "title": "Standard Fixturing Components and Work Supports",
+      "url": "https://www.fixtureworks.com/store/pc/standard-fixturing-components-v69.htm"
+    },
+    {
+      "accessed": "2026-07-23",
+      "identity": "human-review-m32-rejection-001",
+      "licensing_note": "Abstract FXD human-review disposition only; no user image, private dimensions, source CAD, employer data, or proprietary fixture geometry retained.",
+      "publisher": "FXD qualified human review",
+      "reuse_classification": "abstract-human-review-evidence",
+      "source_type": "human_engineering_review",
+      "title": "M32 first Windows visual engineering rejection",
+      "url": null
+    },
+    {
+      "accessed": "2026-07-23",
+      "identity": "jergens-fixturing-components",
+      "licensing_note": "Metadata and original FXD role separation interpretation only; no vendor geometry, catalog content, images, or specifications redistributed.",
+      "publisher": "Jergens, Inc.",
+      "reuse_classification": "official-public-component-category-metadata-and-paraphrase",
+      "source_type": "official_public_web",
+      "title": "Fixturing Components and Zero Point System Overview",
+      "url": "https://www.jergensinc.com/en/categories/fixturing-components"
+    },
+    {
+      "accessed": "2026-07-23",
+      "identity": "strong-hand-modular-tables",
+      "licensing_note": "Metadata and original FXD modular-base interpretation only; no product photography, catalog content, performance claim, or CAD redistributed.",
+      "publisher": "Strong Hand Tools",
+      "reuse_classification": "official-public-product-family-metadata-and-paraphrase",
+      "source_type": "official_public_web",
+      "title": "Modular Welding Table System Overview",
+      "url": "https://www.stronghandtools.com/pages/max-table-overview"
+    }
+  ]
+}

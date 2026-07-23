@@ -19,7 +19,7 @@ def _keys(value: object) -> set[str]:
 
 
 class M32SelfCheckTests(unittest.TestCase):
-    def test_autonomous_scenario_exercises_governed_reduction_and_release_gates(self):
+    def test_autonomous_scenario_exercises_compact_layout_reduction_probe_and_release_gates(self):
         report = run_m32_self_check()
 
         self.assertEqual(report["schema"], SELF_CHECK_SCHEMA)
@@ -28,17 +28,27 @@ class M32SelfCheckTests(unittest.TestCase):
         self.assertTrue(report["step_import"]["source_cad_unchanged"])
         self.assertTrue(report["guided_orientation"]["accepted"])
         self.assertEqual(report["fixture_build"]["requested_station_count"], 5)
-        self.assertEqual(report["fixture_build"]["accepted_feasible_station_count"], 4)
+        self.assertEqual(report["fixture_build"]["accepted_feasible_station_count"], 5)
         self.assertTrue(report["fixture_build"]["original_request_retained"])
+        self.assertFalse(report["fixture_build"]["explicit_reduction_acceptance_required"])
+        self.assertEqual(
+            report["fixture_build"]["tighter_length_reduction_probe"]["feasible_station_count"],
+            4,
+        )
+        self.assertTrue(
+            report["fixture_build"]["tighter_length_reduction_probe"]["explicit_acceptance_required"]
+        )
         self.assertFalse(report["fixture_build_validation"]["authoring_blocked"])
         self.assertTrue(report["authored_geometry"]["provisional"])
         self.assertFalse(report["authored_geometry"]["aabb_fallback_used"])
         self.assertGreater(report["authored_geometry"]["tessellated_triangle_count"], 0)
-        self.assertEqual(report["authored_geometry"]["product_instance_count"], 4)
+        self.assertEqual(report["authored_geometry"]["product_instance_count"], 5)
         self.assertTrue(report["access_review"]["trapped_part_detected"])
         self.assertTrue(report["release_gates"]["engineering_approval_blocked"])
         self.assertTrue(report["release_gates"]["release_export_blocked"])
         self.assertTrue(report["project_persistence"]["passed"])
+        self.assertEqual(report["concept_quality"]["precedent_informed_concept"]["status"], "passed")
+        self.assertEqual(report["concept_quality"]["frozen_rejected_benchmark"]["status"], "blocked")
 
     def test_m32_self_check_exercises_validation_after_accepted_proposal_binding(self):
         report = run_m32_self_check()

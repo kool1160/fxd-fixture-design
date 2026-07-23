@@ -24,6 +24,12 @@ from fxd_geometry.project import FxdProject
 from fxd_geometry.ai_fixture_engineer import deterministic_baseline_proposal
 from fxd_geometry.interactive_workflow import _engineering_annotations
 from fxd_geometry.operations import project_export_block_reason
+from fxd_geometry.fixture_quality import (
+    evaluate_fixture_concept_evidence,
+    evaluate_fixture_concept_quality,
+    evidence_from_fixture_build,
+    rejected_generic_m32_evidence,
+)
 
 
 class MultiStationFixtureTests(unittest.TestCase):
@@ -531,7 +537,7 @@ class MultiStationFixtureTests(unittest.TestCase):
             ), "y")
 
     def test_length_constrained_reduction_is_explicit_and_preserves_requested_intent(self):
-        requested = self.station_requirements(count=5, maximum_length=1219.2)
+        requested = self.station_requirements(count=5, maximum_length=900.0)
         from fxd_geometry import propose_multi_station_fit
         fit = propose_multi_station_fit(self.product, requested)
         self.assertEqual(fit.requested_station_count, 5)
@@ -545,8 +551,8 @@ class MultiStationFixtureTests(unittest.TestCase):
         assert layout is not None
         self.assertEqual(len(layout.stations), 4)
         self.assertEqual(layout.requirements.requested_intent_station_count, 5)
-        self.assertGreater(layout.requested_intent_required_length_mm, 1219.2)
-        self.assertLessEqual(layout.required_fixture_length_mm, 1219.2)
+        self.assertGreater(layout.requested_intent_required_length_mm, 900.0)
+        self.assertLessEqual(layout.required_fixture_length_mm, 900.0)
 
     def test_missing_weld_intent_is_review_blocking_not_false_weld_access_validation(self):
         plan = generate_multi_station_fixture_build_plan(
@@ -1214,3 +1220,124 @@ class MultiStationFixtureTests(unittest.TestCase):
         self.assertEqual(updated.fixture_build.to_dict(), plan.to_dict())
         self.assertEqual(updated.fixture_build_validation.evidence_digest,
                          validate_fixture_build_plan(self.product, plan).evidence_digest)
+
+    def test_rejected_generic_m32_fixture_fails_concept_quality_benchmark(self):
+        report = evaluate_fixture_concept_evidence(rejected_generic_m32_evidence())
+        self.assertEqual(report.status, "blocked")
+        self.assertGreaterEqual(len(report.blockers), 6)
+        self.assertTrue({
+            "insufficient_product_specific_contact_evidence",
+            "excessive_empty_rail_span",
+            "isolated_station_structure",
+            "incomplete_datum_dof_explanation",
+            "clamp_support_reaction_weakness",
+            "unclear_loading_sequence",
+            "generic_fixture_component_placement",
+        }.issubset(set(report.user_rejection_rules_triggered)))
+
+    def test_precedent_informed_m32_fixture_passes_concept_quality_gate(self):
+        plan = self.plan()
+        report = evaluate_fixture_concept_quality(plan)
+        evidence = evidence_from_fixture_build(plan)
+        self.assertEqual(report.status, "passed")
+        self.assertEqual(report.blockers, ())
+        self.assertEqual(report.score, 100)
+        self.assertEqual(plan.concept_quality_evidence_digest, report.evidence_digest)
+        self.assertLessEqual(evidence.empty_span_ratio, 0.12)
+        self.assertTrue(all(value >= 6 for value in evidence.product_specific_contacts_per_station))
+        self.assertEqual(len(evidence.clamp_support_mappings), 5)
+        self.assertGreaterEqual(evidence.mounting_point_count, 8)
+        self.assertFalse(evidence.disconnected_component_identities)
+        first_station_contacts = tuple(
+            component for component in plan.components
+            if "station=m32-station-01" in component.evidence
+            and component.role in {
+                BuildComponentRole.SUPPORT_PAD,
+                BuildComponentRole.LOCATOR_PLATE,
+                BuildComponentRole.HARD_STOP,
+                BuildComponentRole.TOGGLE_CLAMP,
+            }
+        )
+        self.assertTrue(all(
+            component.source_references[0].face_identity
+            for component in first_station_contacts
+        ))
+        role_faces = {
+            component.role: component.source_references[0].face_identity
+            for component in first_station_contacts
+        }
+        self.assertEqual(len({
+            role_faces[BuildComponentRole.SUPPORT_PAD],
+            role_faces[BuildComponentRole.LOCATOR_PLATE],
+            role_faces[BuildComponentRole.HARD_STOP],
+        }), 3)
+        self.assertIn("pattern-001-compact-continuous-base",
+                      plan.precedent_record_identities)
+        self.assertIn("pattern-002-discrete-product-nest",
+                      plan.precedent_record_identities)
+
+    def test_concept_quality_blockers_override_numerical_score(self):
+        plan = self.plan()
+        changed = tuple(
+            replace(component, reaction_support_identity=None)
+            if component.role == BuildComponentRole.TOGGLE_CLAMP else component
+            for component in plan.components
+        )
+        report = evaluate_fixture_concept_quality(replace(
+            plan, components=changed, concept_quality_evidence_digest=None,
+        ))
+        self.assertEqual(report.status, "blocked")
+        self.assertGreater(report.score, 50)
+        self.assertIn("quality-clamp-reaction",
+                      {item.identity for item in report.blockers})
+
+    def test_concept_quality_rejects_excess_empty_span_and_generic_contacts(self):
+        plan = self.plan()
+        layout = replace(
+            plan.multi_station_layout,
+            station_pitch_mm=plan.multi_station_layout.station_pitch_mm + 100.0,
+            required_fixture_length_mm=plan.multi_station_layout.required_fixture_length_mm + 400.0,
+        )
+        generic_components = tuple(
+            replace(component, evidence=tuple(
+                item for item in component.evidence
+                if not item.startswith("product_feature=")
+            ))
+            if component.role in {
+                BuildComponentRole.SUPPORT_PAD,
+                BuildComponentRole.LOCATOR_PLATE,
+                BuildComponentRole.HARD_STOP,
+                BuildComponentRole.TOGGLE_CLAMP,
+            } else component
+            for component in plan.components
+        )
+        report = evaluate_fixture_concept_quality(replace(
+            plan, components=generic_components, multi_station_layout=layout,
+            concept_quality_evidence_digest=None,
+        ))
+        blockers = {item.identity for item in report.blockers}
+        self.assertIn("quality-empty-span", blockers)
+        self.assertIn("quality-product-contact", blockers)
+
+    def test_persistence_preserves_precedent_and_quality_evidence(self):
+        plan = self.plan()
+        restored = FixtureBuildPlan.from_dict(plan.to_dict())
+        self.assertEqual(restored.precedent_record_identities,
+                         plan.precedent_record_identities)
+        self.assertEqual(restored.precedent_library_evidence_digest,
+                         plan.precedent_library_evidence_digest)
+        self.assertEqual(restored.concept_quality_evidence_digest,
+                         plan.concept_quality_evidence_digest)
+        self.assertEqual(evaluate_fixture_concept_quality(restored).evidence_digest,
+                         plan.concept_quality_evidence_digest)
+
+    def test_stale_fixture_knowledge_invalidates_dependent_concept_quality(self):
+        plan = self.plan()
+        stale = replace(
+            plan, precedent_library_evidence_digest="0" * 64,
+            concept_quality_evidence_digest=None,
+        )
+        report = evaluate_fixture_concept_quality(stale)
+        self.assertEqual(report.status, "blocked")
+        self.assertIn("quality-precedent-stale",
+                      {item.identity for item in report.blockers})

@@ -38,6 +38,10 @@ from fxd_geometry import (
     load_step_for_workbench,
     product_from_workbench_document,
     propose_multi_station_fit,
+    evaluate_fixture_concept_evidence,
+    evaluate_fixture_concept_quality,
+    evidence_from_fixture_build,
+    rejected_generic_m32_evidence,
     validate_fixture_build_plan,
 )
 from fxd_geometry.ai_fixture_engineer import deterministic_baseline_proposal
@@ -194,7 +198,7 @@ def _write_summary_screenshot(report: dict[str, object], destination: Path) -> N
     draw.text((56, 46), "FXD M32 autonomous software self-check", font=title, fill="#f8fafc")
     draw.text((56, 100), "OFFLINE SYNTHETIC REVIEW EVIDENCE - HUMAN ENGINEERING REVIEW REQUIRED", font=subtitle, fill="#a7f3d0")
     lines = (
-        "Scenario: 5 requested stations -> 4 feasible stations at 1219.2 mm maximum length",
+        "Scenario: compact precedent-informed 5-station fixture within 1219.2 mm maximum length",
         f"Calculated pitch: {float(fixture_build['calculated_pitch_mm']):.1f} mm",
         f"Fixture-build validation: {validation['status']} (review-only provisional authoring permitted)",
         f"Authored real OCP components: {int(geometry['real_ocp_component_count'])}",
@@ -338,33 +342,32 @@ def _run_m32_scenario(directory: Path) -> tuple[dict[str, object], Path, Path]:
             manufacturing_orientation_identity=orientation.identity,
     )
     fit = propose_multi_station_fit(product, requested)
-    if (fit.requested_station_count, fit.feasible_station_count) != (5, 4):
-        raise AssertionError("the governed 5-station request did not propose the expected 4-station fit")
-    if not fit.requires_explicit_acceptance:
-        raise AssertionError("station-count reduction was not kept behind explicit acceptance")
-    accepted = replace(
-        requested,
-        requested_station_count=fit.feasible_station_count,
-        requested_intent_station_count=fit.requested_station_count,
+    if fit.requested_station_count != 5 or fit.feasible_station_count < 5:
+        raise AssertionError("the compact governed layout did not fit all five requested stations")
+    if fit.requires_explicit_acceptance:
+        raise AssertionError("compact layout unexpectedly reduced the accepted station count")
+    reduction_probe = propose_multi_station_fit(
+        product, replace(requested, maximum_fixture_length_mm=900.0),
     )
+    if (reduction_probe.requested_station_count, reduction_probe.feasible_station_count) != (5, 4):
+        raise AssertionError("the tighter deterministic fit probe did not propose four stations")
+    if not reduction_probe.requires_explicit_acceptance:
+        raise AssertionError("station-count reduction did not remain behind explicit acceptance")
+    accepted = requested
     alternatives = generate_multi_station_fixture_alternatives(
         product, project.active, _fixture_build_requirements(product.source_sha256), accepted,
     )
     plan = bind_fixture_build_plan_to_proposal(alternatives[-1], accepted_proposal)
     layout = plan.multi_station_layout
-    if layout is None or len(layout.stations) != 4:
-        raise AssertionError("accepted feasible station count was not used for the fixture build plan")
-    if layout.requirements.requested_intent_station_count != 5:
-        raise AssertionError("original 5-station engineering intent was silently overwritten")
+    if layout is None or len(layout.stations) != 5:
+        raise AssertionError("all five requested stations were not used for the compact fixture build plan")
     if layout.required_fixture_length_mm > 1219.2:
         raise AssertionError("accepted fixture layout exceeds its maximum fixture length")
-    if layout.requested_intent_required_length_mm is None or layout.requested_intent_required_length_mm <= 1219.2:
-        raise AssertionError("requested station intent lacks explicit infeasible-length evidence")
     station_plates = tuple(item for item in plan.components if item.role == BuildComponentRole.STATION_PLATE)
     clamp_closed = tuple(item for item in plan.components if item.role == BuildComponentRole.TOGGLE_CLAMP)
     clamp_open = tuple(item for item in plan.components if item.role == BuildComponentRole.CLAMP_OPEN_ENVELOPE)
     braces = tuple(item for item in plan.components if item.role == BuildComponentRole.END_BRACE)
-    if len(station_plates) != 4 or len(clamp_closed) != 4 or len(clamp_open) != 4:
+    if len(station_plates) != 5 or len(clamp_closed) != 5 or len(clamp_open) != 5:
         raise AssertionError("product-driven station or clamp review geometry is incomplete")
     if any(item.geometry_authority != GeometryAuthority.PURCHASED_COMPONENT
            for item in clamp_closed + clamp_open):
@@ -400,6 +403,17 @@ def _run_m32_scenario(directory: Path) -> tuple[dict[str, object], Path, Path]:
     if (plan.fixture_proposal_identity != accepted_proposal.proposal_identity
             or plan.fixture_proposal_evidence_digest != accepted_proposal.evidence_digest):
         raise AssertionError("the self-check build lost its exact proposal identity or evidence binding")
+    improved_quality = evaluate_fixture_concept_quality(plan)
+    improved_quality_evidence = evidence_from_fixture_build(plan)
+    rejected_quality = evaluate_fixture_concept_evidence(
+        rejected_generic_m32_evidence(),
+    )
+    if improved_quality.status != "passed" or improved_quality.blockers:
+        raise AssertionError("the precedent-informed M32 concept did not pass concept quality")
+    if rejected_quality.status != "blocked":
+        raise AssertionError("the frozen generic M32 rejection benchmark unexpectedly passed")
+    if improved_quality.score <= rejected_quality.score:
+        raise AssertionError("the improved concept did not materially improve the quality score")
     validation = validate_fixture_build_plan(product, plan)
     weld_finding = next((item for item in validation.findings if item.rule_id == "FXD-WLD-001"), None)
     if weld_finding is None or weld_finding.disposition != "review_blocker":
@@ -519,12 +533,40 @@ def _run_m32_scenario(directory: Path) -> tuple[dict[str, object], Path, Path]:
             "family": FixtureFamily.LINEAR_MULTI_STATION_WELD.value,
             "requested_station_count": 5,
             "accepted_feasible_station_count": len(layout.stations),
-            "explicit_reduction_acceptance_required": True,
+            "explicit_reduction_acceptance_required": fit.requires_explicit_acceptance,
             "maximum_fixture_length_mm": 1219.2,
             "calculated_pitch_mm": layout.station_pitch_mm,
             "accepted_required_length_mm": layout.required_fixture_length_mm,
             "requested_required_length_mm": layout.requested_intent_required_length_mm,
             "original_request_retained": True,
+            "tighter_length_reduction_probe": {
+                "maximum_fixture_length_mm": 900.0,
+                "feasible_station_count": reduction_probe.feasible_station_count,
+                "explicit_acceptance_required": reduction_probe.requires_explicit_acceptance,
+            },
+        },
+        "concept_quality": {
+            "frozen_rejected_benchmark": rejected_quality.to_dict(),
+            "precedent_informed_concept": improved_quality.to_dict(),
+            "metrics": {
+                "fixture_length_mm": improved_quality_evidence.fixture_length_mm,
+                "occupied_length_mm": improved_quality_evidence.occupied_length_mm,
+                "empty_span_ratio": improved_quality_evidence.empty_span_ratio,
+                "station_pitch_mm": improved_quality_evidence.station_pitch_mm,
+                "product_specific_contacts_per_station": list(
+                    improved_quality_evidence.product_specific_contacts_per_station
+                ),
+                "connected_base_component_count": len(
+                    improved_quality_evidence.connected_component_identities
+                ),
+                "mounting_point_count": improved_quality_evidence.mounting_point_count,
+                "clamp_support_mapping_count": len(
+                    improved_quality_evidence.clamp_support_mappings
+                ),
+                "datum_dof_mapping_count": len(
+                    improved_quality_evidence.datum_dof_mappings
+                ),
+            },
         },
         "fixture_build_validation": {
             "status": validation.status,
