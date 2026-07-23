@@ -140,6 +140,9 @@ export, retention, access-control, encryption, and audit disposition.
 A context asset is loaded only when needed to answer the engineering question.
 It records geometry authority, frames, movement states, keep-out and maintenance
 envelopes, functional interfaces, required validation packs, and limitations.
+`collision_authority`, `envelope_authority`, and `access_authority` are explicit
+and cannot exceed the underlying geometry authority. Provisional geometry
+forces provisional-only authority and visibly provisional envelopes.
 Robot assets are optional; they are not the foundation of the architecture.
 Every context asset has an explicit deliverable scope. The default
 `reference_context_only` scope is excluded from the fixture BOM, component and
@@ -204,6 +207,10 @@ A project instance pins:
 - downstream evidence digests.
 
 Project references do not silently float to the newest library revision.
+`library_revision_history_v1.schema.json` makes the history aggregate and
+project pin explicit; `revision_history_examples_v1.json` supplies a synthetic
+root, update, rollback, publication attempts, historical pin, and explicit
+migration.
 
 ## Revision, replacement, and migration
 
@@ -220,6 +227,11 @@ and optional restored-content identity. The content digest is calculated over
 the canonical record excluding the revision envelope; the concurrency token is
 derived from revision identity, expected parent, and content digest.
 
+The history validator requires exactly one parentless `r1` root, resolved and
+acyclic parentage, monotonic creation time, deterministic ordering, and one
+resolved current published revision. A non-initial isolated revision without a
+parent is invalid.
+
 ### Concurrent publication
 
 Two writers may create draft children of one parent. Publication compares the
@@ -230,15 +242,27 @@ create a reconciled child whose reason identifies both inputs. A supplier
 revision update follows the same rule and never mutates the prior imported
 revision.
 
+Publication attempts record the proposal, expected parent, expected parent
+token, decision time, and disposition. An accepted attempt must match the
+actual proposal parent and token. One parent cannot have two published
+successors in the authoritative history; a stale writer remains a rejected or
+draft conflict.
+
 ### Rollback
 
 Rollback creates a new child revision whose
 `restores_content_from_revision_id` names the prior content being restored.
-It never rewrites or deletes history. The new revision receives a new digest
-and concurrency token, invalidates dependent analysis and output evidence, and
-requires explicit engineer acceptance. Restoring a missing private file is a
-relink only when its digest matches the pinned source; otherwise it is a new
-revision and explicit migration.
+It never rewrites or deletes history. The rollback revision reuses the restored
+ancestor's canonical content digest as proof of the content selected, but
+receives a new revision identity and concurrency token. It invalidates
+dependent analysis and output evidence and requires explicit engineer
+acceptance. Restoring a missing private file is a relink only when its digest
+matches the pinned source; otherwise it is a new revision and explicit
+migration.
+
+The restored revision must resolve and be an ancestor of the rollback parent.
+Rollback is invalid unless it creates a new revision and marks dependent
+evidence invalid with a reason.
 
 ### Linked updates
 
@@ -273,6 +297,10 @@ template may rewrite an existing project silently. Migration is a visible
 project revision with before/after identities, compatibility results,
 invalidated evidence, and engineer disposition.
 
+A project pin resolves a history, subject, and exact revision. Automatic
+adoption is false. Migration records from/to revisions, engineer decision,
+timestamp, explicit non-silent disposition, and evidence invalidation.
+
 ## Validation architecture
 
 Validation participation is a declared property, not inferred from category
@@ -290,14 +318,23 @@ Important rules:
 - human confirmation remains required wherever the matrix says so;
 - production release remains an external qualified-human boundary.
 
+Semantic clone detection uses an explicit engineering-substance projection by
+record type. Principles, patterns, applications, and failures are compared by
+record type, summary, applicability, limitations, and engineering details.
+Library components additionally project category, authority, feature,
+interface, material, variant, and replacement content. Identity, title, tags,
+source/provenance wording, and dependency labels are validated separately and
+cannot make cloned engineering content unique.
+
 ## Output architecture
 
 ### BOM
 
-An item may be included as an exact purchased identity, a generic unresolved
-line, a manufactured FXD component, or excluded. Metadata-only commercial
-records may create an explicitly unresolved BOM line but not an exact part
-claim.
+Only governed exact purchased identities and validated manufactured components
+participate in a deliverable BOM. Metadata-only and provisional records remain
+excluded. They may carry a separate `advisory_bom_hint` whose
+`deliverable_eligible` value is always false; reconciliation cannot silently
+promote that hint into a fixture or equipment BOM.
 
 ### STEP
 
@@ -481,9 +518,10 @@ paraphrase only. Private and supplier-controlled assets remain excluded.
 ## Validation evidence
 
 `scripts/validate_fixture_library_research.py` validates the bounded Draft
-2020-12 vocabulary used by the ten schemas, every reference instance,
+2020-12 vocabulary used by the eleven schemas, every reference instance,
 authority/output consistency, immutable revision evidence, coordinate-frame
 semantics, typed interface closure, process-context deliverable separation,
-cross-file identities, ranges, calendar dates, semantic duplication, minimum
-corpus counts, structured rights, private-path/CAD leakage, and forbidden
-binary/CAD assets using only the Python standard library.
+revision-history ancestry and project pins, cross-file identities, ranges,
+calendar dates, engineering-substance duplication, minimum corpus counts,
+structured release-decision chronology, private-path/CAD leakage, and
+forbidden binary/CAD assets using only the Python standard library.

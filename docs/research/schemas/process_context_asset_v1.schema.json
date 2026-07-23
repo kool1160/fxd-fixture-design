@@ -14,6 +14,9 @@
     "units",
     "geometry_authority",
     "geometry_source_item_id",
+    "collision_authority",
+    "envelope_authority",
+    "access_authority",
     "frame",
     "movement_states",
     "keep_out_envelopes",
@@ -82,6 +85,15 @@
         "string",
         "null"
       ]
+    },
+    "collision_authority": {
+      "$ref": "#/$defs/context_authority"
+    },
+    "envelope_authority": {
+      "$ref": "#/$defs/context_authority"
+    },
+    "access_authority": {
+      "$ref": "#/$defs/context_authority"
     },
     "frame": {
       "$ref": "owned_coordinate_frame_v1.schema.json"
@@ -276,11 +288,87 @@
               }
             }
           },
+          "collision_authority": {
+            "enum": [
+              "provisional_only",
+              "excluded"
+            ]
+          },
+          "envelope_authority": {
+            "enum": [
+              "provisional_only",
+              "excluded"
+            ]
+          },
+          "access_authority": {
+            "enum": [
+              "provisional_only",
+              "excluded"
+            ]
+          },
+          "keep_out_envelopes": {
+            "items": {
+              "properties": {
+                "provisional": {
+                  "const": true
+                }
+              }
+            }
+          },
+          "maintenance_envelopes": {
+            "items": {
+              "properties": {
+                "provisional": {
+                  "const": true
+                }
+              }
+            }
+          },
           "deliverable_scope": {
             "enum": [
               "reference_context_only",
               "excluded_from_deliverables"
             ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "geometry_authority": {
+            "const": "metadata_only_commercial_component"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "collision_authority": {
+            "enum": [
+              "metadata_only",
+              "excluded"
+            ]
+          },
+          "envelope_authority": {
+            "enum": [
+              "metadata_only",
+              "excluded"
+            ]
+          },
+          "access_authority": {
+            "enum": [
+              "metadata_only",
+              "excluded"
+            ]
+          },
+          "movement_states": {
+            "items": {
+              "properties": {
+                "authoritative_for_collision": {
+                  "const": false
+                }
+              }
+            }
           }
         }
       }
@@ -363,6 +451,14 @@
     }
   ],
   "$defs": {
+    "context_authority": {
+      "enum": [
+        "exact",
+        "provisional_only",
+        "metadata_only",
+        "excluded"
+      ]
+    },
     "participation": {
       "enum": [
         "required",

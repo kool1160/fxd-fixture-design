@@ -72,6 +72,187 @@
       ]
     }
   },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "interface_type": {
+            "const": "face_mount"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "features": {
+            "items": {
+              "properties": {
+                "feature_type": {
+                  "const": "planar_face"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "interface_type": {
+            "const": "hole_pattern"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "features": {
+            "items": {
+              "properties": {
+                "feature_type": {
+                  "const": "hole"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "interface_type": {
+            "const": "slot_pattern"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "features": {
+            "items": {
+              "properties": {
+                "feature_type": {
+                  "const": "slot"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "interface_type": {
+            "const": "pin_and_bushing"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "features": {
+            "items": {
+              "properties": {
+                "feature_type": {
+                  "enum": [
+                    "pin",
+                    "bushing"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "interface_type": {
+            "const": "rail_mount"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "features": {
+            "items": {
+              "properties": {
+                "feature_type": {
+                  "const": "rail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "interface_type": {
+            "const": "weld_mount"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "features": {
+            "items": {
+              "properties": {
+                "feature_type": {
+                  "const": "weld_mount"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "interface_type": {
+            "const": "table_grid_mount"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "features": {
+            "items": {
+              "properties": {
+                "feature_type": {
+                  "const": "table_grid_mount"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "interface_type": {
+            "const": "custom_datum_frame"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "features": {
+            "items": {
+              "properties": {
+                "feature_type": {
+                  "const": "custom_datum_frame"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
   "$defs": {
     "vector3": {
       "type": "array",
@@ -218,35 +399,35 @@
                 "number",
                 "null"
               ],
-              "minimum": 0
+              "exclusiveMinimum": 0
             },
             "length": {
               "type": [
                 "number",
                 "null"
               ],
-              "minimum": 0
+              "exclusiveMinimum": 0
             },
             "width": {
               "type": [
                 "number",
                 "null"
               ],
-              "minimum": 0
+              "exclusiveMinimum": 0
             },
             "height": {
               "type": [
                 "number",
                 "null"
               ],
-              "minimum": 0
+              "exclusiveMinimum": 0
             },
             "pitch": {
               "type": [
                 "number",
                 "null"
               ],
-              "minimum": 0
+              "exclusiveMinimum": 0
             },
             "units": {
               "enum": [

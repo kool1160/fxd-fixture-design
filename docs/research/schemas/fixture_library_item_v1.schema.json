@@ -357,6 +357,33 @@
     "bom_participation": {
       "$ref": "#/$defs/participation"
     },
+    "advisory_bom_hint": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "required": [
+        "classification",
+        "description",
+        "deliverable_eligible"
+      ],
+      "properties": {
+        "classification": {
+          "enum": [
+            "unresolved_supplier_candidate",
+            "generic_review_placeholder"
+          ]
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1
+        },
+        "deliverable_eligible": {
+          "const": false
+        }
+      }
+    },
     "export_participation": {
       "$ref": "#/$defs/output_participation"
     },
@@ -638,6 +665,7 @@
         }
       },
       "then": {
+        "$ref": "#/$defs/no_item_geometry",
         "properties": {
           "category": {
             "const": "private_purchased_tooling"
@@ -690,6 +718,27 @@
       },
       "then": {
         "properties": {
+          "source_file": {
+            "type": "null"
+          },
+          "feature_definition": {
+            "type": "null"
+          },
+          "mounting_interfaces": {
+            "maxItems": 0
+          },
+          "functional_interfaces": {
+            "maxItems": 0
+          },
+          "contact_points": {
+            "maxItems": 0
+          },
+          "material_manufacturing_intent": {
+            "type": "null"
+          },
+          "bom_participation": {
+            "const": "excluded"
+          },
           "preview_representation": {
             "properties": {
               "kind": {
@@ -791,6 +840,7 @@
         }
       },
       "then": {
+        "$ref": "#/$defs/no_item_geometry",
         "properties": {
           "category": {
             "const": "fixture_family_template"
@@ -836,14 +886,24 @@
         }
       },
       "then": {
+        "$ref": "#/$defs/no_item_geometry",
         "properties": {
           "category": {
             "const": "shop_standard_pack"
           },
           "preview_representation": {
             "properties": {
+              "kind": {
+                "enum": [
+                  "none",
+                  "metadata_card"
+                ]
+              },
               "authority": {
-                "const": "informational"
+                "enum": [
+                  "none",
+                  "informational"
+                ]
               }
             }
           },
@@ -869,12 +929,29 @@
         }
       },
       "then": {
+        "$ref": "#/$defs/no_item_geometry",
         "properties": {
           "category": {
             "const": "process_context_asset"
           },
           "bom_participation": {
             "const": "excluded"
+          },
+          "preview_representation": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "none",
+                  "metadata_card"
+                ]
+              },
+              "authority": {
+                "enum": [
+                  "none",
+                  "informational"
+                ]
+              }
+            }
           },
           "export_participation": {
             "$ref": "#/$defs/no_manufacturing_output"
@@ -891,6 +968,7 @@
         }
       },
       "then": {
+        "$ref": "#/$defs/no_item_geometry",
         "properties": {
           "category": {
             "const": "private_benchmark_reference"
@@ -900,8 +978,17 @@
           },
           "preview_representation": {
             "properties": {
+              "kind": {
+                "enum": [
+                  "none",
+                  "metadata_card"
+                ]
+              },
               "authority": {
-                "const": "informational"
+                "enum": [
+                  "none",
+                  "informational"
+                ]
               }
             }
           },
@@ -925,6 +1012,7 @@
         }
       },
       "then": {
+        "$ref": "#/$defs/no_item_geometry",
         "properties": {
           "category": {
             "const": "public_engineering_knowledge"
@@ -1074,6 +1162,57 @@
           "const": "excluded"
         },
         "manufacturing_release": {
+          "const": "excluded"
+        }
+      }
+    },
+    "no_item_geometry": {
+      "type": "object",
+      "properties": {
+        "source_file": {
+          "type": "null"
+        },
+        "local_coordinate_system": {
+          "type": "null"
+        },
+        "feature_definition": {
+          "type": "null"
+        },
+        "mounting_interfaces": {
+          "maxItems": 0
+        },
+        "functional_interfaces": {
+          "maxItems": 0
+        },
+        "contact_points": {
+          "maxItems": 0
+        },
+        "movement_states": {
+          "maxItems": 0
+        },
+        "open_closed_states": {
+          "properties": {
+            "claimed": {
+              "const": false
+            },
+            "open_state_id": {
+              "type": "null"
+            },
+            "closed_state_id": {
+              "type": "null"
+            }
+          }
+        },
+        "keep_out_envelopes": {
+          "maxItems": 0
+        },
+        "maintenance_envelopes": {
+          "maxItems": 0
+        },
+        "material_manufacturing_intent": {
+          "type": "null"
+        },
+        "bom_participation": {
           "const": "excluded"
         }
       }

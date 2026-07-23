@@ -26,7 +26,9 @@ Every interface uses or references the reusable
 The semantic validator rejects missing or duplicate axes, non-finite values,
 zero vectors, non-normalized vectors, non-orthogonal bases, declared
 left/right-handedness that disagrees with the basis, missing owners, and frame
-units that disagree with the owner.
+units that disagree with the owner. Frame identities are unique across every
+frame owned by one item or process-context asset, including item, mounting,
+functional, and context-frame collections.
 
 Project placement composes:
 
@@ -106,6 +108,15 @@ Every mounting interface captures:
 - whether human confirmation is required; and
 - allowed replacement classes.
 
+The interface type constrains the feature kinds it may contain:
+`face_mount` uses planar faces, `hole_pattern` uses holes, `slot_pattern` uses
+slots, `pin_and_bushing` uses both pins and bushings, `rail_mount` uses rails,
+and the remaining typed interfaces use their correspondingly tagged feature.
+Applicable dimensions are finite and strictly positive. Non-applicable
+dimensions and adjustment ranges are `null`, rather than tolerated as
+uninterpreted extra data. A feature replacement class must be declared by its
+owning interface before it can be referenced.
+
 ## Functional interfaces
 
 `functional_interface_v1.schema.json` supports:
@@ -133,6 +144,13 @@ Every functional interface captures:
 - movement state;
 - permissible-contact status; and
 - dependent validation packs.
+
+Functional geometry is a tagged, mutually exclusive union. A `point` carries
+only a point, an `axis` only an origin and vector, a `plane` only an origin and
+normal, and region, contact-patch, envelope, tool-center-point, sensor-field,
+and line records carry only their kind-specific payload. Required values must
+exist, all values must be finite, directions must be non-zero, and geometry
+units must match the owning item or context asset.
 
 ## Contact interfaces
 
@@ -250,10 +268,12 @@ missing source. The UI must show degraded authority and blocked operations.
 
 State identities are unique within the owning item or context asset. Every
 functional interface and envelope state reference resolves to that owner.
-Items that claim open/closed behavior must name both an open and closed state;
-fixed items must not carry hidden open/closed references. Contact references
-resolve to existing functional interfaces. These closure rules are semantic
-validator requirements, not UI conventions.
+Items that claim open/closed behavior must name two distinct references whose
+state kinds are respectively `open` and `closed`; a fixed state cannot satisfy
+either role. Fixed items must not carry hidden open/closed references. Contact
+references resolve only to existing clamp, locator, support, or stop contact
+roles. These closure rules are semantic validator requirements, not UI
+conventions.
 
 ## Interface review questions
 

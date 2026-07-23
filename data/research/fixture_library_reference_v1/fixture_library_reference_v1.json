@@ -3116,13 +3116,13 @@
       "authority_level": "process_context_asset",
       "revision": {
         "revision_id": "r1",
-        "content_sha256": "ad8f80103605cba84cd831de55d3c0151abb85e15ed59168d2108d20bb552073",
+        "content_sha256": "5eb1be940a20795a04c2838c32bac1f6c73029b4dc8519b98b0a889579b2e973",
         "parent_revision_id": null,
         "author_identity": "FXD synthetic research",
         "created_at": "2026-07-23T00:00:00Z",
         "change_reason": "Initial non-authorizing research reference revision.",
         "source_revision": null,
-        "optimistic_concurrency_token": "e7c00e68e356262738b8281f87fe7b90085fb99ab1f0c581334b56354f109974",
+        "optimistic_concurrency_token": "e1edfad44410c13cd0df395df31ec325255a7b81fdfccd0d28d9da04dae99901",
         "publication_state": "published_research",
         "deprecation_state": "active",
         "restores_content_from_revision_id": null
@@ -3222,7 +3222,10 @@
         "separate_equipment_manifest": "excluded"
       },
       "delivery_authorization": null,
-      "geometry_source_item_id": null
+      "geometry_source_item_id": null,
+      "collision_authority": "provisional_only",
+      "envelope_authority": "provisional_only",
+      "access_authority": "provisional_only"
     },
     {
       "schema_version": "fxd-process-context-asset-v1",
@@ -3232,13 +3235,13 @@
       "authority_level": "process_context_asset",
       "revision": {
         "revision_id": "r1",
-        "content_sha256": "5492467f0fcd3d452ccf2f9568a1c83bfc54df5edefb22e8cd835c12347f6704",
+        "content_sha256": "664f8492ae7b376ceb49890a375d92cb995b065deedc2eeda412e1b2aeb6fcb2",
         "parent_revision_id": null,
         "author_identity": "FXD synthetic research",
         "created_at": "2026-07-23T00:00:00Z",
         "change_reason": "Initial non-authorizing research reference revision.",
         "source_revision": null,
-        "optimistic_concurrency_token": "10368a96b339541fd730cc9292f31d5d7b317960b5951cf549263a5213ff3d46",
+        "optimistic_concurrency_token": "50927b368324b663326fc217c9351e37eabb6ecd12a462fc6938bf11dc3b434c",
         "publication_state": "published_research",
         "deprecation_state": "active",
         "restores_content_from_revision_id": null
@@ -3361,7 +3364,10 @@
         "separate_equipment_manifest": "excluded"
       },
       "delivery_authorization": null,
-      "geometry_source_item_id": null
+      "geometry_source_item_id": null,
+      "collision_authority": "provisional_only",
+      "envelope_authority": "provisional_only",
+      "access_authority": "provisional_only"
     },
     {
       "schema_version": "fxd-process-context-asset-v1",
@@ -3371,13 +3377,13 @@
       "authority_level": "process_context_asset",
       "revision": {
         "revision_id": "r1",
-        "content_sha256": "d727e10bffede0455a2ca1dbe0ab8bf333b8ef7df2cf25c485f8386c1d5014fc",
+        "content_sha256": "27c9fa8ec0e75d0f77a21e9aa8bcb3d8d2e82b41b364c33eb7c89083407d0129",
         "parent_revision_id": null,
         "author_identity": "FXD synthetic research",
         "created_at": "2026-07-23T00:00:00Z",
         "change_reason": "Initial non-authorizing research reference revision.",
         "source_revision": null,
-        "optimistic_concurrency_token": "03a10c7f9801dcb6101b70fcc69ff6e77577879dcb1c47aa9d997985b7abd671",
+        "optimistic_concurrency_token": "0503309f69c8ec4df970a60e355c1c4f5ecd9b6990b328c2a08ab7ab325278cc",
         "publication_state": "published_research",
         "deprecation_state": "active",
         "restores_content_from_revision_id": null
@@ -3446,7 +3452,10 @@
         "separate_equipment_manifest": "excluded"
       },
       "delivery_authorization": null,
-      "geometry_source_item_id": null
+      "geometry_source_item_id": null,
+      "collision_authority": "provisional_only",
+      "envelope_authority": "provisional_only",
+      "access_authority": "provisional_only"
     },
     {
       "schema_version": "fxd-process-context-asset-v1",
@@ -3456,13 +3465,13 @@
       "authority_level": "process_context_asset",
       "revision": {
         "revision_id": "r1",
-        "content_sha256": "2b3b23c7ed78f324b4d3f7ab8c9f1c8b7e04046828f9f6a01985fb258aa319f5",
+        "content_sha256": "879e25255cc58269a722b39ae7afd23cc20f0c1d4a258d5961b97548013cae65",
         "parent_revision_id": null,
         "author_identity": "FXD synthetic research",
         "created_at": "2026-07-23T00:00:00Z",
         "change_reason": "Initial non-authorizing research reference revision.",
         "source_revision": null,
-        "optimistic_concurrency_token": "b25dbd17e131b284f61340394d4d9204a26b24fe2394d29ca7b7e7ccddf3d3f5",
+        "optimistic_concurrency_token": "409913ee5ad588cd25d0239ac05b6106454c4ec4dd0836eeb5ee06452b709b2b",
         "publication_state": "published_research",
         "deprecation_state": "active",
         "restores_content_from_revision_id": null
@@ -3561,7 +3570,10 @@
         "separate_equipment_manifest": "excluded"
       },
       "delivery_authorization": null,
-      "geometry_source_item_id": null
+      "geometry_source_item_id": null,
+      "collision_authority": "provisional_only",
+      "envelope_authority": "provisional_only",
+      "access_authority": "provisional_only"
     },
     {
       "schema_version": "fxd-process-context-asset-v1",
@@ -3571,13 +3583,13 @@
       "authority_level": "process_context_asset",
       "revision": {
         "revision_id": "r1",
-        "content_sha256": "bba446dde50fcf0d4a1c107d5c5a6a84d8c8ab42d8229ef46a3f3ffc0c1067d2",
+        "content_sha256": "e2536b03762cbe78422ca4518289417cbbb2e96563432fba71d75d1049770991",
         "parent_revision_id": null,
         "author_identity": "FXD synthetic research",
         "created_at": "2026-07-23T00:00:00Z",
         "change_reason": "Initial non-authorizing research reference revision.",
         "source_revision": null,
-        "optimistic_concurrency_token": "55fa53cd22a8a5a173593773673a48b21901c087d3b6ec5b5aeec6a2548040a6",
+        "optimistic_concurrency_token": "c0523cbe771a33266827dc0b1da3f13243f674519fff54fd5cfc7eae05500c17",
         "publication_state": "published_research",
         "deprecation_state": "active",
         "restores_content_from_revision_id": null
@@ -3675,7 +3687,10 @@
         "separate_equipment_manifest": "excluded"
       },
       "delivery_authorization": null,
-      "geometry_source_item_id": null
+      "geometry_source_item_id": null,
+      "collision_authority": "provisional_only",
+      "envelope_authority": "provisional_only",
+      "access_authority": "provisional_only"
     },
     {
       "schema_version": "fxd-process-context-asset-v1",
@@ -3685,13 +3700,13 @@
       "authority_level": "process_context_asset",
       "revision": {
         "revision_id": "r1",
-        "content_sha256": "a9405649112340695cef8da37ce0f0e7db365d46786d35549c4f6b56a3852c5f",
+        "content_sha256": "d48a445b0d4a3e5be2d69ae6aa0df2f5b831c9a1660e94b62efcdbca386cc109",
         "parent_revision_id": null,
         "author_identity": "FXD synthetic research",
         "created_at": "2026-07-23T00:00:00Z",
         "change_reason": "Initial non-authorizing research reference revision.",
         "source_revision": null,
-        "optimistic_concurrency_token": "6cf08eda9f6b88dafcb336698f6c375e2f604ecbb33cb5922afcc3285222ecc4",
+        "optimistic_concurrency_token": "6d6caf438b3fdb9c060bf3a040037c03d00c223eb82a9a847bdbe9a1fefd66aa",
         "publication_state": "published_research",
         "deprecation_state": "active",
         "restores_content_from_revision_id": null
@@ -3766,7 +3781,10 @@
         "separate_equipment_manifest": "excluded"
       },
       "delivery_authorization": null,
-      "geometry_source_item_id": null
+      "geometry_source_item_id": null,
+      "collision_authority": "provisional_only",
+      "envelope_authority": "provisional_only",
+      "access_authority": "provisional_only"
     },
     {
       "schema_version": "fxd-process-context-asset-v1",
@@ -3776,13 +3794,13 @@
       "authority_level": "process_context_asset",
       "revision": {
         "revision_id": "r1",
-        "content_sha256": "9d2a1b1e9cd1999d7f3abeba8363c6368c72d7b83b500af2078903f00d2ff160",
+        "content_sha256": "15353385b27412142998204e13651d35e6655552a5515be7c25f16adc77020ce",
         "parent_revision_id": null,
         "author_identity": "FXD synthetic research",
         "created_at": "2026-07-23T00:00:00Z",
         "change_reason": "Initial non-authorizing research reference revision.",
         "source_revision": null,
-        "optimistic_concurrency_token": "2b9e59641dfa4665d2968a6a3b0173dff0508cf16f8877eea5a92a9455176cd3",
+        "optimistic_concurrency_token": "42d0066b9a3838adbf170074b87ceff4e88ea7bb70edd167100bea17e7ad62c8",
         "publication_state": "published_research",
         "deprecation_state": "active",
         "restores_content_from_revision_id": null
@@ -3906,7 +3924,10 @@
         "separate_equipment_manifest": "excluded"
       },
       "delivery_authorization": null,
-      "geometry_source_item_id": null
+      "geometry_source_item_id": null,
+      "collision_authority": "provisional_only",
+      "envelope_authority": "provisional_only",
+      "access_authority": "provisional_only"
     },
     {
       "schema_version": "fxd-process-context-asset-v1",
@@ -3916,13 +3937,13 @@
       "authority_level": "process_context_asset",
       "revision": {
         "revision_id": "r1",
-        "content_sha256": "0995a75fcd48dcb837937dbc4515a0100efa2887983cf087213af4c17503cf9d",
+        "content_sha256": "bc3f36db45cd0a4048b44fca35766ea993227f1dc1eb029d313fdba8dcdff64e",
         "parent_revision_id": null,
         "author_identity": "FXD synthetic research",
         "created_at": "2026-07-23T00:00:00Z",
         "change_reason": "Initial non-authorizing research reference revision.",
         "source_revision": null,
-        "optimistic_concurrency_token": "48b700610b896fd43fec5c11331ce5e799dae3a01a642b5a526ed9f7f03a5dd1",
+        "optimistic_concurrency_token": "6e8fcace79325764bbcc7f581b316f3db8205aad24255e65e1be73a08fff6d29",
         "publication_state": "published_research",
         "deprecation_state": "active",
         "restores_content_from_revision_id": null
@@ -4021,7 +4042,10 @@
         "separate_equipment_manifest": "excluded"
       },
       "delivery_authorization": null,
-      "geometry_source_item_id": null
+      "geometry_source_item_id": null,
+      "collision_authority": "provisional_only",
+      "envelope_authority": "provisional_only",
+      "access_authority": "provisional_only"
     }
   ],
   "complete_item_examples": [

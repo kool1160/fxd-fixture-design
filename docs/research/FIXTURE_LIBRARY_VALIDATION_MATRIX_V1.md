@@ -60,8 +60,8 @@ deterministic blocker.
 | `fxd_parametric_component` | required when manufactured or purchased | permitted after exact generation and validation | permitted when a supported 2D definition exists | permitted | required | human confirmation required |
 | `exact_private_imported_cad` | permitted | permitted only by owner policy | excluded unless an authorized 2D definition exists | permitted as reference | required | human confirmation required |
 | `supplier_authorized_exact_cad` | required when selected | permitted only when supplier terms allow | excluded | permitted subject to terms | required | human confirmation required |
-| `metadata_only_commercial_component` | permitted as unresolved supplier line | excluded | excluded | permitted as metadata callout | required with missing-geometry warning | blocks when missing if exact selection is required |
-| `provisional_review_envelope` | permitted only as unresolved generic line | excluded | excluded | permitted only as visibly provisional review geometry | required with provisional label | excluded |
+| `metadata_only_commercial_component` | excluded; a separate non-deliverable advisory hint is permitted | excluded | excluded | permitted as metadata callout | required with missing-geometry warning | blocks when missing if exact selection is required |
+| `provisional_review_envelope` | excluded; a separate non-deliverable advisory hint is permitted | excluded | excluded | permitted only as visibly provisional review geometry | required with provisional label | excluded |
 | `user_authored_reusable_component` | required when placed | permitted after project validation | permitted for supported manufactured profiles | permitted | required | human confirmation required |
 | `fixture_family_template` | excluded | excluded | excluded | excluded | permitted as planning context | excluded |
 | `shop_standard` | permitted as provenance | excluded | excluded | permitted as attributed notes | required when it affects a decision | human confirmation required |
@@ -102,7 +102,7 @@ weaker authority controls.
 |---|---|---|---|---|---|---|
 | FXD standard parametric primitives | required when used | permitted after exact validation | permitted when manufactured as 2D stock | permitted | required | human confirmation required |
 | Shop-standard packs | permitted as attributed decision provenance | excluded | excluded | permitted as attributed notes | required when applied | human confirmation required |
-| Private purchased tooling | required when selected; unresolved if metadata-only | permitted only for authorized exact geometry | excluded | permitted subject to source terms | required | human confirmation required |
+| Private purchased tooling | required only for selected exact tooling; metadata-only candidates use non-deliverable advisory hints | permitted only for authorized exact geometry | excluded | permitted subject to source terms | required | human confirmation required |
 | User-created reusable components | required when used | permitted after validation | permitted for supported manufactured profiles | permitted | required | human confirmation required |
 | Fixture-family templates | excluded | excluded | excluded | excluded | permitted as planning context | excluded |
 | Process-context assets | excluded from fixture BOM; separately authorized equipment has a separate BOM | excluded from fixture STEP; separately authorized equipment has a separate manifest | excluded from fixture DXF | permitted as visibly labeled reference | required when selected | excluded from fixture release |
@@ -115,8 +115,8 @@ weaker authority controls.
 2. A provisional envelope may produce a conflict finding, but never an exact
    clearance pass.
 3. Metadata-only items are absent geometry, not zero-volume geometry.
-4. A process-context asset inherits the limits of its underlying geometry
-   authority.
+4. A process-context asset declares collision, envelope, and access authority,
+   and every declaration is bounded by its underlying geometry authority.
 5. Missing linked exact geometry blocks exact operations and cannot fall back
    silently to a preview.
 6. A changed digest or revision makes prior exact evidence stale.
@@ -140,6 +140,12 @@ separate BOM classification, project/customer delivery intent, validation
 evidence, and reconciliation evidence. It remains excluded from every fixture
 manufacturing output. Geometry authority still bounds collision and access
 authority.
+
+For provisional geometry, `collision_authority`, `envelope_authority`, and
+`access_authority` are `provisional_only`, collision cannot be authoritative,
+and every envelope remains visibly provisional. Exact collision, envelope, or
+access authority requires governed exact source evidence. Functional
+representations cannot elevate a provisional context to exact authority.
 
 ## Loading and unloading rules
 
@@ -174,12 +180,17 @@ operation, ergonomic condition, guarding, or safety.
 ## BOM rules
 
 - exact selected purchased tooling uses exact supplier/model/revision metadata;
-- metadata-only tooling uses an unresolved line and blocks when exact selection
-  is required;
+- metadata-only tooling may carry a non-deliverable advisory BOM hint and
+  blocks when exact selection is required;
 - provisional envelopes never create an exact supplier part;
 - manufactured FXD components reconcile geometry, revision, material, and
   quantity;
 - private benchmark and public knowledge records never enter BOM.
+
+An advisory BOM hint is not a BOM line, has
+`deliverable_eligible: false`, and cannot participate in a fixture or separate
+equipment deliverable without replacement by an independently authorized
+exact item and explicit reconciliation.
 
 ## STEP and DXF rules
 

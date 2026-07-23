@@ -110,6 +110,7 @@
         "kind": {
           "enum": [
             "point",
+            "line",
             "axis",
             "plane",
             "bounded_region",
@@ -230,9 +231,176 @@
             "number",
             "null"
           ],
-          "minimum": 0
+          "exclusiveMinimum": 0
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "point",
+                  "tool_center_point"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "point": {
+                "type": "array"
+              },
+              "axis": {
+                "type": "null"
+              },
+              "normal": {
+                "type": "null"
+              },
+              "bounds_min": {
+                "type": "null"
+              },
+              "bounds_max": {
+                "type": "null"
+              },
+              "radius": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "line",
+                  "axis"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "point": {
+                "type": "array"
+              },
+              "axis": {
+                "type": "array"
+              },
+              "normal": {
+                "type": "null"
+              },
+              "bounds_min": {
+                "type": "null"
+              },
+              "bounds_max": {
+                "type": "null"
+              },
+              "radius": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "plane"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "point": {
+                "type": "array"
+              },
+              "axis": {
+                "type": "null"
+              },
+              "normal": {
+                "type": "array"
+              },
+              "bounds_min": {
+                "type": "null"
+              },
+              "bounds_max": {
+                "type": "null"
+              },
+              "radius": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "bounded_region",
+                  "envelope",
+                  "sensor_field"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "point": {
+                "type": "null"
+              },
+              "axis": {
+                "type": "null"
+              },
+              "normal": {
+                "type": "null"
+              },
+              "bounds_min": {
+                "type": "array"
+              },
+              "bounds_max": {
+                "type": "array"
+              },
+              "radius": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "contact_patch"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "point": {
+                "type": "array"
+              },
+              "axis": {
+                "type": "null"
+              },
+              "normal": {
+                "type": "array"
+              },
+              "bounds_min": {
+                "type": "array"
+              },
+              "bounds_max": {
+                "type": "array"
+              },
+              "radius": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      ]
     }
   }
 }

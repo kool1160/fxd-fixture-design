@@ -50,7 +50,9 @@ commit, redistribution, STEP export, or derivative publication.
 ### `metadata_only_commercial_component`
 
 Supplier and model metadata without exact geometry. It may support sourcing,
-recommendation, interface questions, and an unresolved BOM line.
+recommendation, and interface questions. An optional `advisory_bom_hint` can
+describe an unresolved candidate, but `deliverable_eligible` is always false
+and `bom_participation` remains `excluded`.
 
 It is excluded from exact collision, exact clearance, STEP, DXF, and any claim
 that depends on physical geometry.
@@ -62,6 +64,8 @@ broad-phase review and communicate missing evidence.
 
 It never silently becomes exact. Exact collision, exact clearance, release,
 supplier identity, and manufacturing output remain blocked or excluded.
+Fixture BOM participation is excluded; a generic review placeholder, when
+needed, uses the separate non-deliverable `advisory_bom_hint`.
 
 ### `user_authored_reusable_component`
 
@@ -109,6 +113,30 @@ with source provenance and original FXD wording.
 
 It may support deterministic retrieval and AI recommendation, but not geometry
 truth, supplier claims, standards compliance, validation passes, or release.
+
+## Authoritative machine contract
+
+`scripts/validate_fixture_library_research.py` contains the single
+`AUTHORITY_RULES` table used by semantic validation. JSON Schema mirrors the
+locally expressible constraints, but does not define a competing authority
+table.
+
+| Authority | Source evidence | Geometry, frames, interfaces, material, and states | BOM and fixture output | Separate equipment |
+|---|---|---|---|---|
+| `fxd_parametric_component` | no imported source file; traced parametric definition | exact generated definition, owned frame, material intent, and typed interfaces permitted | manufactured participation requires deterministic validation and human release | prohibited |
+| `exact_private_imported_cad` | private authorized identity, SHA-256, usage evidence, storage, units, and revision | exact imported geometry and owned frame; no competing parametric definition | owner policy, validation, and human release govern BOM/output | may source a separately authorized equipment record |
+| `supplier_authorized_exact_cad` | supplier, model, supplier-authorized source, SHA-256, license evidence, storage, units, and revision | exact imported geometry and owned frame; no competing parametric definition | supplier terms, validation, and human release govern BOM/output | may source a separately authorized equipment record |
+| `metadata_only_commercial_component` | metadata only; source-file geometry prohibited | all geometry-bearing fields prohibited | deliverable BOM and manufacturing output excluded; advisory hint only | prohibited |
+| `provisional_review_envelope` | source-file geometry prohibited | visibly provisional representation only; exact features and manufacturing interfaces prohibited | deliverable BOM and manufacturing output excluded; advisory hint only | prohibited |
+| `user_authored_reusable_component` | author and exactly one parametric or user-authored exact source form | owned frame and mounting interface required; revisioned function/material evidence permitted | validation and human release required | prohibited unless a separate context-delivery record exists |
+| `fixture_family_template` | no source-file geometry | no geometry-bearing fields | BOM, STEP, DXF, drawings, and release excluded | prohibited |
+| `shop_standard` | attributed standard provenance, not CAD | no geometry-bearing fields | deliverable BOM and manufacturing geometry excluded | prohibited |
+| `process_context_asset` | dedicated context record names any governed geometry source | collision, envelope, and access authority derive from the source | fixture BOM, STEP, DXF, and release excluded | dedicated schema alone can authorize a separate manifest |
+| `private_benchmark_reference` | opaque benchmark metadata only | public record carries no geometry-bearing fields | BOM and manufacturing output excluded | prohibited |
+| `public_engineering_knowledge` | public source identity and original FXD paraphrase only | all geometry-bearing fields prohibited | BOM and manufacturing output excluded | prohibited |
+
+Changing a label never carries geometry or output rights across rows. Any
+authority transition creates a new immutable revision and revalidation.
 
 ## Privacy classifications
 
@@ -196,7 +224,8 @@ Every private benchmark records:
 - rights holder or grantor and authorship identities;
 - rights basis;
 - permitted use, asset, and metadata-field scope;
-- approval timestamp and optional expiry;
+- approval timestamp, audited release-decision timestamp and state, and
+  optional expiry;
 - revocation state, timestamp, and reason;
 - deletion and backup disposition;
 - export and public-release permission;
@@ -212,10 +241,20 @@ the audit disposition, and drives deletion/backup handling in the future
 private store. Public history may retain only already-authorized public
 material and non-sensitive audit evidence as applicable law and policy allow.
 
+Release validation is reproducible and does not read the machine clock. The
+recorded decision timestamp must be at or after approval, strictly before an
+expiry when present, and before any revocation. Only explicitly release-capable
+rights bases can approve selected public release. Unknown, pending, denied,
+incomplete, expired, or revoked rights fail closed.
+
 The public validator recursively rejects likely Windows paths, Unix home or
 private paths, UNC paths, `file://` references, CAD/native-model filenames,
 image filenames, and obvious customer/employer asset-path strings in every
-public research JSON value. Ordinary public HTTP(S) source URLs remain allowed.
+public research JSON value. Only `canonical_url` fields in validated public
+source records receive the URL exemption. HTTPS strings in provenance, notes,
+benchmarks, and other fields remain subject to CAD, archive, image,
+customer/employer, private-network, private-storage, local, UNC, and `file://`
+checks.
 This scanning is defense in depth; a future private implementation still
 requires separately controlled local storage, access control, encryption
 policy, backup boundaries, export controls, and qualified rights review before

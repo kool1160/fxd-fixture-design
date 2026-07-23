@@ -181,9 +181,18 @@ The schema does not use a standalone permission boolean. Its structured
 rights-and-release record must identify the grantor, authorship, rights basis,
 permitted use, permitted asset identities, permitted metadata fields, approval
 and expiry, revocation, deletion/backup disposition, export/public permissions,
-audit identity, retention, access control, controlled storage, and encryption
-expectation. Public release fails closed unless every released field and asset
-is an explicit subset of this record.
+audit identity, retention, access control, controlled storage, encryption
+expectation, and an audited release-decision state and timestamp. Public
+release fails closed unless the decision is approved under a release-capable
+rights basis and every released field and asset is an explicit subset of this
+record.
+
+Release chronology is deterministic and does not use the validator machine's
+wall clock. Approval must occur no later than the audited release decision.
+When an expiry exists, it must follow approval and the release decision must
+precede it. Revoked, denied, pending, incomplete, unknown, expired-at-decision,
+or otherwise non-releasable rights block selection. Revocation cannot predate
+approval and blocks later release and export.
 
 Revocation immediately blocks new release and export, records timestamp and
 reason, and invokes the recorded deletion and backup disposition. Expiry and
@@ -225,9 +234,14 @@ examples remain usable without any private asset.
 
 The public validator scans all research JSON string values and rejects likely
 Windows local paths, Unix home/private paths, UNC/network paths, `file://`
-references, CAD/native-model filenames, image filenames, and obvious
-customer/employer asset paths. This is a public-repository guard, not a claim
-that regular expressions replace rights review or controlled storage.
+references, CAD/native-model/archive filenames, image filenames, private
+network or storage indicators, and obvious customer/employer asset paths.
+HTTPS is not a blanket exemption: only the source register's explicitly typed
+`canonical_url` fields may bypass ordinary path scanning, and those URLs still
+must be canonical public HTTPS locations under the source schema. URLs in
+provenance, notes, descriptions, and other fields receive the full leakage
+scan. This is a public-repository guard, not a claim that regular expressions
+replace rights review or controlled storage.
 
 ## Synthetic examples
 

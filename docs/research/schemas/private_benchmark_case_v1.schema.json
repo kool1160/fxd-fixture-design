@@ -259,6 +259,17 @@
               "revocation_state": {
                 "const": "not_revoked"
               },
+              "rights_basis": {
+                "enum": [
+                  "original_synthetic_work",
+                  "owner_authorization",
+                  "contractual_permission",
+                  "employment_or_assignment_rights"
+                ]
+              },
+              "release_decision_state": {
+                "const": "approved"
+              },
               "export_permission": {
                 "const": true
               },
@@ -323,6 +334,8 @@
         "permitted_asset_scope",
         "permitted_metadata_fields",
         "approval_timestamp",
+        "release_decision_timestamp",
+        "release_decision_state",
         "expiry_timestamp",
         "revocation_state",
         "revocation_timestamp",
@@ -367,6 +380,18 @@
         "approval_timestamp": {
           "type": "string",
           "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+        },
+        "release_decision_timestamp": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+        },
+        "release_decision_state": {
+          "enum": [
+            "approved",
+            "denied",
+            "pending_review",
+            "not_requested"
+          ]
         },
         "expiry_timestamp": {
           "type": [

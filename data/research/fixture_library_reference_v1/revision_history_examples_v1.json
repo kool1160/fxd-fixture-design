@@ -1,0 +1,115 @@
+{
+  "schema_version": "fxd-library-revision-history-state-v1",
+  "histories": [
+    {
+      "history_id": "history-synthetic-support-pad",
+      "subject_id": "synthetic-support-pad-history-subject",
+      "current_revision_id": "r3",
+      "revisions": [
+        {
+          "revision": {
+            "revision_id": "r1",
+            "content_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+            "parent_revision_id": null,
+            "author_identity": "FXD synthetic research",
+            "created_at": "2026-07-23T00:00:00Z",
+            "change_reason": "Create the synthetic root revision.",
+            "source_revision": null,
+            "optimistic_concurrency_token": "fd1167ec024f142b2b4912f3a08877399c6105bd3c57b628e86ce661ec440f09",
+            "publication_state": "published_research",
+            "deprecation_state": "superseded",
+            "restores_content_from_revision_id": null
+          },
+          "change_kind": "root",
+          "current_published_successor": false,
+          "evidence_invalidated": false,
+          "invalidation_reason": null
+        },
+        {
+          "revision": {
+            "revision_id": "r2",
+            "content_sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+            "parent_revision_id": "r1",
+            "author_identity": "FXD synthetic research",
+            "created_at": "2026-07-23T01:00:00Z",
+            "change_reason": "Demonstrate an immutable published update.",
+            "source_revision": null,
+            "optimistic_concurrency_token": "610f92bab4c2edeb8e58369a81c7da84c672e999227a96e695dfd0288dc222a6",
+            "publication_state": "published_research",
+            "deprecation_state": "superseded",
+            "restores_content_from_revision_id": null
+          },
+          "change_kind": "update",
+          "current_published_successor": false,
+          "evidence_invalidated": true,
+          "invalidation_reason": "The geometry update makes r1-dependent evidence stale."
+        },
+        {
+          "revision": {
+            "revision_id": "r3",
+            "content_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+            "parent_revision_id": "r2",
+            "author_identity": "FXD synthetic research",
+            "created_at": "2026-07-23T02:00:00Z",
+            "change_reason": "Create a new rollback revision restoring r1 content.",
+            "source_revision": null,
+            "optimistic_concurrency_token": "87df2167fc6fe40f974359a31d596741f593eb19661ff1b7f82fce1616a2c7d0",
+            "publication_state": "published_research",
+            "deprecation_state": "active",
+            "restores_content_from_revision_id": "r1"
+          },
+          "change_kind": "rollback",
+          "current_published_successor": true,
+          "evidence_invalidated": true,
+          "invalidation_reason": "Rollback creates r3 and invalidates evidence derived from r2."
+        }
+      ],
+      "publication_attempts": [
+        {
+          "attempt_id": "publish-r2",
+          "proposed_revision_id": "r2",
+          "expected_parent_revision_id": "r1",
+          "expected_parent_concurrency_token": "fd1167ec024f142b2b4912f3a08877399c6105bd3c57b628e86ce661ec440f09",
+          "decision_timestamp": "2026-07-23T01:05:00Z",
+          "disposition": "accepted"
+        },
+        {
+          "attempt_id": "publish-r3",
+          "proposed_revision_id": "r3",
+          "expected_parent_revision_id": "r2",
+          "expected_parent_concurrency_token": "610f92bab4c2edeb8e58369a81c7da84c672e999227a96e695dfd0288dc222a6",
+          "decision_timestamp": "2026-07-23T02:05:00Z",
+          "disposition": "accepted"
+        }
+      ]
+    }
+  ],
+  "project_pins": [
+    {
+      "pin_id": "pin-current-explicit-migration",
+      "project_id": "synthetic-project-migrated",
+      "history_id": "history-synthetic-support-pad",
+      "subject_id": "synthetic-support-pad-history-subject",
+      "pinned_revision_id": "r3",
+      "automatic_adoption": false,
+      "migration": {
+        "from_revision_id": "r1",
+        "to_revision_id": "r3",
+        "engineer_decision_id": "synthetic-engineer-decision-001",
+        "decision_timestamp": "2026-07-23T03:00:00Z",
+        "silent_adoption": false,
+        "evidence_invalidated": true,
+        "invalidation_reason": "Explicit migration invalidates evidence pinned to r1."
+      }
+    },
+    {
+      "pin_id": "pin-historical-root",
+      "project_id": "synthetic-project-pinned-root",
+      "history_id": "history-synthetic-support-pad",
+      "subject_id": "synthetic-support-pad-history-subject",
+      "pinned_revision_id": "r1",
+      "automatic_adoption": false,
+      "migration": null
+    }
+  ]
+}
