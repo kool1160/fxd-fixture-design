@@ -109,7 +109,11 @@ powershell.exe -ExecutionPolicy Bypass -File ".\scripts\run_m32_visual_review.ps
 The command creates a persistent, redacted bundle outside the repository and
 opens the actual FXD Qt/VTK application on the governed synthetic compact
 five-station project. The application stays open until the reviewer closes
-it. The bundle retains its synthetic STEP, reloadable FXD project, reports,
+it. The launcher reports `Application launch status: ready` only after the
+current deterministically valid OCP assembly has populated the native VTK
+review scene and the initial application screenshot exists. A child that exits
+or does not become ready within the bounded startup interval fails the command.
+The bundle retains its synthetic STEP, reloadable FXD project, reports,
 initial screenshots, and qualified-engineering checklist after closure. Provider
 configuration is removed only from child processes; no network provider request
 is permitted. Passing software checks does not approve the fixture or replace

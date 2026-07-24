@@ -161,6 +161,20 @@ def _m32_visual_review_station_count(plan: object) -> int:
     return station_count
 
 
+def _require_m32_visual_review_authoring(plan: object, authored: object) -> None:
+    """Require the current valid OCP assembly and its separate review boundary."""
+    validation = getattr(authored, "validation", None)
+    components = tuple(getattr(authored, "components", ()))
+    if (getattr(plan, "authoring_state", None) != "provisional"
+            or getattr(authored, "provisional", True)
+            or tuple(getattr(authored, "review_labels", ()))
+            or validation is None
+            or not getattr(validation, "valid", False)
+            or not components
+            or not all(component.topology.solids >= 1 for component in components)):
+        raise RuntimeError("M32 visual-review OCP authoring evidence is invalid")
+
+
 @dataclass(frozen=True)
 class _ValidationRecord:
     """UI-only normalized finding. It never changes engineering decisions."""
@@ -5012,12 +5026,13 @@ class FxdWorkbenchWindow(QMainWindow):
         if self.workflow is None or not self.workflow.has_accepted_manufacturing_orientation():
             raise RuntimeError("M32 visual-review project lacks accepted manufacturing orientation")
         authored = author_fixture_build(plan, self.project.product, self.kernel)
-        if (not authored.provisional
-                or authored.review_labels != ("PROVISIONAL", "NOT APPROVED", "INVALID BUILD PLAN")
-                or not authored.components
-                or not all(component.topology.solids >= 1 for component in authored.components)):
-            raise RuntimeError("M32 visual-review OCP authoring evidence is invalid")
+        _require_m32_visual_review_authoring(plan, authored)
         self.authored_fixture_build = authored
+        # Project persistence records the session as review-only, while this
+        # exact re-authoring result is valid. Refresh after caching it so the
+        # application never carries the obsolete "invalid build plan" text
+        # into the qualified-review screenshot.
+        self._refresh_all()
         items = self._review_geometry_items()
         authored_items = [item for item in items if item.get("kind") == "authored_mesh"]
         product_items = [item for item in items if item.get("kind") == "product_review_mesh"]
@@ -5046,11 +5061,11 @@ class FxdWorkbenchWindow(QMainWindow):
         if hasattr(self, "validation_source_selector"):
             self.validation_source_selector.setCurrentText("Fixture Build Plan")
         self.setWindowTitle(
-            "FXD M32 VISUAL REVIEW - PROVISIONAL / NOT APPROVED / INVALID BUILD PLAN"
+            "FXD M32 VISUAL REVIEW - VALIDATED GEOMETRY / REVIEW ONLY / NOT APPROVED"
         )
         self.statusBar().showMessage(
             "M32 compact precedent-informed five-station review loaded with real OCP "
-            "solids; qualified engineering review remains required."
+            "solids and review-only export evidence; qualified engineering review remains required."
         )
         QApplication.processEvents()
         screenshot_path.parent.mkdir(parents=True, exist_ok=True)

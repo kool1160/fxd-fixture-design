@@ -4,6 +4,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 $script:M32VisualRunnerPath = $PSCommandPath
 $script:M32VisualExpectedBranch = "milestone-32-multi-station-weld-fixture-synthesis"
+$script:M32VisualStartupTimeoutSeconds = 120
 $script:M32VisualProviderEnvironmentNames = @(
     "OPENAI_API_KEY", "FXD_OPENAI_MODEL", "FXD_OPENAI_LIVE_SMOKE",
     "FXD_AI_MODEL", "FXD_AI_PROVIDER", "FXD_AI_ENDPOINT", "FXD_AI_API_KEY"
@@ -73,11 +74,33 @@ function Invoke-M32VisualApplication {
         -Arguments @(
             ".\fxd_qt_app.py", "--project", $ProjectPath,
             "--require-m32-visual-review", "--screenshot", $ScreenshotPath
-        )
+    )
     [void]$process.Start()
-    Write-Host "Application launch status: launched; loading strict OCP/VTK visual review"
+    Write-Host "Application launch status: loading strict OCP/VTK visual review"
+    Wait-M32VisualApplicationReady -Process $process -ScreenshotPath $ScreenshotPath
+    Write-Host "Application launch status: ready; strict OCP/VTK visual review loaded"
     Write-Host "The FXD application will remain open until you close it manually."
     Wait-M32VisualApplicationProcess -Process $process -ScreenshotPath $ScreenshotPath
+}
+
+function Wait-M32VisualApplicationReady {
+    param(
+        [System.Diagnostics.Process]$Process,
+        [string]$ScreenshotPath,
+        [int]$TimeoutSeconds = $script:M32VisualStartupTimeoutSeconds
+    )
+    $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
+    while ([DateTime]::UtcNow -lt $deadline) {
+        if ((Test-Path -LiteralPath $ScreenshotPath -PathType Leaf) -and
+                (Get-Item -LiteralPath $ScreenshotPath).Length -gt 0) {
+            return
+        }
+        if ($Process.HasExited) {
+            throw "The FXD M32 visual-review application exited before startup completed."
+        }
+        Start-Sleep -Milliseconds 100
+    }
+    throw "The FXD M32 visual-review application did not become ready within $TimeoutSeconds seconds."
 }
 
 function Wait-M32VisualApplicationProcess {

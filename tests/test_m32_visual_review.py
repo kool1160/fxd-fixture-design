@@ -8,7 +8,11 @@ from dataclasses import replace
 from hashlib import sha256
 from pathlib import Path
 
-from fxd_qt_app import _m32_visual_review_station_count
+from fxd_qt_app import (
+    _m32_visual_review_station_count,
+    _require_m32_visual_review_authoring,
+)
+from fxd_geometry import OcpKernel, author_fixture_build
 from fxd_geometry.project import FxdProject
 from scripts.m32_self_check import VISUAL_REVIEW_SCHEMA
 from scripts.m32_visual_review import (
@@ -67,6 +71,10 @@ class M32VisualReviewBundleTests(unittest.TestCase):
             assert plan is not None and plan.multi_station_layout is not None
 
             self.assertEqual(_m32_visual_review_station_count(plan), 5)
+            authored = author_fixture_build(plan, restored.product, OcpKernel())
+            self.assertFalse(authored.provisional)
+            self.assertEqual(authored.review_labels, ())
+            _require_m32_visual_review_authoring(plan, authored)
 
             layout = plan.multi_station_layout
             old_reduced_layout = replace(
@@ -78,6 +86,17 @@ class M32VisualReviewBundleTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "compact precedent-informed"):
                 _m32_visual_review_station_count(
                     replace(plan, multi_station_layout=old_reduced_layout)
+                )
+            with self.assertRaisesRegex(RuntimeError, "authoring evidence is invalid"):
+                _require_m32_visual_review_authoring(
+                    plan,
+                    replace(
+                        authored,
+                        provisional=True,
+                        review_labels=(
+                            "PROVISIONAL", "NOT APPROVED", "INVALID BUILD PLAN",
+                        ),
+                    ),
                 )
 
     def test_persisted_reports_are_redacted_and_contain_no_private_absolute_path(self):

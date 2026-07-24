@@ -26,9 +26,31 @@ Describe "M32 Windows visual-review launcher" {
         $content.Contains('.\fxd_qt_app.py') | Should Be $true
         $content.Contains('"--project"') | Should Be $true
         $content.Contains('"--require-m32-visual-review"') | Should Be $true
+        $ready = $content.IndexOf('Wait-M32VisualApplicationReady -Process $process')
+        $manualClose = $content.IndexOf('Wait-M32VisualApplicationProcess -Process $process')
+        ($ready -ge 0) | Should Be $true
+        ($manualClose -gt $ready) | Should Be $true
         $content.Contains('$Process.WaitForExit()') | Should Be $true
         $content.Contains('.Kill(') | Should Be $false
         $content.Contains('CloseMainWindow') | Should Be $false
+    }
+
+    It "requires the strict application to become ready before manual review" {
+        $screenshot = Join-Path $TestDrive "ready.png"
+        $success = Start-Process -FilePath "powershell.exe" -ArgumentList @(
+            "-NoProfile", "-Command",
+            "Set-Content -LiteralPath '$screenshot' -Value 'synthetic-ready'; Start-Sleep -Milliseconds 500; exit 0"
+        ) -PassThru -WindowStyle Hidden
+        { Wait-M32VisualApplicationReady -Process $success `
+            -ScreenshotPath $screenshot -TimeoutSeconds 5 } | Should Not Throw
+        $success.WaitForExit()
+
+        $failure = Start-Process -FilePath "powershell.exe" -ArgumentList @(
+            "-NoProfile", "-Command", "exit 7"
+        ) -PassThru -WindowStyle Hidden
+        { Wait-M32VisualApplicationReady -Process $failure `
+            -ScreenshotPath (Join-Path $TestDrive "missing-ready.png") `
+            -TimeoutSeconds 5 } | Should Throw
     }
 
     It "turns a failed application process into a launcher failure" {
