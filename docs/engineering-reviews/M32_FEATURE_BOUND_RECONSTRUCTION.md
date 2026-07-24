@@ -77,6 +77,13 @@ through-holes and exercises the same workbench normalization, binding,
 one-up qualification, five-up repetition, OCP authoring, tessellation, and
 project persistence path.
 
+The physical pin-axis regression inspects every round and relieved pin in the
+five-station authored OCP assembly, then imports each emitted component STEP
+and inspects it again. Every cylindrical face must retain the exact transformed
+product-hole axis line and the imported hole radius minus the recorded
+diametral clearance. This is direct B-Rep evidence; component bounds, labels,
+and evidence strings cannot satisfy the regression by themselves.
+
 ## Remaining human boundary
 
 The result remains provisional fixture-engineering work. A qualified reviewer

@@ -288,6 +288,109 @@ class MultiStationFixtureTests(unittest.TestCase):
         self.assertEqual(before, self.source.read_bytes())
         self.assertEqual(self.source_sha256, sha256(self.source.read_bytes()).hexdigest())
 
+    def test_authored_locator_pin_axes_and_radii_match_exact_product_holes(self):
+        plan = self.plan()
+        layout = plan.multi_station_layout
+        assert layout is not None
+        assembly = author_fixture_build(plan, self.product, self.kernel)
+        hole_bindings = tuple(
+            item for item in layout.requirements.product_feature_bindings
+            if item.role == ProductFeatureRole.LOCATOR_HOLE
+        )
+        self.assertEqual(len(hole_bindings), 2)
+
+        def transformed(matrix, vector, *, direction=False):
+            homogeneous = 0.0 if direction else 1.0
+            return Vec3(
+                matrix[0] * vector.x + matrix[1] * vector.y
+                + matrix[2] * vector.z + matrix[3] * homogeneous,
+                matrix[4] * vector.x + matrix[5] * vector.y
+                + matrix[6] * vector.z + matrix[7] * homogeneous,
+                matrix[8] * vector.x + matrix[9] * vector.y
+                + matrix[10] * vector.z + matrix[11] * homogeneous,
+            )
+
+        def unit(vector):
+            magnitude = (
+                vector.x * vector.x + vector.y * vector.y + vector.z * vector.z
+            ) ** 0.5
+            return Vec3(
+                vector.x / magnitude, vector.y / magnitude, vector.z / magnitude,
+            )
+
+        def distance_to_axis(point, origin, direction):
+            delta = Vec3(
+                point.x - origin.x, point.y - origin.y, point.z - origin.z,
+            )
+            cross = Vec3(
+                delta.y * direction.z - delta.z * direction.y,
+                delta.z * direction.x - delta.x * direction.z,
+                delta.x * direction.y - delta.y * direction.x,
+            )
+            return (
+                cross.x * cross.x + cross.y * cross.y + cross.z * cross.z
+            ) ** 0.5
+
+        authored = {item.component.identity: item for item in assembly.components}
+        checked_shapes = 0
+        for station in layout.stations:
+            for index, binding in enumerate(hole_bindings):
+                assert binding.axis_origin_source_mm is not None
+                assert binding.axis_direction_source is not None
+                assert binding.radius_mm is not None
+                suffix = "round-pin" if index == 0 else "relieved-pin"
+                component = authored[f"{station.identity}-{suffix}"]
+                expected_origin = transformed(
+                    station.source_to_station_manufacturing,
+                    binding.axis_origin_source_mm,
+                )
+                expected_direction = unit(transformed(
+                    station.source_to_station_manufacturing,
+                    binding.axis_direction_source,
+                    direction=True,
+                ))
+                expected_radius = (
+                    binding.radius_mm
+                    - layout.requirements.locator_diametral_clearance_mm * 0.5
+                )
+
+                for shape in (
+                    component.shape,
+                    self.kernel.import_step(component.step_bytes),
+                ):
+                    cylindrical_faces = tuple(
+                        face for face in self.kernel.face_records(shape)
+                        if face.axis_origin_mm is not None
+                        and face.axis_direction is not None
+                        and face.radius_mm is not None
+                    )
+                    self.assertTrue(
+                        cylindrical_faces,
+                        f"{component.component.identity} has no physical cylindrical face",
+                    )
+                    for face in cylindrical_faces:
+                        actual_origin = Vec3(*face.axis_origin_mm)
+                        actual_direction = unit(Vec3(*face.axis_direction))
+                        self.assertAlmostEqual(face.radius_mm, expected_radius, places=7)
+                        self.assertAlmostEqual(
+                            abs(
+                                actual_direction.x * expected_direction.x
+                                + actual_direction.y * expected_direction.y
+                                + actual_direction.z * expected_direction.z
+                            ),
+                            1.0,
+                            places=7,
+                        )
+                        self.assertLessEqual(
+                            distance_to_axis(
+                                expected_origin, actual_origin, actual_direction,
+                            ),
+                            1e-7,
+                        )
+                    checked_shapes += 1
+
+        self.assertEqual(checked_shapes, 20)
+
     def test_dxf_profiles_use_the_plate_plane_or_fail_closed(self):
         plan = self.plan()
         assembly = author_fixture_build(plan, self.product, self.kernel)
