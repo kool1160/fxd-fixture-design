@@ -2,7 +2,7 @@
 
 ## State
 
-**REPAIR — POST-MERGE GOVERNANCE FINDINGS; PRODUCT IMPLEMENTATION HELD**
+**AWAITING_REVIEW — GOVERNANCE REPAIR; PRODUCT IMPLEMENTATION HELD**
 
 This file is the concise operator-facing control surface. The matching machine-readable projection is [`docs/CONTROL_STATE.json`](docs/CONTROL_STATE.json); CI requires them to agree.
 
@@ -18,18 +18,19 @@ Issue #66 and merged PR #67 establish the accepted AI-driven product reset. Issu
 
 - **Issue:** #74 — Post-merge repair: close Issue 66 governance findings and restore current state
 - **Lane:** governance repair
-- **Implementation PR:** #72 — draft repair PR
+- **Implementation PR:** #72 — ready for exact-head review
 - **Expected branch:** `governance/issue66-post-merge-repair`
+- **Expected PR state:** open and ready for review
 - **Review authority:** FXD Review-Control chat
 - **Builder/repair session:** Codex, only after `CONTINUE`
 
-## Repair scope
+## Repair delivered
 
-- Keep automatic historical-milestone selection retired when `docs/OPERATOR_PROTOCOL.md` is absent but durable `docs/CONTROL_STATE.json` remains.
-- Require the frozen historical registry path to remain exactly `docs/MILESTONE_STATE.json` before validating its pinned blob.
-- Add focused regressions for both boundaries.
-- Keep machine and human current state synchronized to Issue #74 / PR #72.
-- Remove one-time write-enabled repair tooling.
+- Automatic historical-milestone selection remains retired when `docs/OPERATOR_PROTOCOL.md` is absent but durable `docs/CONTROL_STATE.json` remains.
+- The frozen historical registry path is required to remain exactly `docs/MILESTONE_STATE.json` before validating its pinned blob.
+- Focused regressions cover both boundaries.
+- Machine and human current state are synchronized to Issue #74 / PR #72.
+- No one-time write-enabled repair tooling remains.
 
 ## Held and superseded
 
@@ -57,7 +58,7 @@ M33.1 remains blocked until this repair merges and a separate current-state tran
 - Reopening M32.
 - Production fixture approval or release.
 
-## Success evidence
+## Acceptance evidence required
 
 - `docs/CONTROL_STATE.json`, this file, Issue #74, branch, and PR #72 agree.
 - Both original PR #67 findings have exact code and regression evidence.
@@ -67,4 +68,4 @@ M33.1 remains blocked until this repair merges and a separate current-state tran
 
 ## Next valid action
 
-**Check PR #72's exact head and CI.** Merge only after both findings are resolved and exact-head evidence is green. Then create a separate governed transition that activates M33.1; do not begin product implementation from this repair PR.
+**Review PR #72's exact head and CI.** Merge only after both findings are independently resolved and exact-head evidence is green. Then create a separate governed transition that activates M33.1; do not begin product implementation from this repair PR.
