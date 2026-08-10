@@ -8,7 +8,7 @@ Make FXD simple to operate without turning Chris into a human message bus or all
 
 One repository. One active gate. One implementation PR.
 
-Current state is stored in `docs/CONTROL_STATE.json` and projected concisely in `CURRENT.md`. They must agree before any work begins.
+Current state is stored in `docs/CONTROL_STATE.json` and projected concisely in `CURRENT.md`. They must agree before any work begins. On an implementation branch, current `main` control state outranks stale branch-local governance copies.
 
 ## Roles
 
@@ -35,6 +35,9 @@ This boundary is fail-closed and applies even when FXD is not otherwise held.
 - Normal FXD implementation, repair, and coding work uses **ChatGPT Codex Remote under the user's ChatGPT agentic allowance**.
 - Repository GitHub Actions must not invoke `openai/codex-action` for implementation, repair, review, or orchestration.
 - Repository GitHub Actions must not receive, expose, or forward `OPENAI_API_KEY` for development/orchestration.
+- **`CONTINUE` does not authorize product-runtime API spending.** Neither do generic instructions such as `test FXD`, `run the tests`, `finish M33.1`, or `continue the project`.
+- Product-runtime API spending requires a **separate explicit owner instruction to run the live test**, followed by Review-Control recording that bounded authorization in current GitHub authority.
+- Without that separate authorization, Codex must not read/use provider credentials, enable a live-provider opt-in, run a live acceptance script, select live mode against a real provider, or make a provider HTTP/SDK/CLI call.
 - Repository `OPENAI_API_KEY` use is reserved for explicit **FXD product-runtime live-AI evidence/use** only.
 - Product-runtime API use requires a reviewed exact head, explicit Review-Control authorization, an explicit model/provider, the active request budget, and fail-closed provenance.
 - A development convenience, automation idea, or desire to remove owner clicks never authorizes paid API orchestration.
@@ -44,7 +47,7 @@ The retired `.github/workflows/m33-1-codex-continue.yml` is historical evidence 
 
 ## HOLD state
 
-If `docs/CONTROL_STATE.json` has `state: HELD` or `product_implementation_held: true`:
+If current `main` `docs/CONTROL_STATE.json` has `state: HELD` or `product_implementation_held: true`:
 
 - `CONTINUE` is illegal;
 - Codex product implementation/repair is prohibited;
@@ -136,16 +139,16 @@ Reason: <one sentence>
 
 ## What `CONTINUE` means
 
-Codex reads `AGENTS.md`, `docs/CONTROL_STATE.json`, `CURRENT.md`, this protocol, Product Direction, Engineering Constitution, Architecture, the active issue, the active PR, exact review findings, and required checks. Then it follows this order:
+Codex reads current `main` `AGENTS.md`, `docs/CONTROL_STATE.json`, `CURRENT.md`, and this protocol before trusting branch-local state. It then reads Product Direction, Engineering Constitution, Architecture, the active issue, the active PR, exact review findings, and required checks. Then it follows this order:
 
-1. If FXD is held, control state and `CURRENT.md` disagree, the active gate is missing, or repository truth conflicts, stop `BLOCKED`.
+1. If current `main` FXD is held, current state cannot be read, branch state conflicts with current `main`, the active gate is missing, or repository truth conflicts, stop `BLOCKED`.
 2. If the active PR has unresolved blocking findings, repair only those findings on the same PR.
 3. If required CI is failing, diagnose and repair only the failure inside the active gate.
 4. If the PR is green and no blocker remains, refresh exact-head evidence and stop `AWAITING_REVIEW`.
 5. If no implementation PR exists, build the smallest complete vertical slice allowed by the active issue, open one focused draft PR, and stop `AWAITING_REVIEW`.
 6. If a needed change is outside scope, add or recommend backlog work and stop.
 
-`CONTINUE` never means keep finding useful work; reopen M32; use the frozen milestone registry to select work; start a second implementation PR; redesign unrelated architecture; add speculative infrastructure; weaken deterministic checks; silently switch AI mode; create a paid GitHub/API coding route; merge/deploy/publish/delete branches; or approve production tooling.
+`CONTINUE` never means keep finding useful work; reopen M32; use the frozen milestone registry to select work; start a second implementation PR; redesign unrelated architecture; add speculative infrastructure; weaken deterministic checks; silently switch AI mode; create a paid GitHub/API coding route; authorize product-runtime API spending; merge/deploy/publish/delete branches; or approve production tooling.
 
 ## Exact-head review
 
@@ -153,7 +156,7 @@ After `AWAITING_REVIEW`, Review-Control must inspect the exact pushed SHA fresh.
 
 Review order:
 
-1. **State:** control state, `CURRENT.md`, issue, branch, and PR agree.
+1. **State:** current `main` control state, `CURRENT.md`, issue, branch, and PR agree.
 2. **Scope:** every changed file maps to the active gate.
 3. **Architecture:** AI, OCP authoring, deterministic validation, persistence, UI, and provider boundaries remain correct.
 4. **Deterministic evidence:** required checks actually ran against the reviewed head.

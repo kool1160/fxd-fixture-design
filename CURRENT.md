@@ -13,10 +13,10 @@ This is the concise operator-facing projection of [`docs/CONTROL_STATE.json`](do
 - **Issue:** #69
 - **Implementation PR:** #79 — draft and held
 - **Branch:** `agent/m33-1-native-product-reconstruction`
-- **Held head:** `3397c96ad011aedc185e8cb46484662bd87a272e`
+- **Held head:** `686486b0cfd6e1f062a3074b8d1319a0e84549b4`
 - **Status:** HELD — COST CONTROL
 
-PR #79 and its evidence are preserved. The hold does not accept, merge, supersede, or discard that work.
+PR #79 and its evidence are preserved. The latest held head changes only Review-Control cost-safety instructions on top of the previously reviewed M33.1 product head; the product implementation is not accepted or merged and requires fresh exact-head review after resume.
 
 ## Development execution boundary
 
@@ -24,6 +24,9 @@ PR #79 and its evidence are preserved. The hold does not accept, merge, supersed
 - **Development API requests:** 0.
 - **Paid GitHub Codex dispatchers:** forbidden.
 - GitHub workflows must not invoke `openai/codex-action` or pass `OPENAI_API_KEY` for implementation, repair, review, or orchestration.
+- **`CONTINUE`, `test FXD`, `run the tests`, and `finish M33.1` do not authorize product-runtime API spending.**
+- Product-runtime API spending requires a separate explicit owner instruction to run the live test, followed by Review-Control recording the bounded authorization in current GitHub authority.
+- Without that separate authorization, Codex must not use provider credentials, enable live-provider opt-ins, run live acceptance scripts, exercise `ai_design_live` against a real provider, or call a paid provider endpoint.
 - Repository `OPENAI_API_KEY` use is reserved for explicit FXD **product-runtime** live-AI evidence/use after Review-Control authorization.
 - The M33.1 Profile E request remains unspent and is prohibited while this hold is active.
 
@@ -36,7 +39,7 @@ PR #79 and its evidence are preserved. The hold does not accept, merge, supersed
 - Bounded classifications with unsupported meaning retained as `unknown`.
 - Explicit `ai_design_live` and `deterministic_offline` modes.
 - Fail-closed live OpenAI behavior with visible, persisted provenance and no deterministic substitute.
-- Focused tests, full repository checks, pinned OCP evidence, native UI evidence, privacy/secret checks, exact-head review, and one intentional Profile E request when separately authorized.
+- Focused tests, full repository checks, pinned OCP evidence, native UI evidence, privacy/secret checks, exact-head review, and one intentional Profile E request only when separately authorized.
 
 ### OUT OF SCOPE
 
@@ -57,7 +60,7 @@ PR #79 and its evidence are preserved. The hold does not accept, merge, supersed
 - **Maximum request timeout:** 60 seconds
 - **Model policy:** explicitly configured high-capability OpenAI model; no default guess or silent switch
 
-These are product-runtime ceilings. They do not authorize development/orchestration API spending.
+These are product-runtime ceilings, not standing authorization. They do not authorize development/orchestration API spending or a live product request by themselves.
 
 ## Held and superseded
 
