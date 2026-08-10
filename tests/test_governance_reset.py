@@ -7,10 +7,18 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from scripts.validate_control_state import validate
+from scripts.validate_control_state import _validate_workflow_cost_boundary, validate
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def _write_retired_dispatcher(workflows: Path) -> None:
+    (workflows / "m33-1-codex-continue.yml").write_text(
+        """name: RETIRED — M33.1 paid Codex dispatcher
+on:\n  workflow_dispatch:\njobs:\n  retired:\n    permissions:\n      contents: read\n    steps:\n      - run: |\n          echo \"Use ChatGPT Codex Remote\"\n          exit 1\n""",
+        encoding="utf-8",
+    )
 
 
 class GovernanceResetTests(unittest.TestCase):
@@ -84,21 +92,75 @@ class GovernanceResetTests(unittest.TestCase):
         self.assertNotIn("Implementation PR:** none yet", current)
         self.assertNotIn("**CONTINUE**", current)
 
-    def test_all_github_workflows_reject_paid_development_routes(self) -> None:
-        workflows = ROOT / ".github" / "workflows"
-        forbidden = (
-            "uses: openai/codex-action",
-            "openai-api-key:",
-            "secrets.OPENAI_API_KEY",
-        )
-        for path in (*workflows.glob("*.yml"), *workflows.glob("*.yaml")):
-            text = path.read_text(encoding="utf-8")
-            active_lines = "\n".join(
-                line for line in text.splitlines()
-                if not line.lstrip().startswith("#")
+    def test_all_current_projection_docs_show_the_hold_and_existing_pr(self) -> None:
+        expected = {
+            "README.md": (
+                "HELD — COST CONTROL",
+                "draft PR #79",
+                "ChatGPT Codex Remote",
+            ),
+            "docs/FOREMAN_SETUP.md": (
+                "HELD — COST CONTROL",
+                "**Implementation PR:** #79",
+                "ChatGPT Codex Remote",
+            ),
+            "docs/MILESTONE_CONTRACT.md": (
+                "**Implementation PR:** #79",
+                "**Status:** HELD — COST CONTROL",
+                "Development/API cost boundary",
+            ),
+        }
+        for relative, tokens in expected.items():
+            text = (ROOT / relative).read_text(encoding="utf-8")
+            for token in tokens:
+                self.assertIn(token, text, relative)
+
+    def test_actual_github_workflows_have_no_paid_development_route(self) -> None:
+        errors: list[str] = []
+        _validate_workflow_cost_boundary(ROOT, errors)
+        self.assertEqual([], errors)
+
+    def test_cost_guard_detects_case_variant_codex_action(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            workflows = root / ".github" / "workflows"
+            workflows.mkdir(parents=True)
+            _write_retired_dispatcher(workflows)
+            (workflows / "bad.yml").write_text(
+                "jobs:\n  paid:\n    steps:\n      - uses: OpenAI/codex-action@v1\n",
+                encoding="utf-8",
             )
-            for token in forbidden:
-                self.assertNotIn(token, active_lines, f"{path}: {token}")
+            errors: list[str] = []
+            _validate_workflow_cost_boundary(root, errors)
+        self.assertTrue(any("Codex action" in error for error in errors), errors)
+
+    def test_cost_guard_detects_alternate_secret_forwarding(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            workflows = root / ".github" / "workflows"
+            workflows.mkdir(parents=True)
+            _write_retired_dispatcher(workflows)
+            (workflows / "bad.yml").write_text(
+                "jobs:\n  paid:\n    env:\n      OPENAI_API_KEY: ${{ secrets.DEVELOPMENT_OPENAI_KEY }}\n",
+                encoding="utf-8",
+            )
+            errors: list[str] = []
+            _validate_workflow_cost_boundary(root, errors)
+        self.assertTrue(any("API key forwarding" in error for error in errors), errors)
+
+    def test_cost_guard_detects_direct_provider_endpoint_with_secret(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            workflows = root / ".github" / "workflows"
+            workflows.mkdir(parents=True)
+            _write_retired_dispatcher(workflows)
+            (workflows / "bad.yml").write_text(
+                "jobs:\n  paid:\n    steps:\n      - run: curl https://api.openai.com/v1/responses\n        env:\n          PROVIDER_KEY: ${{ secrets.PROVIDER_KEY }}\n",
+                encoding="utf-8",
+            )
+            errors: list[str] = []
+            _validate_workflow_cost_boundary(root, errors)
+        self.assertTrue(any("endpoint" in error for error in errors), errors)
 
     def test_retired_paid_dispatcher_is_inert_read_only_and_fail_closed(self) -> None:
         workflow = (ROOT / ".github" / "workflows" / "m33-1-codex-continue.yml").read_text(
@@ -114,12 +176,12 @@ class GovernanceResetTests(unittest.TestCase):
         active_lines = "\n".join(
             line for line in workflow.splitlines()
             if not line.lstrip().startswith("#")
-        )
+        ).casefold()
         for token in (
             "push:",
-            "openai/codex-action",
-            "openai-api-key:",
-            "secrets.OPENAI_API_KEY",
+            "codex-action",
+            "openai_api_key",
+            "api.openai.com",
             "contents: write",
             "pull-requests: write",
             "issues: write",
@@ -200,6 +262,11 @@ class GovernanceResetTests(unittest.TestCase):
             )
         self.assertNotEqual(0, result.returncode)
         self.assertIn("automatic milestone selection is retired by Issue #66", result.stderr)
+
+    def test_control_state_validator_pins_exact_historical_registry_path(self) -> None:
+        validator = (ROOT / "scripts" / "validate_control_state.py").read_text(encoding="utf-8")
+        self.assertIn('legacy.get("path") != "docs/MILESTONE_STATE.json"', validator)
+        self.assertIn('(root / "docs/MILESTONE_STATE.json").read_bytes()', validator)
 
     def test_historical_validation_never_prints_m32_as_current_authority(self) -> None:
         result = subprocess.run(
