@@ -11,21 +11,22 @@ The product is not complete merely because it can author valid solids. It must p
 Read and obey these sources in order:
 
 1. Explicit current instruction from Chris Hilton for a product/authority decision
-2. `CURRENT.md`
-3. The active GitHub issue and any explicitly linked decision record
-4. `docs/PRODUCT_DIRECTION.md`
-5. `docs/OPERATOR_PROTOCOL.md`
-6. `docs/ENGINEERING_CONSTITUTION.md`
-7. `docs/AI_DRIVEN_SYNTHESIS_ARCHITECTURE.md`
-8. `docs/ARCHITECTURE.md`
-9. `docs/MILESTONE_CONTRACT.md`
-10. The active pull request, exact head, review threads, and required CI
-11. `docs/ENGINEERING_TEAM.md`
-12. `BACKLOG.md` and historical records
+2. `docs/CONTROL_STATE.json` — machine-readable current gate and legal state
+3. `CURRENT.md` — concise human-facing projection; CI requires it to agree with control state
+4. The active GitHub issue and any explicitly linked decision record
+5. `docs/PRODUCT_DIRECTION.md`
+6. `docs/OPERATOR_PROTOCOL.md`
+7. `docs/ENGINEERING_CONSTITUTION.md`
+8. `docs/AI_DRIVEN_SYNTHESIS_ARCHITECTURE.md`
+9. `docs/ARCHITECTURE.md`
+10. `docs/MILESTONE_CONTRACT.md`
+11. The active pull request, exact head, review threads, and required CI
+12. `docs/ENGINEERING_TEAM.md`
+13. `BACKLOG.md` and historical records
 
 A lower source cannot silently override a higher source. Conflict means `BLOCKED`.
 
-`docs/MILESTONE_STATE.json` remains historical governance evidence during the Issue #66 reset. It does not authorize reopening superseded Issue #57 or PR #54. Current work comes from `CURRENT.md` and the active issue until the accepted governance transition replaces that temporary rule.
+`docs/MILESTONE_STATE.json` is frozen pre-reset history under Issue #66. Its Git blob identity is pinned in `docs/CONTROL_STATE.json`. It cannot select current work, reopen superseded Issue #57 / PR #54, or override the active gate.
 
 ## Operating model
 
@@ -40,6 +41,7 @@ A lower source cannot silently override a higher source. Conflict means `BLOCKED
 - Review-Control independently inspects the exact pushed head.
 - New ideas and unrelated cleanup go to backlog.
 - Claude / Anthropic is not an implementation, audit, review, fallback, or tie-break route.
+- The retired GitHub Actions Foreman and automatic milestone selector must fail closed.
 
 Read `docs/OPERATOR_PROTOCOL.md` before any implementation or review action.
 
@@ -50,7 +52,7 @@ Issue #66 governs the current product and governance reset.
 - Issue #57 and PR #54 are closed as superseded.
 - Preserve their branch/evidence for selective salvage.
 - Do not continue the advisory-AI/deterministic-template architecture.
-- Do not begin product runtime implementation until the governance-reset head is accepted and one bounded next gate is active.
+- Do not begin product runtime implementation until PR #67 is accepted and `docs/CONTROL_STATE.json` activates one bounded next gate.
 
 ## Product architecture rules
 
