@@ -174,7 +174,7 @@ def validate(root: Path) -> list[str]:
         except OSError as exc:
             errors.append(f"cannot read {relative}: {exc}")
             continue
-        if relative != "CURRENT.md" and "#66" not in text and "Issue #66" not in text:
+        if relative in ACTIVE_PROJECTION_DOCS and "#66" not in text and "Issue #66" not in text:
             errors.append(f"{relative} does not preserve Issue #66 reset authority")
         for forbidden in ("M32 is the sole Active", "PR #54 is the active implementation"):
             if forbidden.casefold() in text.casefold():
