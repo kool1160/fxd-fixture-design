@@ -1,3 +1,4 @@
+<!-- FXD-CONTROL-STATE: docs/CONTROL_STATE.json -->
 <!-- FXD-MILESTONE-STATE: docs/MILESTONE_STATE.json -->
 # FXD — Intelligent Fixture Design
 
@@ -13,13 +14,13 @@ The first product focus is practical weld fixturing for sheet-metal, plate, tube
 
 **Governance and architecture reset active under Issue #66. Product implementation is held.**
 
+The authoritative machine-readable state is [`docs/CONTROL_STATE.json`](docs/CONTROL_STATE.json). The concise human-facing projection is [`CURRENT.md`](CURRENT.md). CI requires them to agree.
+
 The previous Issue #57 / PR #54 path is closed as superseded. It proved substantial OCP, VTK, geometry, validation, persistence, fixture-library, and export capability, but it did not prove FXD's product value: AI remained advisory while deterministic templates generated the fixture, and repeated human reviews rejected fixture practicality.
 
 The closed branch and evidence are preserved for selective salvage. They are not authorization to continue the old flow.
 
-Read [`CURRENT.md`](CURRENT.md) for the exact active scope and next valid action.
-
-The pre-reset machine registry remains at [`docs/MILESTONE_STATE.json`](docs/MILESTONE_STATE.json) for historical and deterministic migration evidence. During Issue #66 it cannot override `CURRENT.md` or reopen closed work.
+The frozen pre-reset registry remains at [`docs/MILESTONE_STATE.json`](docs/MILESTONE_STATE.json) as byte-preserved historical evidence. It cannot select current work, override `docs/CONTROL_STATE.json`, or reopen closed work.
 
 ## Accepted product architecture
 
@@ -72,20 +73,23 @@ Review-Control -> CONTINUE | OWNER_DECISION | BLOCKED | COMPLETE
 
 One repository. One active gate. One implementation PR. Codex does not choose scope, merge, advance, deploy, or approve its own work. Claude/Anthropic is not part of the standard implementation or audit path.
 
+The former autonomous GitHub Actions Foreman and registry selector are retired and fail closed.
+
 Read [`docs/OPERATOR_PROTOCOL.md`](docs/OPERATOR_PROTOCOL.md) and [`AGENTS.md`](AGENTS.md) before working.
 
 ## Read order
 
 1. `AGENTS.md`
-2. `CURRENT.md`
-3. active GitHub issue
-4. `docs/PRODUCT_DIRECTION.md`
-5. `docs/OPERATOR_PROTOCOL.md`
-6. `docs/ENGINEERING_CONSTITUTION.md`
-7. `docs/AI_DRIVEN_SYNTHESIS_ARCHITECTURE.md`
-8. `docs/ARCHITECTURE.md`
-9. `docs/MILESTONE_CONTRACT.md`
-10. active PR, exact head, review threads, and CI
+2. `docs/CONTROL_STATE.json`
+3. `CURRENT.md`
+4. active GitHub issue
+5. `docs/PRODUCT_DIRECTION.md`
+6. `docs/OPERATOR_PROTOCOL.md`
+7. `docs/ENGINEERING_CONSTITUTION.md`
+8. `docs/AI_DRIVEN_SYNTHESIS_ARCHITECTURE.md`
+9. `docs/ARCHITECTURE.md`
+10. `docs/MILESTONE_CONTRACT.md`
+11. active PR, exact head, review threads, and CI
 
 Historical milestone registries, roadmaps, binders, and handoffs remain evidence and context. They do not override current control state.
 
