@@ -47,7 +47,7 @@ The Issue #66 reset was accepted and merged through PR #67 at `592876fefde118b53
 - Universal CAD/manufacturing reconstruction.
 - Private fixture-library upload or public disclosure of Chris's fixture knowledge.
 - Customer/employer CAD in public tests, prompts, logs, screenshots, or CI.
-- Claude/Anthropic integration or audit.
+- Claude/Anthropic integration, review, audit, fallback, or tie-break use.
 - M33.2 or later work.
 - Production approval, release, billing, SaaS, or deployment.
 
@@ -62,6 +62,16 @@ The Issue #66 reset was accepted and merged through PR #67 at `592876fefde118b53
 - Offline tests cannot claim live-provider proof.
 - Software evidence cannot approve fixture practicality or production use.
 - M32 / Issue #57 / PR #54 remains superseded and cannot be resumed as current work.
+
+## Budgets
+
+- **Live requests per acceptance run:** 1
+- **Automatic provider retries:** 0
+- **Repair requests in M33.1:** 0
+- **Maximum request timeout:** 60 seconds
+- **Model policy:** explicitly configured high-capability OpenAI model; no default guess or silent switch
+
+These are ceilings, not targets. Missing or failed live-provider evidence blocks the live acceptance path; it does not authorize another request or a deterministic substitute.
 
 ## Required evidence
 

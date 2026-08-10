@@ -25,21 +25,22 @@ Development operation is governed by `docs/OPERATOR_PROTOCOL.md`.
 
 A conflict stops work. A lower source cannot silently override a higher source.
 
-## Issue #66 reset transition
+## Accepted Issue #66 reset
 
-Issue #66 is an owner-approved product and governance sequence change.
+Issue #66 is the accepted product and project-control reset. PR #67 merged that reset as `592876fefde118b5325bbb5b4949eeb1490cdf6c`.
 
-During reset review:
+The accepted transition:
 
-- product implementation is held;
-- `docs/CONTROL_STATE.json`, `CURRENT.md`, and Issue #66 own current state;
-- Issue #57 and PR #54 are closed as superseded, not Complete;
-- Issues #59 and #63 are closed as superseded;
-- `docs/MILESTONE_STATE.json` is frozen byte-for-byte as pre-reset historical evidence, with its Git blob identity pinned in control state;
-- the former autonomous Foreman workflow and automatic selector fail closed;
-- M33 / Issue #68 and M33.1 / Issue #69 remain planned and blocked until PR #67 is accepted and control state advances.
+- makes AI the typed fixture-strategy author in live AI Design mode;
+- keeps OCP and deterministic systems responsible for executable authoring, validation, and failure evidence;
+- requires qualified human engineering judgment for fixture practicality and production authority;
+- retires the autonomous Foreman and automatic current-work selector;
+- separates Review-Control from Codex;
+- supersedes M32 / Issue #57 / PR #54 without falsely calling it Complete;
+- preserves M32 history and useful technical evidence for selective salvage;
+- freezes `docs/MILESTONE_STATE.json` as byte-preserved historical evidence only.
 
-This explicit transition prevents old governance machinery from making the rejected architecture authoritative merely because it previously labeled M32 Active.
+Issue #70 records the next legal transition: M33 / Issue #68 is active and M33.1 / Issue #69 is the sole active product gate.
 
 ## Legal states
 
@@ -74,29 +75,38 @@ Its branch, commits, tests, documentation, and evidence remain historical/salvag
 
 No completion claim may use M32 software evidence as proof that FXD can design a useful fixture.
 
-## Next product milestone
-
-After the Issue #66 governance reset is accepted, Review-Control may activate:
+## Active product milestone
 
 # M33 — AI-Driven Fixture Synthesis Proof
 
-## Goal
+- **Issue:** #68
+- **Status:** ACTIVE
+- **Goal:** prove one representative fixture from trustworthy product reconstruction through a live AI-authored strategy, real OCP authoring, deterministic validation, at most one bounded AI repair, persistence/provenance, and qualified human practicality acceptance.
 
-Prove one representative fixture from trustworthy product reconstruction through a live AI-authored strategy, real OCP authoring, deterministic validation, at most one bounded AI repair, persistence/provenance, and qualified human practicality acceptance.
+M33 is not Complete because its first gate is active. Later gates remain planned and unauthorized until Review-Control advances them after accepted evidence.
 
-## Ordered gates
+## Ordered M33 gates
 
 ### M33.1 — Product reconstruction and explicit AI mode
+
+- **Issue:** #69
+- **Status:** ACTIVE
 
 Prove:
 
 - source-SHA-bound native product/manufacturing reconstruction;
 - material ambiguity is visible and blocks or asks a focused question;
-- AI Design and deterministic/offline mode are separate;
-- provider/model/live-request state is undeniable;
-- AI Design fails closed instead of silently falling back.
+- AI Design and deterministic/offline mode are separate explicit modes;
+- provider/model/live-request state is undeniable and safely persisted;
+- AI Design fails closed instead of silently falling back;
+- one opt-in live acceptance path makes exactly one bounded request;
+- zero automatic provider retries and zero repair requests in this gate.
+
+M33.1 does not authorize the final fixture-strategy schema, strategy-to-OCP authoring, fixture generation, or repair cycles.
 
 ### M33.2 — Typed fixture strategy drives OCP
+
+**PLANNED — NOT AUTHORIZED.**
 
 Prove:
 
@@ -108,6 +118,8 @@ Prove:
 
 ### M33.3 — Deterministic rejection and bounded repair
 
+**PLANNED — NOT AUTHORIZED.**
+
 Prove:
 
 - seeded invalid strategy or authored behavior is rejected by deterministic checks;
@@ -116,6 +128,8 @@ Prove:
 - repeated failure ends `BLOCKED` without weakening checks or expanding scope.
 
 ### M33.4 — Persistence, outputs, and qualified acceptance
+
+**PLANNED — NOT AUTHORIZED.**
 
 Prove:
 
@@ -127,14 +141,16 @@ Prove:
 ## M33 non-goals
 
 - multiple fixture families;
-- multi-station optimization unless the representative proof specifically requires it;
+- multi-station optimization unless a later accepted gate explicitly requires it;
 - broad integrated-CAD implementation;
 - SaaS, billing, accounts, or cloud project storage;
 - universal learned rules;
 - supplier scraping or unauthorized CAD redistribution;
+- customer/employer CAD in public automation;
+- Claude/Anthropic implementation or audit;
 - production certification or automatic release.
 
-## Gate creation
+## Gate creation and activation
 
 Every active gate requires one GitHub issue containing:
 
@@ -148,6 +164,8 @@ Every active gate requires one GitHub issue containing:
 
 The issue is implementation scope. Conversation alone does not expand it.
 
+A gate becomes active only when `docs/CONTROL_STATE.json`, `CURRENT.md`, and GitHub agree. Codex cannot activate a gate.
+
 ## Implementation loop
 
 Review-Control returns `CONTINUE` only after confirming:
@@ -155,11 +173,11 @@ Review-Control returns `CONTINUE` only after confirming:
 - control state and `CURRENT.md` agree;
 - the active issue is unambiguous;
 - no duplicate implementation PR exists;
-- the selected branch/PR is correct;
+- the selected branch/PR is correct when one exists;
 - unresolved findings and CI state are known;
 - the task is inside the active gate.
 
-Codex implements or repairs the same gate, updates one draft PR, and stops `AWAITING_REVIEW`.
+When no implementation PR exists, Codex creates exactly one focused branch and one draft PR for the active gate. It then implements or repairs that same gate and stops `AWAITING_REVIEW`.
 
 Review-Control inspects the exact pushed head and returns:
 
@@ -175,8 +193,10 @@ Codex never merges, advances, or selects a new gate.
 - New ideas go to backlog.
 - Unrelated refactors go to backlog.
 - Future infrastructure without a current consumer goes to backlog.
+- “While we are here” does not authorize work.
 - A blocker may authorize a narrow repair, not a redesign.
 - Changing product direction, fixture family, provider authority, privacy posture, production behavior, or milestone goal requires an explicit owner-approved decision.
+- Passing tests cannot redefine the acceptance criteria.
 
 ## Evidence profiles
 

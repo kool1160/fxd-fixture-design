@@ -56,6 +56,13 @@
       "title": "Native product reconstruction and explicit live-AI mode"
     }
   },
+  "budgets": {
+    "live_requests_per_acceptance_run": 1,
+    "automatic_provider_retries": 0,
+    "repair_requests": 0,
+    "request_timeout_seconds_max": 60,
+    "model_policy": "explicitly configured high-capability OpenAI model; no default guess"
+  },
   "operator_protocol": "docs/OPERATOR_PROTOCOL.md",
   "current_human_surface": "CURRENT.md",
   "legacy_milestone_registry": {

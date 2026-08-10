@@ -39,6 +39,20 @@ class GovernanceResetTests(unittest.TestCase):
         self.assertEqual("ACTIVE", state["product_milestone"]["active_gate"]["status"])
         self.assertIn("CONTINUE", state["next_valid_action"])
         self.assertIn("Issue #69", state["next_valid_action"])
+        self.assertIn("AWAITING_REVIEW", state["next_valid_action"])
+
+    def test_m33_1_provider_budgets_are_hard_ceiling(self) -> None:
+        state = json.loads((ROOT / "docs" / "CONTROL_STATE.json").read_text(encoding="utf-8"))
+        self.assertEqual(
+            {
+                "live_requests_per_acceptance_run": 1,
+                "automatic_provider_retries": 0,
+                "repair_requests": 0,
+                "request_timeout_seconds_max": 60,
+                "model_policy": "explicitly configured high-capability OpenAI model; no default guess",
+            },
+            state["budgets"],
+        )
 
     def test_reset_merge_and_superseded_m32_remain_durable(self) -> None:
         state = json.loads((ROOT / "docs" / "CONTROL_STATE.json").read_text(encoding="utf-8"))
@@ -53,7 +67,7 @@ class GovernanceResetTests(unittest.TestCase):
         self.assertEqual(54, m32["pull_request"])
         self.assertEqual("closed_unmerged_preserve_for_salvage", m32["disposition"])
 
-    def test_current_state_keeps_scope_in_front_of_agents(self) -> None:
+    def test_current_state_keeps_scope_and_budgets_in_front_of_agents(self) -> None:
         current = (ROOT / "CURRENT.md").read_text(encoding="utf-8")
         for token in (
             "ACTIVE — M33.1 / ISSUE #69",
@@ -62,6 +76,11 @@ class GovernanceResetTests(unittest.TestCase):
             "Implementation PR:** none yet",
             "## IN SCOPE",
             "## OUT OF SCOPE",
+            "## Budgets",
+            "Live requests per acceptance run:** 1",
+            "Automatic provider retries:** 0",
+            "Repair requests in M33.1:** 0",
+            "Maximum request timeout:** 60 seconds",
             "## Required evidence",
             "**CONTINUE**",
             "PR #54 — closed unmerged",
