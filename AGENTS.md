@@ -45,22 +45,58 @@ A lower source cannot silently override a higher source. Conflict means `BLOCKED
 
 Read `docs/OPERATOR_PROTOCOL.md` before any implementation or review action.
 
-## Current reset
+## Current active gate
 
-Issue #66 governs the current product and governance reset.
+The Issue #66 reset was accepted through PR #67. Issue #70 activates:
 
-- Issue #57 and PR #54 are closed as superseded.
-- Preserve their branch/evidence for selective salvage.
-- Do not continue the advisory-AI/deterministic-template architecture.
-- Do not begin product runtime implementation until PR #67 is accepted and `docs/CONTROL_STATE.json` activates one bounded next gate.
+- **Milestone:** M33 — AI-Driven Fixture Synthesis Proof
+- **Gate:** M33.1 — Native product reconstruction and explicit live-AI mode
+- **Active issue:** #69
+- **Implementation PR:** none until Review-Control issues `CONTINUE`
 
-## Product architecture rules
+Codex may implement only Issue #69. It must not begin M33.2, reopen M32, invent a future gate, or expand the active scope.
+
+## M33.1 product rules
+
+### Native product reconstruction
+
+Create a versioned source-SHA-bound reconstruction sufficient for the first fixture family. Preserve exact components, transforms, bodies, and OCP face/hole/axis/plane evidence. Manufacturing classification must be bounded and traceable.
+
+Unsupported meaning remains `unknown`. Ambiguity that materially changes fixture design asks a focused question or blocks.
+
+### Explicit product modes
+
+The product must expose separate modes:
+
+- `ai_design_live`
+- `deterministic_offline`
+
+Mode cannot be inferred from environment variables or silently changed.
+
+### Live AI fails closed
+
+In live mode:
+
+- provider and model are explicitly configured;
+- exactly one bounded request occurs only after an intentional operator action;
+- automatic retries are zero;
+- fallback is disabled;
+- the UI and persisted provenance show provider, model, attempted yes/no, status, time, contract versions, safe failure category, and usage/cost when available;
+- missing configuration, timeout, provider failure, cancellation, quarantine, or malformed output visibly fails and produces no deterministic substitute.
+
+Offline mode cannot claim a live request or AI-authored result.
+
+### M33.1 exclusions
+
+This gate does not implement the final fixture-strategy contract, strategy-to-OCP fixture authoring, AI repair, final fixture generation, multiple fixture families, private fixture-library upload, M33.2, production release, SaaS, or billing.
+
+## Permanent product architecture rules
 
 ### AI authors fixture strategy
 
-In live AI Design mode, the configured OpenAI model must produce a strict typed fixture strategy that actually drives downstream build planning and geometry authoring.
+In later live AI Design gates, the configured OpenAI model must produce a strict typed fixture strategy that actually drives downstream build planning and geometry authoring.
 
-The strategy must cover the material engineering choices required by the gate: datum hierarchy, supports, locators/stops/pins, clamps and reaction paths, base/construction, loading/unloading, weld/access intent, alternatives, assumptions, and cited precedents.
+The strategy covers datum hierarchy, supports, locators/stops/pins, clamps and reaction paths, base/construction, loading/unloading, weld/access intent, alternatives, assumptions, and cited precedents.
 
 ### Deterministic systems enforce truth
 
@@ -73,16 +109,6 @@ OCP and deterministic logic own:
 - structured failure evidence.
 
 AI may repair a failed strategy only through an allowlisted bounded repair contract. It may never override a deterministic failure.
-
-### No silent AI fallback
-
-When AI Design is selected:
-
-- provider and model must be explicitly configured;
-- the UI must show provider, model, request state, and whether a live request occurred;
-- missing configuration, provider failure, timeout, cancellation, quarantine, or malformed output stops the AI path clearly;
-- deterministic/offline mode is a separate explicit mode;
-- no deterministic fixture may be quietly substituted and presented as AI-designed.
 
 ### Product reconstruction and precedents
 
@@ -111,7 +137,7 @@ Fixture precedents must express product-feature-to-fixture-response relationship
 3. Repair unresolved blocking findings on the same PR before new implementation.
 4. Repair required CI failures only inside the active gate.
 5. Otherwise implement the smallest complete active-gate slice.
-6. Run focused and full deterministic checks plus risk-appropriate native/live-provider evidence.
+6. Run focused and full deterministic checks plus required pinned-OCP, native-UI, and intentional live-provider evidence.
 7. Push the exact evidence to the same branch/PR.
 8. Stop `AWAITING_REVIEW`.
 
@@ -137,7 +163,7 @@ Codex stops with:
 
 ```text
 AWAITING_REVIEW
-Gate: <issue / objective>
+Gate: M33.1 / Issue #69
 PR: #__
 Head: <full SHA>
 CI: green | failing | running
@@ -149,7 +175,7 @@ or:
 
 ```text
 BLOCKED
-Gate: <issue / objective>
+Gate: M33.1 / Issue #69
 Reason: <one sentence>
 ```
 
