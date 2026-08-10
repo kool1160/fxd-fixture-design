@@ -16,7 +16,7 @@ from .annotations import (
 from .aabb import Vec3
 from .concepts import CompleteFixtureConcept, FixtureCorrection, generate_fixture_concepts
 from .fixture import FixtureFeature, FixtureFinding, FixtureParameters, ManufacturingSpec
-from .product_model import ProductModel
+from .product_model import Component, ProductModel
 from .step_import import import_step
 from .validation import ValidationFinding, ValidationResult, validate_fixture_concept
 from .structure import generate_structural_assembly
@@ -42,6 +42,100 @@ SUPPORTED_LAYERS = frozenset({
     "warnings", "provisional",
 })
 PROJECT_FORMAT = "fxd-neutral-project-v6"
+LEGACY_PROJECT_FORMATS = frozenset({
+    "fxd-neutral-project-v1", "fxd-neutral-project-v2", "fxd-neutral-project-v3",
+    "fxd-neutral-project-v4", "fxd-neutral-project-v5",
+})
+
+
+def _migrate_legacy_geometry_references(
+    data: dict[str, object], document: object, product: ProductModel,
+) -> dict[str, object]:
+    """Translate only exact pre-v6 XCAF aliases into current OCP identities."""
+    assembly = getattr(document, "assembly", None)
+    kernel_components = tuple(getattr(assembly, "components", ()))
+    current_components = {item.identity: item for item in product.components}
+    aliases: dict[str, tuple[Component, str]] = {}
+
+    if kernel_components:
+        for kernel_component in kernel_components:
+            legacy_component = kernel_component.legacy_reference
+            current_component = current_components.get(kernel_component.reference)
+            if legacy_component is None or current_component is None:
+                raise ProjectFormatError(
+                    "legacy project cannot reconstruct exact component identity aliases"
+                )
+            if legacy_component in aliases:
+                raise ProjectFormatError("legacy component identity alias is ambiguous")
+            legacy_body = "body:" + hashlib.sha256(
+                legacy_component.encode()
+            ).hexdigest()[:20]
+            aliases[legacy_component] = (current_component, legacy_body)
+    else:
+        current_component = current_components.get("source:geometry")
+        if current_component is None:
+            raise ProjectFormatError(
+                "legacy project cannot reconstruct unstructured source geometry"
+            )
+        aliases["source:geometry"] = (current_component, "body:source")
+
+    def migrate_reference(value: dict[str, object]) -> dict[str, object]:
+        component_identity = value.get("component_identity")
+        if not isinstance(component_identity, str):
+            return value
+        alias = aliases.get(component_identity)
+        if alias is None:
+            return value
+        current_component, legacy_body = alias
+        result = dict(value)
+        result["component_identity"] = current_component.identity
+        body_identity = value.get("body_identity")
+        if body_identity is None:
+            return result
+        current_bodies = {item.identity: item for item in current_component.bodies}
+        if body_identity in current_bodies:
+            return result
+        if body_identity != legacy_body:
+            return result
+
+        face_identity = value.get("face_identity")
+        edge_identity = value.get("edge_identity")
+        if face_identity:
+            matches = tuple(
+                body for body in current_component.bodies
+                if face_identity in {face.identity for face in body.faces}
+            )
+        elif edge_identity:
+            matches = tuple(
+                body for body in current_component.bodies
+                if edge_identity in {edge.identity for edge in body.edges}
+            )
+        else:
+            matches = tuple(current_component.bodies)
+        if len(matches) != 1:
+            raise ProjectFormatError(
+                "legacy body reference cannot be mapped to one exact current OCP solid"
+            )
+        result["body_identity"] = matches[0].identity
+        return result
+
+    def migrate(value: object) -> object:
+        if isinstance(value, list):
+            return [migrate(item) for item in value]
+        if isinstance(value, dict):
+            migrated = {key: migrate(item) for key, item in value.items()}
+            if ("component_identity" in migrated
+                    and any(key in migrated for key in (
+                        "body_identity", "face_identity", "edge_identity",
+                    ))):
+                return migrate_reference(migrated)
+            return migrated
+        return value
+
+    migrated = migrate(data)
+    if not isinstance(migrated, dict):
+        raise ProjectFormatError("legacy project root must be an object")
+    return migrated
 
 
 @dataclass(frozen=True)
@@ -758,10 +852,9 @@ class FxdProject:
     def load(cls, source: str | Path) -> "FxdProject":
         try:
             data = json.loads(Path(source).read_text(encoding="utf-8"))
-            if data.get("format") not in {
-                    "fxd-neutral-project-v1", "fxd-neutral-project-v2", "fxd-neutral-project-v3",
-                    "fxd-neutral-project-v4", "fxd-neutral-project-v5", PROJECT_FORMAT
-            } or data.get("units") != "mm":
+            project_format = data.get("format")
+            if (project_format not in LEGACY_PROJECT_FORMATS | {PROJECT_FORMAT}
+                    or data.get("units") != "mm"):
                 raise ProjectFormatError("unsupported FXD project format or units")
             raw = base64.b64decode(data["source_step_base64"], validate=True)
             workflow_data = data.get("interactive_workflow")
@@ -774,6 +867,9 @@ class FxdProject:
                 from .workbench import load_step_for_workbench
                 document = load_step_for_workbench(raw, source_name=data["source_name"])
                 product = product_from_workbench_document(document)
+                if project_format in LEGACY_PROJECT_FORMATS:
+                    data = _migrate_legacy_geometry_references(data, document, product)
+                    workflow_data = data.get("interactive_workflow")
                 workflow = InteractiveWorkflow.from_dict(workflow_data)
                 orientation_revalidation_required = not workflow.has_accepted_manufacturing_orientation()
             else:

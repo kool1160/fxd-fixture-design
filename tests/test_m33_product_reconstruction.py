@@ -1,3 +1,4 @@
+import hashlib
 import json
 import tempfile
 import unittest
@@ -11,7 +12,7 @@ from fxd_geometry import (
     ProductReconstructionError, TopologyCounts, Vec3, face_annotation, load_step_for_workbench,
     product_from_workbench_document, reconstruct_product,
 )
-from fxd_geometry.project import FxdProject
+from fxd_geometry.project import FxdProject, ProjectFormatError
 
 
 class M33ProductReconstructionTests(unittest.TestCase):
@@ -175,12 +176,23 @@ class M33ProductReconstructionTests(unittest.TestCase):
     def test_project_v6_persists_reconstruction_and_v5_migrates_without_it(self):
         _, document = self._document()
         product = product_from_workbench_document(document)
-        annotations = EngineeringAnnotations.for_product(
+        component = product.components[0]
+        body = component.bodies[0]
+        face = body.faces[0]
+        current_reference = GeometryReference(
+            component.identity, body.identity, face.identity,
+        )
+        annotations = replace(EngineeringAnnotations.for_product(
             product, build_orientation=Vec3(0, 0, 1),
             loading_direction=Vec3(1, 0, 0), process_type="review", production_quantity=1,
+        ), permitted_locating_surfaces=(current_reference,))
+        geometry_annotation = face_annotation(
+            document, current_reference, AnnotationRole.PRIMARY_DATUM,
+            notes="Historical v5 exact-reference compatibility evidence.",
         )
         workflow = InteractiveWorkflow(
             product.source_sha256, ProcessSetup("reconstruction-persistence"),
+            geometry_annotations=(geometry_annotation,),
         )
         reconstruction = reconstruct_product(document, product, workflow)
         project = FxdProject.from_product(
@@ -198,11 +210,67 @@ class M33ProductReconstructionTests(unittest.TestCase):
             legacy["schema_version"] = 5
             legacy.pop("product_reconstruction")
             legacy.pop("ai_execution")
+            kernel_component = document.assembly.components[0]
+            legacy_payload = repr((
+                (1,), kernel_component.name, kernel_component.transform,
+                kernel_component.topology, kernel_component.faces,
+            )).encode()
+            legacy_component = (
+                "component:" + hashlib.sha256(legacy_payload).hexdigest()[:24]
+            )
+            legacy_body = "body:" + hashlib.sha256(
+                legacy_component.encode()
+            ).hexdigest()[:20]
+            self.assertEqual(kernel_component.legacy_reference, legacy_component)
+            self.assertNotEqual(legacy_component, component.identity)
+            self.assertNotEqual(legacy_body, body.identity)
+
+            def use_historical_v5_identities(value):
+                if isinstance(value, list):
+                    return [use_historical_v5_identities(item) for item in value]
+                if isinstance(value, dict):
+                    migrated = {
+                        key: use_historical_v5_identities(item)
+                        for key, item in value.items()
+                    }
+                    if (migrated.get("component_identity") == component.identity
+                            and any(key in migrated for key in (
+                                "body_identity", "face_identity", "edge_identity",
+                            ))):
+                        migrated["component_identity"] = legacy_component
+                        if migrated.get("body_identity") == body.identity:
+                            migrated["body_identity"] = legacy_body
+                    return migrated
+                return value
+
+            legacy = use_historical_v5_identities(legacy)
             legacy_path = Path(directory) / "legacy-v5.fxd.json"
             legacy_path.write_text(json.dumps(legacy), encoding="utf-8")
             migrated = FxdProject.load(legacy_path)
             self.assertIsNone(migrated.product_reconstruction)
             self.assertIsNone(migrated.ai_execution)
+            self.assertEqual(migrated.product.source_sha256, document.source_sha256)
+            self.assertEqual(
+                migrated.annotations.permitted_locating_surfaces,
+                (current_reference,),
+            )
+            self.assertEqual(
+                migrated.workflow.geometry_annotations[0].reference,
+                current_reference,
+            )
+            self.assertEqual(
+                migrated.product.components[0].bodies[0].identity,
+                kernel_component.bodies[0].reference,
+            )
+
+            invalid = json.loads(json.dumps(legacy))
+            invalid["annotations"]["permitted_locating_surfaces"][0][
+                "component_identity"
+            ] = "component:not-a-historical-alias"
+            invalid_path = Path(directory) / "invalid-v5.fxd.json"
+            invalid_path.write_text(json.dumps(invalid), encoding="utf-8")
+            with self.assertRaisesRegex(ProjectFormatError, "unknown component reference"):
+                FxdProject.load(invalid_path)
 
         changed_workflow = replace(
             workflow,

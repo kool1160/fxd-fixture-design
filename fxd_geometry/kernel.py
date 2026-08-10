@@ -104,6 +104,7 @@ class KernelComponent:
     topology: TopologyCounts
     bodies: tuple[KernelBody, ...]
     faces: tuple[KernelFace, ...]
+    legacy_reference: str | None = None
 
 
 @dataclass(frozen=True)
@@ -262,10 +263,15 @@ class OcpKernel:
                 topology = self.topology_counts(transformed)
                 bodies = self.body_records(transformed)
                 faces = self.face_records(transformed)
+                legacy_payload = repr((path, name, transform, topology, faces)).encode()
+                legacy_reference = (
+                    "component:" + hashlib.sha256(legacy_payload).hexdigest()[:24]
+                )
                 payload = repr((path, name, transform, topology, bodies, faces)).encode()
                 reference = "component:" + hashlib.sha256(payload).hexdigest()[:24]
                 components.append(KernelComponent(reference, parent_reference, name,
-                                                  transform, topology, bodies, faces))
+                                                  transform, topology, bodies, faces,
+                                                  legacy_reference))
                 try:
                     color = Quantity_Color()
                     for color_type in (XCAFDoc_ColorType.XCAFDoc_ColorGen,
