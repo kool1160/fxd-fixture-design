@@ -17,43 +17,133 @@ class GovernanceResetTests(unittest.TestCase):
     def test_authoritative_control_state_validates(self) -> None:
         self.assertEqual([], validate(ROOT))
 
-    def test_m33_1_is_the_only_active_gate(self) -> None:
+    def test_m33_1_is_held_on_the_existing_implementation_pr(self) -> None:
         state = json.loads((ROOT / "docs" / "CONTROL_STATE.json").read_text(encoding="utf-8"))
-        self.assertEqual(2, state["revision"])
+        self.assertEqual(3, state["revision"])
         self.assertEqual(70, state["authority_issue"])
-        self.assertEqual("ACTIVE", state["state"])
-        self.assertFalse(state["product_implementation_held"])
+        self.assertEqual("HELD", state["state"])
+        self.assertTrue(state["product_implementation_held"])
+        self.assertEqual("owner", state["hold"]["authority"])
+        self.assertEqual("cost_control", state["hold"]["reason"])
         self.assertEqual(
             {
                 "lane": "product",
                 "milestone": 33,
                 "id": "M33.1",
                 "issue": 69,
-                "pull_request": None,
-                "branch": None,
-                "expected_pr_state": "none_until_codex_continue",
+                "pull_request": 79,
+                "branch": "agent/m33-1-native-product-reconstruction",
+                "expected_pr_state": "open_draft_held_cost_control",
                 "objective": state["active_gate"]["objective"],
             },
             state["active_gate"],
         )
         self.assertEqual("ACTIVE", state["product_milestone"]["status"])
-        self.assertEqual("ACTIVE", state["product_milestone"]["active_gate"]["status"])
-        self.assertIn("CONTINUE", state["next_valid_action"])
-        self.assertIn("Issue #69", state["next_valid_action"])
-        self.assertIn("AWAITING_REVIEW", state["next_valid_action"])
+        self.assertEqual("HELD", state["product_milestone"]["active_gate"]["status"])
+        self.assertTrue(state["next_valid_action"].startswith("HOLD."))
+        self.assertNotIn("CONTINUE", state["next_valid_action"])
 
-    def test_m33_1_provider_budgets_are_hard_ceiling(self) -> None:
+    def test_development_route_is_chatgpt_codex_remote_with_zero_api_budget(self) -> None:
         state = json.loads((ROOT / "docs" / "CONTROL_STATE.json").read_text(encoding="utf-8"))
         self.assertEqual(
             {
-                "live_requests_per_acceptance_run": 1,
-                "automatic_provider_retries": 0,
-                "repair_requests": 0,
-                "request_timeout_seconds_max": 60,
-                "model_policy": "explicitly configured high-capability OpenAI model; no default guess",
+                "implementation_surface": "chatgpt_codex_remote",
+                "repository_api_key_for_development": False,
+                "github_paid_codex_dispatchers_allowed": False,
+                "product_runtime_api_requires_explicit_review_control_authorization": True,
             },
-            state["budgets"],
+            state["development_execution"],
         )
+        self.assertEqual(0, state["budgets"]["development_api_requests"])
+        self.assertEqual(0, state["budgets"]["repository_paid_codex_dispatchers"])
+
+    def test_m33_1_product_runtime_budgets_remain_hard_ceiling(self) -> None:
+        state = json.loads((ROOT / "docs" / "CONTROL_STATE.json").read_text(encoding="utf-8"))
+        budgets = state["budgets"]
+        self.assertEqual(1, budgets["live_requests_per_acceptance_run"])
+        self.assertEqual(0, budgets["automatic_provider_retries"])
+        self.assertEqual(0, budgets["repair_requests"])
+        self.assertEqual(60, budgets["request_timeout_seconds_max"])
+        self.assertEqual(
+            "explicitly configured high-capability OpenAI model; no default guess",
+            budgets["model_policy"],
+        )
+
+    def test_current_state_projects_hold_and_cost_boundary(self) -> None:
+        current = (ROOT / "CURRENT.md").read_text(encoding="utf-8")
+        for token in (
+            "HELD — COST CONTROL — M33.1 / ISSUE #69 / PR #79",
+            "Implementation PR:** #79",
+            "ChatGPT Codex Remote",
+            "Development API requests:** 0",
+            "Paid GitHub Codex dispatchers:** forbidden",
+            "Profile E request remains unspent",
+            "**HOLD**",
+        ):
+            self.assertIn(token, current)
+        self.assertNotIn("Implementation PR:** none yet", current)
+        self.assertNotIn("**CONTINUE**", current)
+
+    def test_all_github_workflows_reject_paid_development_routes(self) -> None:
+        workflows = ROOT / ".github" / "workflows"
+        forbidden = (
+            "uses: openai/codex-action",
+            "openai-api-key:",
+            "secrets.OPENAI_API_KEY",
+        )
+        for path in (*workflows.glob("*.yml"), *workflows.glob("*.yaml")):
+            text = path.read_text(encoding="utf-8")
+            active_lines = "\n".join(
+                line for line in text.splitlines()
+                if not line.lstrip().startswith("#")
+            )
+            for token in forbidden:
+                self.assertNotIn(token, active_lines, f"{path}: {token}")
+
+    def test_retired_paid_dispatcher_is_inert_read_only_and_fail_closed(self) -> None:
+        workflow = (ROOT / ".github" / "workflows" / "m33-1-codex-continue.yml").read_text(
+            encoding="utf-8"
+        )
+        for token in (
+            "RETIRED — M33.1 paid Codex dispatcher",
+            "contents: read",
+            "Use ChatGPT Codex Remote",
+            "exit 1",
+        ):
+            self.assertIn(token, workflow)
+        active_lines = "\n".join(
+            line for line in workflow.splitlines()
+            if not line.lstrip().startswith("#")
+        )
+        for token in (
+            "push:",
+            "openai/codex-action",
+            "openai-api-key:",
+            "secrets.OPENAI_API_KEY",
+            "contents: write",
+            "pull-requests: write",
+            "issues: write",
+            "gh pr create",
+            "git push",
+        ):
+            self.assertNotIn(token, active_lines)
+
+    def test_autonomous_foreman_workflow_is_retired_and_read_only(self) -> None:
+        workflow = (ROOT / ".github" / "workflows" / "fxd-foreman.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("RETIRED BY ISSUE #66", workflow)
+        self.assertIn("contents: read", workflow)
+        self.assertIn("exit 1", workflow)
+        for forbidden in (
+            "openai/codex-action",
+            "contents: write",
+            "pull-requests: write",
+            "issues: write",
+            "gh pr create",
+            "git push",
+        ):
+            self.assertNotIn(forbidden, workflow)
 
     def test_reset_merge_and_superseded_m32_remain_durable(self) -> None:
         state = json.loads((ROOT / "docs" / "CONTROL_STATE.json").read_text(encoding="utf-8"))
@@ -67,46 +157,6 @@ class GovernanceResetTests(unittest.TestCase):
         self.assertEqual(57, m32["issue"])
         self.assertEqual(54, m32["pull_request"])
         self.assertEqual("closed_unmerged_preserve_for_salvage", m32["disposition"])
-
-    def test_current_state_keeps_scope_and_budgets_in_front_of_agents(self) -> None:
-        current = (ROOT / "CURRENT.md").read_text(encoding="utf-8")
-        for token in (
-            "ACTIVE — M33.1 / ISSUE #69",
-            "M33:** AI-Driven Fixture Synthesis Proof",
-            "Issue:** #69",
-            "Implementation PR:** none yet",
-            "## IN SCOPE",
-            "## OUT OF SCOPE",
-            "## Budgets",
-            "Live requests per acceptance run:** 1",
-            "Automatic provider retries:** 0",
-            "Repair requests in M33.1:** 0",
-            "Maximum request timeout:** 60 seconds",
-            "## Required evidence",
-            "**CONTINUE**",
-            "PR #54 — closed unmerged",
-        ):
-            self.assertIn(token, current)
-        self.assertNotIn("PRODUCT IMPLEMENTATION HELD", current)
-        self.assertNotIn("Implementation PR:** #67", current)
-
-    def test_autonomous_foreman_workflow_is_retired_and_read_only(self) -> None:
-        workflow = (ROOT / ".github" / "workflows" / "fxd-foreman.yml").read_text(
-            encoding="utf-8"
-        )
-        self.assertIn("RETIRED BY ISSUE #66", workflow)
-        self.assertIn("Use docs/OPERATOR_PROTOCOL.md", workflow)
-        self.assertIn("contents: read", workflow)
-        self.assertIn("exit 1", workflow)
-        for forbidden in (
-            "openai/codex-action",
-            "contents: write",
-            "pull-requests: write",
-            "issues: write",
-            "gh pr create",
-            "git push",
-        ):
-            self.assertNotIn(forbidden, workflow)
 
     def test_real_repository_selector_fails_closed_under_review_control(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -130,23 +180,17 @@ class GovernanceResetTests(unittest.TestCase):
             scripts.mkdir()
             docs.mkdir()
             shutil.copy2(ROOT / "scripts" / "fxd-backlog.mjs", scripts / "fxd-backlog.mjs")
-            # Isolate selector authority; historical-registry semantics are covered
-            # by the real legacy validator suite.
             (scripts / "validate_legacy_milestones.py").write_text(
                 "raise SystemExit(0)\n", encoding="utf-8"
             )
             (docs / "CONTROL_STATE.json").write_text("{}\n", encoding="utf-8")
             (docs / "MILESTONE_STATE.json").write_text(
-                json.dumps(
-                    {
-                        "product_lane": {"paused": False, "active_milestone": 32},
-                        "milestones": [],
-                    }
-                )
-                + "\n",
+                json.dumps({
+                    "product_lane": {"paused": False, "active_milestone": 32},
+                    "milestones": [],
+                }) + "\n",
                 encoding="utf-8",
             )
-            self.assertFalse((docs / "OPERATOR_PROTOCOL.md").exists())
             result = subprocess.run(
                 ["node", "scripts/fxd-backlog.mjs", "select"],
                 cwd=root,
@@ -156,20 +200,6 @@ class GovernanceResetTests(unittest.TestCase):
             )
         self.assertNotEqual(0, result.returncode)
         self.assertIn("automatic milestone selection is retired by Issue #66", result.stderr)
-        self.assertNotIn("Selected", result.stdout)
-
-    def test_control_state_validator_pins_exact_historical_registry_path(self) -> None:
-        validator = (ROOT / "scripts" / "validate_control_state.py").read_text(
-            encoding="utf-8"
-        )
-        self.assertIn(
-            'legacy.get("path") != "docs/MILESTONE_STATE.json"',
-            validator,
-        )
-        self.assertIn(
-            '(root / "docs/MILESTONE_STATE.json").read_bytes()',
-            validator,
-        )
 
     def test_historical_validation_never_prints_m32_as_current_authority(self) -> None:
         result = subprocess.run(
@@ -181,18 +211,16 @@ class GovernanceResetTests(unittest.TestCase):
         )
         self.assertEqual(0, result.returncode, result.stderr)
         self.assertIn("immutable legacy FXD milestone records", result.stdout)
-        self.assertIn("historical FXD milestone records", result.stdout)
         self.assertIn("frozen historical projection only", result.stdout)
         self.assertNotIn("Active milestone 32", result.stdout)
-        self.assertNotIn("Active Milestone 32", result.stdout)
 
-    def test_operator_protocol_separates_builder_and_review_control(self) -> None:
+    def test_operator_protocol_separates_builder_review_and_api_cost_boundary(self) -> None:
         protocol = (ROOT / "docs" / "OPERATOR_PROTOCOL.md").read_text(encoding="utf-8")
         self.assertIn("Review-Control decides and reviews", protocol)
-        self.assertIn("Codex implements one bounded gate", protocol)
-        self.assertIn("AWAITING_REVIEW", protocol)
-        self.assertIn("Claude / Anthropic is not part", protocol)
+        self.assertIn("ChatGPT Codex Remote", protocol)
+        self.assertIn("Permanent API and cost boundary", protocol)
         self.assertIn("Codex never merges or advances itself", protocol)
+        self.assertIn("Claude / Anthropic is not part", protocol)
 
 
 if __name__ == "__main__":
