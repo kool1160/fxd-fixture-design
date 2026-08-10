@@ -1,10 +1,16 @@
 {
   "schema_version": "fxd-control-state-v1",
-  "revision": 2,
-  "updated_at_utc": "2026-08-10T01:39:00Z",
+  "revision": 3,
+  "updated_at_utc": "2026-08-10T14:26:00Z",
   "authority_issue": 70,
-  "state": "ACTIVE",
-  "product_implementation_held": false,
+  "state": "HELD",
+  "product_implementation_held": true,
+  "hold": {
+    "authority": "owner",
+    "reason": "cost_control",
+    "since_utc": "2026-08-10T14:26:00Z",
+    "resume_condition": "Explicit owner instruction after Review-Control verifies the ChatGPT Codex Remote-only development route and repository API cost guardrails."
+  },
   "accepted_reset": {
     "issue": 66,
     "pull_request": 67,
@@ -20,10 +26,16 @@
     "milestone": 33,
     "id": "M33.1",
     "issue": 69,
-    "pull_request": null,
-    "branch": null,
-    "expected_pr_state": "none_until_codex_continue",
+    "pull_request": 79,
+    "branch": "agent/m33-1-native-product-reconstruction",
+    "expected_pr_state": "open_draft_held_cost_control",
     "objective": "Create a source-SHA-bound native product reconstruction and make live OpenAI design mode explicit, undeniable, and fail-closed without silent deterministic fallback."
+  },
+  "development_execution": {
+    "implementation_surface": "chatgpt_codex_remote",
+    "repository_api_key_for_development": false,
+    "github_paid_codex_dispatchers_allowed": false,
+    "product_runtime_api_requires_explicit_review_control_authorization": true
   },
   "superseded": [
     {
@@ -52,11 +64,13 @@
     "active_gate": {
       "id": "M33.1",
       "issue": 69,
-      "status": "ACTIVE",
+      "status": "HELD",
       "title": "Native product reconstruction and explicit live-AI mode"
     }
   },
   "budgets": {
+    "development_api_requests": 0,
+    "repository_paid_codex_dispatchers": 0,
     "live_requests_per_acceptance_run": 1,
     "automatic_provider_retries": 0,
     "repair_requests": 0,
@@ -71,5 +85,5 @@
     "authority": "historical_only",
     "note": "The pre-reset registry is preserved byte-for-byte as historical evidence and cannot select current work."
   },
-  "next_valid_action": "Review-Control issues CONTINUE to Codex for Issue #69. Codex creates or repairs exactly one M33.1 implementation PR and stops AWAITING_REVIEW."
+  "next_valid_action": "HOLD. No Codex implementation or repair, no paid GitHub model/API development workflow, no Profile E live request, no PR #79 merge, and no M33.2 advancement until explicit owner resume. Review-Control may perform cost-safety governance and repository inspection only."
 }
