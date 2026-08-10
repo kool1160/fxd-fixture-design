@@ -1,0 +1,326 @@
+name: M33.1 Codex Continue — one bounded pass
+
+# Scope checks include deletions and Codex uses the recommended workspace
+# permission profile.
+on:
+  push:
+    branches:
+      - dispatch/m33-1-codex-continue
+  workflow_dispatch:
+
+# This is a one-gate dispatcher, not a milestone selector or autonomous Foreman.
+# Preflight allows exactly M33.1 / Issue #69 with no existing implementation
+# branch or pull request. After one PR exists, every re-run fails closed before
+# a paid model call.
+
+concurrency:
+  group: fxd-m33-1-codex-continue
+  cancel-in-progress: false
+
+jobs:
+  continue:
+    name: Implement one M33.1 pass and publish one draft PR
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    env:
+      EXPECTED_REPOSITORY: kool1160/fxd-fixture-design
+      IMPLEMENTATION_BRANCH: codex/m33-1-native-reconstruction-live-ai
+      IMPLEMENTATION_MODEL: gpt-5.6-sol
+    steps:
+      - name: Check out authoritative main without persisted credentials
+        uses: actions/checkout@v5
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Validate authority, issue, and duplicate safety
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REPOSITORY" == "$EXPECTED_REPOSITORY" ]] || {
+            echo "repository mismatch: expected $EXPECTED_REPOSITORY, got $GITHUB_REPOSITORY" >&2
+            exit 1
+          }
+
+          python scripts/validate_control_state.py
+
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          state = json.loads(Path("docs/CONTROL_STATE.json").read_text(encoding="utf-8"))
+          gate = state.get("active_gate", {})
+          expected = {
+              "lane": "product",
+              "milestone": 33,
+              "id": "M33.1",
+              "issue": 69,
+              "pull_request": None,
+              "branch": None,
+              "expected_pr_state": "none_until_codex_continue",
+          }
+          errors = [
+              f"active_gate.{key}: expected {value!r}, got {gate.get(key)!r}"
+              for key, value in expected.items()
+              if gate.get(key) != value
+          ]
+          if state.get("state") != "ACTIVE":
+              errors.append(f"state must be ACTIVE, got {state.get('state')!r}")
+          if state.get("product_implementation_held") is not False:
+              errors.append("product implementation is held")
+          action = str(state.get("next_valid_action", ""))
+          if "CONTINUE" not in action or "Issue #69" not in action:
+              errors.append("next_valid_action does not authorize CONTINUE for Issue #69")
+          if errors:
+              raise SystemExit("M33.1 authority failed:\n- " + "\n- ".join(errors))
+          PY
+
+          issue_json="$(gh issue view 69 --repo "$EXPECTED_REPOSITORY" --json number,state,title,body,url)"
+          [[ "$(jq -r '.number' <<<"$issue_json")" == "69" ]]
+          [[ "$(jq -r '.state' <<<"$issue_json")" == "OPEN" ]]
+          [[ "$(jq -r '.url' <<<"$issue_json")" == "https://github.com/$EXPECTED_REPOSITORY/issues/69" ]]
+          issue_body="$(jq -r '.body // empty' <<<"$issue_json")"
+          [[ "$issue_body" =~ [^[:space:]] ]] || { echo "Issue #69 body is empty" >&2; exit 1; }
+
+          existing_prs="$(gh pr list --repo "$EXPECTED_REPOSITORY" --state open --limit 100 --json number,title,headRefName,body)"
+          if jq -e --arg branch "$IMPLEMENTATION_BRANCH" '
+              any(.[]; .headRefName == $branch or (.title | test("M33\\.1|native product reconstruction"; "i")))
+            ' <<<"$existing_prs" >/dev/null; then
+            echo "an open M33.1 implementation PR or branch already exists" >&2
+            jq -r '.[] | "#\(.number) \(.headRefName) — \(.title)"' <<<"$existing_prs" >&2
+            exit 1
+          fi
+          if git ls-remote --exit-code --heads origin "$IMPLEMENTATION_BRANCH" >/dev/null 2>&1; then
+            echo "implementation branch already exists: $IMPLEMENTATION_BRANCH" >&2
+            exit 1
+          fi
+
+          mkdir -p .fxd
+          printf '%s\n' "$issue_body" > .fxd/issue-69.md
+          printf '.fxd/\n' >> .git/info/exclude
+
+      - name: Create the one implementation branch locally
+        shell: bash
+        run: |
+          set -euo pipefail
+          git switch -c "$IMPLEMENTATION_BRANCH"
+
+      - name: Build bounded Codex prompt
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > .fxd/m33-1-codex-prompt.md <<'PROMPT'
+          You are the bounded Codex implementation session for FXD M33.1 / GitHub Issue #69.
+
+          The FXD Review-Control authority has issued CONTINUE. GitHub and the repository are the source of truth.
+
+          Read, in order:
+          1. AGENTS.md
+          2. docs/CONTROL_STATE.json
+          3. CURRENT.md
+          4. .fxd/issue-69.md
+          5. docs/PRODUCT_DIRECTION.md
+          6. docs/OPERATOR_PROTOCOL.md
+          7. docs/ENGINEERING_CONSTITUTION.md
+          8. docs/AI_DRIVEN_SYNTHESIS_ARCHITECTURE.md
+          9. docs/ARCHITECTURE.md
+          10. docs/MILESTONE_CONTRACT.md
+          11. relevant source, tests, provider contracts, persistence, UI, and OCP workbench code
+
+          Implement the smallest complete M33.1 vertical slice and nothing from M33.2.
+
+          Required outcome:
+          - versioned CAD-neutral source-SHA-bound native product/manufacturing reconstruction;
+          - exact component/transform/body/OCP feature evidence needed by the first supported fixture family;
+          - bounded manufacturing classifications with unknown/provenance rather than guesses;
+          - visible focused ambiguity questions or blockers;
+          - explicit persisted/runtime ai_design_live versus deterministic_offline mode;
+          - live OpenAI mode that requires explicit key and model, never infers mode from environment alone, makes one intentional bounded request only when triggered, uses zero automatic retries, and cannot silently fall back;
+          - safe persisted provider/model/request/provenance/usage-or-unavailable state;
+          - unmistakable main-UI LIVE, FAILED—NO FALLBACK, and OFFLINE states;
+          - an opt-in exactly-one-request live acceptance path separate from ordinary offline CI;
+          - focused, persistence, provider-failure, source-staleness, native UI/controller, privacy, and OCP evidence.
+
+          Hard boundaries:
+          - Do not implement the final fixture-strategy contract, strategy-to-OCP authoring, repair cycles, fixture generation, M33.2, multiple fixture families, broad CAD reconstruction, private fixture-library upload, SaaS, billing, deployment, or production approval.
+          - Do not use Claude or Anthropic.
+          - Do not upload or invent customer/employer CAD or Chris's private fixture knowledge.
+          - Do not expose secrets or unrestricted provider content.
+          - Do not perform a live product OpenAI acceptance request during this development run. Implement the explicit opt-in path and deterministic tests; Review-Control will authorize Profile E separately on reviewed code.
+          - Do not edit AGENTS.md, CURRENT.md, docs/CONTROL_STATE.json, docs/MILESTONE_STATE.json, docs/OPERATOR_PROTOCOL.md, docs/MILESTONE_CONTRACT.md, .github/workflows/fxd-foreman.yml, scripts/fxd-backlog.mjs, scripts/validate_control_state.py, or tests/test_governance_reset.py. Review-Control owns state transition after the PR exists.
+          - Do not commit, push, create a PR, merge, or advance the gate. The workflow publishes your patch.
+          - Keep existing source CAD immutable, CAD-neutral boundaries intact, and deterministic validation authoritative.
+
+          Inspect the current implementation instead of starting over. Salvage proven provider-neutral proposal, OCP, persistence, and PySide6/VTK infrastructure where it fits the accepted architecture. Remove or bypass silent-fallback behavior only on the explicit live-design path; keep honestly labeled offline behavior available.
+
+          Add documentation only where needed to make the implemented contract reproducible. Run focused tests as useful. The workflow will run the full repository health command against your exact workspace.
+
+          Finish after one bounded implementation pass. Do not search backlog or begin another gate.
+          PROMPT
+          {
+            printf '\n\n## Complete authoritative Issue #69 body\n\n'
+            cat .fxd/issue-69.md
+          } >> .fxd/m33-1-codex-prompt.md
+
+      - name: Run one bounded Codex implementation pass
+        id: codex
+        continue-on-error: true
+        uses: openai/codex-action@v1
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          prompt-file: .fxd/m33-1-codex-prompt.md
+          model: ${{ env.IMPLEMENTATION_MODEL }}
+          effort: xhigh
+          codex-args: '["--ephemeral"]'
+          permission-profile: ":workspace"
+          safety-strategy: drop-sudo
+          output-file: ${{ runner.temp }}/m33-1-codex-final.txt
+
+      - name: Remove runtime-only prompt and issue copy
+        if: always()
+        shell: bash
+        run: rm -rf .fxd
+
+      - name: Enforce scope and protected project-control paths
+        id: scope
+        if: steps.codex.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          changed="$RUNNER_TEMP/m33-1-changed-files.txt"
+          {
+            git diff --name-only --diff-filter=ACDMRTUXB
+            git ls-files --others --exclude-standard
+          } | sed '/^$/d' | sort -u > "$changed"
+          cat "$changed"
+          [[ -s "$changed" ]] || { echo "Codex produced no repository changes" >&2; exit 1; }
+
+          protected='^(AGENTS\.md|CURRENT\.md|docs/CONTROL_STATE\.json|docs/MILESTONE_STATE\.json|docs/OPERATOR_PROTOCOL\.md|docs/MILESTONE_CONTRACT\.md|\.github/workflows/fxd-foreman\.yml|scripts/fxd-backlog\.mjs|scripts/validate_control_state\.py|tests/test_governance_reset\.py)$'
+          if grep -E "$protected" "$changed"; then
+            echo "Codex changed Review-Control-owned paths" >&2
+            exit 1
+          fi
+
+      - name: Validate the exact Codex workspace
+        id: validation
+        if: steps.codex.outcome == 'success' && steps.scope.outcome == 'success'
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          bash scripts/ci.sh
+
+      - name: Upload exact Codex final message and changed-file list
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fxd-m33-1-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/m33-1-codex-final.txt
+            ${{ runner.temp }}/m33-1-changed-files.txt
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Fail clearly when Codex did not produce a scoped change
+        if: steps.codex.outcome != 'success' || steps.scope.outcome != 'success'
+        shell: bash
+        run: |
+          echo "M33.1 Codex pass failed or violated scope. Check OPENAI_API_KEY, model access, logs, and the artifact." >&2
+          exit 1
+
+      - name: Commit and push the implementation branch
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git add -A
+          git diff --cached --check
+          git config --local core.hooksPath /dev/null
+          git config user.name "FXD Codex implementation"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "feat: implement FXD M33.1 foundation"
+
+          helper="$RUNNER_TEMP/git-credential-fxd-m33-1"
+          printf '%s\n' '#!/usr/bin/env sh' 'echo "username=x-access-token"' 'echo "password=$GH_TOKEN"' > "$helper"
+          chmod 700 "$helper"
+          git -c credential.helper= -c credential.helper="$helper" push --set-upstream origin "$IMPLEMENTATION_BRANCH"
+          rm -f "$helper"
+
+      - name: Open exactly one draft implementation PR
+        id: publish
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CODEX_OUTCOME: ${{ steps.codex.outcome }}
+          VALIDATION_OUTCOME: ${{ steps.validation.outcome }}
+        run: |
+          set -euo pipefail
+          body="$RUNNER_TEMP/m33-1-pr-body.md"
+          {
+            echo "Implements #69"
+            echo
+            echo "## M33.1 bounded Codex pass"
+            echo
+            echo "- Gate: \`M33.1\`"
+            echo "- Issue: \`#69\`"
+            echo "- Development model: \`$IMPLEMENTATION_MODEL\` with explicit xhigh reasoning"
+            echo "- Codex outcome: \`$CODEX_OUTCOME\`"
+            echo "- Exact workspace validation: \`$VALIDATION_OUTCOME\`"
+            echo "- Product live OpenAI acceptance request: **not run by this development dispatcher**"
+            echo "- Automatic merge/advance: **disabled**"
+            echo
+            echo "The product live-provider Profile E request remains an explicit later Review-Control action on reviewed code. A failed or missing product request may not silently fall back."
+            echo
+            echo "## Required next action"
+            echo
+            echo "Review-Control updates the branch control-state projection, independently checks the exact diff and evidence, then returns \`CONTINUE\`, \`OWNER_DECISION\`, \`BLOCKED\`, or \`COMPLETE\`. Codex stops \`AWAITING_REVIEW\`."
+          } > "$body"
+
+          pr_url="$(gh pr create \
+            --repo "$GITHUB_REPOSITORY" \
+            --base main \
+            --head "$IMPLEMENTATION_BRANCH" \
+            --title "M33.1: native product reconstruction and explicit live-AI mode" \
+            --body-file "$body" \
+            --draft)"
+          pr_number="${pr_url##*/}"
+          echo "pr_url=$pr_url" >> "$GITHUB_OUTPUT"
+          echo "pr_number=$pr_number" >> "$GITHUB_OUTPUT"
+
+          gh issue comment 69 --repo "$GITHUB_REPOSITORY" --body \
+            "AWAITING_REVIEW — Codex published draft PR #$pr_number on branch \`$IMPLEMENTATION_BRANCH\`. Development model: \`$IMPLEMENTATION_MODEL\`. Exact workspace validation: \`$VALIDATION_OUTCOME\`. No product live-provider acceptance request was consumed by this dispatcher."
+
+      - name: Workflow summary
+        if: always()
+        shell: bash
+        env:
+          PR_URL: ${{ steps.publish.outputs.pr_url }}
+        run: |
+          {
+            echo "## FXD M33.1 bounded Continue"
+            echo
+            if [[ -n "$PR_URL" ]]; then
+              echo "Created draft implementation PR: $PR_URL"
+            else
+              echo "No PR was created. Review the failed step and exact logs."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
