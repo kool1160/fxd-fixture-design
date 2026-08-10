@@ -3,12 +3,13 @@ name: RETIRED — M33.1 paid Codex dispatcher
 # RETIRED BY REVIEW-CONTROL FOR COST SAFETY.
 #
 # FXD implementation is performed through ChatGPT Codex Remote under the
-# user's ChatGPT agentic allowance. Repository OPENAI_API_KEY credentials are
+# user's ChatGPT agentic allowance. Repository OpenAI API credentials are
 # reserved for explicit FXD product-runtime live-AI acceptance/use only.
 #
-# This workflow must never invoke openai/codex-action, consume an OpenAI API
-# key, push implementation code, create pull requests, or advance a gate.
-# It is retained as an inert historical control surface rather than deleted.
+# This workflow must never invoke a Codex action, consume provider API
+# credentials, push implementation code, create pull requests, or advance a
+# gate. It is retained as an inert historical control surface rather than
+# deleted.
 
 on:
   workflow_dispatch:
@@ -24,5 +25,5 @@ jobs:
         shell: bash
         run: |
           echo "RETIRED: FXD paid GitHub Codex dispatcher is disabled."
-          echo "Use ChatGPT Codex Remote for implementation; reserve OPENAI_API_KEY for explicit product-runtime live-AI evidence."
+          echo "Use ChatGPT Codex Remote for implementation; repository API credentials are reserved for explicit product-runtime evidence."
           exit 1
