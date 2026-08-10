@@ -18,14 +18,15 @@ Read [`docs/OPERATOR_PROTOCOL.md`](OPERATOR_PROTOCOL.md).
 
 ## Current control state
 
-Read repository-root `CURRENT.md` before any action.
+Read repository-root `CURRENT.md` and `docs/CONTROL_STATE.json` before any action.
 
-During the Issue #66 reset:
+The Issue #66 reset is accepted. Issue #70 activates exactly one product gate:
 
-- product implementation is held;
-- superseded Issue #57 / PR #54 must not be continued;
-- the governance-reset branch/PR is the only active work;
-- no future product gate begins until Review-Control accepts the reset and activates it durably.
+- **M33.1 / Issue #69 — Native product reconstruction and explicit live-AI mode**
+- product implementation is authorized only for Issue #69;
+- there is no implementation PR until Review-Control issues `CONTINUE` and Codex creates one focused draft PR;
+- superseded Issue #57 / PR #54 remains closed and may be used only as reviewed salvage evidence;
+- M33.2 and later work remain out of scope.
 
 ## Codex entry point
 
@@ -35,19 +36,17 @@ The standing implementation prompt is:
 .github/codex/prompts/run-milestone.md
 ```
 
-Despite the historical filename, it now defines the bounded `Continue FXD` contract. It does not authorize milestone selection.
+Despite the historical filename, it defines the bounded `Continue FXD` contract. It does not authorize milestone selection.
 
 ## Repository preflight
 
 Before Codex receives write authority, Review-Control must verify:
 
-- repository identity;
-- current default-branch SHA;
-- `CURRENT.md` and active issue;
-- open PRs and duplicate branches;
-- exact active PR head and review findings;
-- required CI;
-- no held or superseded lane is being targeted.
+- repository identity and current default-branch SHA;
+- `docs/CONTROL_STATE.json`, `CURRENT.md`, and Issue #69 agree;
+- no existing implementation PR or duplicate branch already owns M33.1;
+- exact review findings and required CI are known;
+- no held, superseded, or future lane is being targeted.
 
 Ambiguity blocks before model execution.
 
@@ -55,7 +54,7 @@ Ambiguity blocks before model execution.
 
 The OpenAI API used by the FXD product is separate from Codex development orchestration.
 
-A future accepted AI Design gate will require explicit process configuration such as:
+M33.1 requires explicit process configuration for live acceptance:
 
 ```text
 OPENAI_API_KEY
@@ -65,7 +64,7 @@ FXD_AI_PROVIDER=openai
 
 Do not commit keys. Use a dedicated OpenAI project with conservative limits and alerts.
 
-AI Design must display provider/model/live-request provenance and fail closed when configuration or provider execution fails. Deterministic/offline mode remains separately selectable and labeled.
+The model name is explicitly configured; FXD must not guess, auto-route, or silently switch it. Live AI Design must display provider/model/request provenance and fail closed when configuration or provider execution fails. Deterministic/offline mode remains separately selectable and labeled. Exactly-one-request live acceptance is opt-in and separate from ordinary CI.
 
 ## Public repository warning
 

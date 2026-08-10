@@ -1,15 +1,94 @@
 from __future__ import annotations
 
+import json
 import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+
+from scripts.validate_control_state import validate
 
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 class GovernanceResetTests(unittest.TestCase):
+    def test_authoritative_control_state_validates(self) -> None:
+        self.assertEqual([], validate(ROOT))
+
+    def test_m33_1_is_the_only_active_gate(self) -> None:
+        state = json.loads((ROOT / "docs" / "CONTROL_STATE.json").read_text(encoding="utf-8"))
+        self.assertEqual(2, state["revision"])
+        self.assertEqual(70, state["authority_issue"])
+        self.assertEqual("ACTIVE", state["state"])
+        self.assertFalse(state["product_implementation_held"])
+        self.assertEqual(
+            {
+                "lane": "product",
+                "milestone": 33,
+                "id": "M33.1",
+                "issue": 69,
+                "pull_request": None,
+                "branch": None,
+                "expected_pr_state": "none_until_codex_continue",
+                "objective": state["active_gate"]["objective"],
+            },
+            state["active_gate"],
+        )
+        self.assertEqual("ACTIVE", state["product_milestone"]["status"])
+        self.assertEqual("ACTIVE", state["product_milestone"]["active_gate"]["status"])
+        self.assertIn("CONTINUE", state["next_valid_action"])
+        self.assertIn("Issue #69", state["next_valid_action"])
+        self.assertIn("AWAITING_REVIEW", state["next_valid_action"])
+
+    def test_m33_1_provider_budgets_are_hard_ceiling(self) -> None:
+        state = json.loads((ROOT / "docs" / "CONTROL_STATE.json").read_text(encoding="utf-8"))
+        self.assertEqual(
+            {
+                "live_requests_per_acceptance_run": 1,
+                "automatic_provider_retries": 0,
+                "repair_requests": 0,
+                "request_timeout_seconds_max": 60,
+                "model_policy": "explicitly configured high-capability OpenAI model; no default guess",
+            },
+            state["budgets"],
+        )
+
+    def test_reset_merge_and_superseded_m32_remain_durable(self) -> None:
+        state = json.loads((ROOT / "docs" / "CONTROL_STATE.json").read_text(encoding="utf-8"))
+        self.assertEqual(66, state["accepted_reset"]["issue"])
+        self.assertEqual(67, state["accepted_reset"]["pull_request"])
+        self.assertEqual(
+            "592876fefde118b5325bbb5b4949eeb1490cdf6c",
+            state["accepted_reset"]["merge_commit"],
+        )
+        m32 = next(item for item in state["superseded"] if item.get("number") == 32)
+        self.assertEqual(57, m32["issue"])
+        self.assertEqual(54, m32["pull_request"])
+        self.assertEqual("closed_unmerged_preserve_for_salvage", m32["disposition"])
+
+    def test_current_state_keeps_scope_and_budgets_in_front_of_agents(self) -> None:
+        current = (ROOT / "CURRENT.md").read_text(encoding="utf-8")
+        for token in (
+            "ACTIVE — M33.1 / ISSUE #69",
+            "M33:** AI-Driven Fixture Synthesis Proof",
+            "Issue:** #69",
+            "Implementation PR:** none yet",
+            "## IN SCOPE",
+            "## OUT OF SCOPE",
+            "## Budgets",
+            "Live requests per acceptance run:** 1",
+            "Automatic provider retries:** 0",
+            "Repair requests in M33.1:** 0",
+            "Maximum request timeout:** 60 seconds",
+            "## Required evidence",
+            "**CONTINUE**",
+            "PR #54 — closed unmerged",
+        ):
+            self.assertIn(token, current)
+        self.assertNotIn("PRODUCT IMPLEMENTATION HELD", current)
+        self.assertNotIn("Implementation PR:** #67", current)
+
     def test_autonomous_foreman_workflow_is_retired_and_read_only(self) -> None:
         workflow = (ROOT / ".github" / "workflows" / "fxd-foreman.yml").read_text(
             encoding="utf-8"
@@ -18,24 +97,21 @@ class GovernanceResetTests(unittest.TestCase):
         self.assertIn("Use docs/OPERATOR_PROTOCOL.md", workflow)
         self.assertIn("contents: read", workflow)
         self.assertIn("exit 1", workflow)
-        self.assertNotIn("openai/codex-action", workflow)
-        self.assertNotIn("contents: write", workflow)
-        self.assertNotIn("pull-requests: write", workflow)
-        self.assertNotIn("issues: write", workflow)
-        self.assertNotIn("gh pr create", workflow)
-        self.assertNotIn("git push", workflow)
+        for forbidden in (
+            "openai/codex-action",
+            "contents: write",
+            "pull-requests: write",
+            "issues: write",
+            "gh pr create",
+            "git push",
+        ):
+            self.assertNotIn(forbidden, workflow)
 
     def test_real_repository_selector_fails_closed_under_review_control(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             context = Path(temp) / "selected.md"
             result = subprocess.run(
-                [
-                    "node",
-                    "scripts/fxd-backlog.mjs",
-                    "select",
-                    "--context",
-                    str(context),
-                ],
+                ["node", "scripts/fxd-backlog.mjs", "select", "--context", str(context)],
                 cwd=ROOT,
                 text=True,
                 capture_output=True,
@@ -57,22 +133,11 @@ class GovernanceResetTests(unittest.TestCase):
         self.assertIn("immutable legacy FXD milestone records", result.stdout)
         self.assertIn("historical FXD milestone records", result.stdout)
         self.assertIn("frozen historical projection only", result.stdout)
-        self.assertIn("pre-reset milestone marker 32 recorded", result.stdout)
         self.assertNotIn("Active milestone 32", result.stdout)
         self.assertNotIn("Active Milestone 32", result.stdout)
 
-    def test_current_state_holds_product_work_and_targets_reset_pr(self) -> None:
-        current = (ROOT / "CURRENT.md").read_text(encoding="utf-8")
-        self.assertIn("AWAITING_REVIEW — GOVERNANCE RESET", current)
-        self.assertIn("PRODUCT IMPLEMENTATION HELD", current)
-        self.assertIn("Issue:** #66", current)
-        self.assertIn("Implementation PR:** #67", current)
-        self.assertIn("PR #54 — closed unmerged", current)
-
     def test_operator_protocol_separates_builder_and_review_control(self) -> None:
-        protocol = (ROOT / "docs" / "OPERATOR_PROTOCOL.md").read_text(
-            encoding="utf-8"
-        )
+        protocol = (ROOT / "docs" / "OPERATOR_PROTOCOL.md").read_text(encoding="utf-8")
         self.assertIn("Review-Control decides and reviews", protocol)
         self.assertIn("Codex implements one bounded gate", protocol)
         self.assertIn("AWAITING_REVIEW", protocol)

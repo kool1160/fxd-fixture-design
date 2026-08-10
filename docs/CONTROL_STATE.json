@@ -1,17 +1,29 @@
 {
   "schema_version": "fxd-control-state-v1",
-  "revision": 1,
-  "updated_at_utc": "2026-08-10T01:00:00Z",
-  "authority_issue": 66,
-  "state": "AWAITING_REVIEW",
-  "product_implementation_held": true,
-  "active_gate": {
-    "lane": "governance",
+  "revision": 2,
+  "updated_at_utc": "2026-08-10T01:39:00Z",
+  "authority_issue": 70,
+  "state": "ACTIVE",
+  "product_implementation_held": false,
+  "accepted_reset": {
     "issue": 66,
     "pull_request": 67,
-    "branch": "governance/ai-driven-fxd-reset",
-    "expected_pr_state": "open_draft",
-    "objective": "Replace advisory-AI fixture generation and autonomous Foreman control with AI-driven synthesis and Review-Control/Codex operation."
+    "merge_commit": "592876fefde118b5325bbb5b4949eeb1490cdf6c",
+    "decision": "docs/decisions/0001-ai-driven-fixture-synthesis-reset.md"
+  },
+  "activation": {
+    "issue": 70,
+    "purpose": "Activate the first bounded product gate after the accepted Issue #66 reset."
+  },
+  "active_gate": {
+    "lane": "product",
+    "milestone": 33,
+    "id": "M33.1",
+    "issue": 69,
+    "pull_request": null,
+    "branch": null,
+    "expected_pr_state": "none_until_codex_continue",
+    "objective": "Create a source-SHA-bound native product reconstruction and make live OpenAI design mode explicit, undeniable, and fail-closed without silent deterministic fallback."
   },
   "superseded": [
     {
@@ -32,17 +44,24 @@
       "disposition": "closed_superseded"
     }
   ],
-  "planned_product_milestone": {
+  "product_milestone": {
     "number": 33,
     "issue": 68,
-    "status": "PLANNED",
+    "status": "ACTIVE",
     "title": "AI-Driven Fixture Synthesis Proof",
-    "first_gate": {
+    "active_gate": {
       "id": "M33.1",
       "issue": 69,
-      "status": "BLOCKED_BY_GOVERNANCE",
+      "status": "ACTIVE",
       "title": "Native product reconstruction and explicit live-AI mode"
     }
+  },
+  "budgets": {
+    "live_requests_per_acceptance_run": 1,
+    "automatic_provider_retries": 0,
+    "repair_requests": 0,
+    "request_timeout_seconds_max": 60,
+    "model_policy": "explicitly configured high-capability OpenAI model; no default guess"
   },
   "operator_protocol": "docs/OPERATOR_PROTOCOL.md",
   "current_human_surface": "CURRENT.md",
@@ -52,5 +71,5 @@
     "authority": "historical_only",
     "note": "The pre-reset registry is preserved byte-for-byte as historical evidence and cannot select current work."
   },
-  "next_valid_action": "Review PR #67 exact head and required checks; repair the same PR if needed; do not begin M33.1 until the governance reset is merged and control state is advanced."
+  "next_valid_action": "Review-Control issues CONTINUE to Codex for Issue #69. Codex creates or repairs exactly one M33.1 implementation PR and stops AWAITING_REVIEW."
 }

@@ -2,61 +2,96 @@
 
 ## State
 
-**AWAITING_REVIEW — GOVERNANCE RESET; PRODUCT IMPLEMENTATION HELD**
+**ACTIVE — M33.1 / ISSUE #69**
 
-This file is the concise operator-facing control surface. The matching machine-readable projection is [`docs/CONTROL_STATE.json`](docs/CONTROL_STATE.json); CI requires them to agree.
+This is the concise operator-facing control surface. The matching machine-readable authority is [`docs/CONTROL_STATE.json`](docs/CONTROL_STATE.json); CI requires them to agree.
 
-GitHub Issue #66 is the active governance authority for the reset. The frozen pre-reset `docs/MILESTONE_STATE.json` remains historical evidence only and cannot select current work.
+The Issue #66 reset was accepted and merged through PR #67 at `592876fefde118b5325bbb5b4949eeb1490cdf6c`. Issue #70 activates the first bounded product gate under the new Review-Control/Codex operating model.
 
-## Active gate
+## Active milestone
 
-- **Issue:** #66 — Governance reset: AI-driven fixture synthesis and LaserX-style project control
-- **Lane:** product direction / architecture / governance
-- **Implementation PR:** #67 — draft governance reset
-- **Expected branch:** `governance/ai-driven-fxd-reset`
+- **M33:** AI-Driven Fixture Synthesis Proof
+- **Milestone issue:** #68
+- **Status:** ACTIVE
+
+## Sole active gate
+
+- **Gate:** M33.1 — Native product reconstruction and explicit live-AI mode
+- **Issue:** #69
+- **Lane:** product implementation
+- **Implementation PR:** none yet
+- **Expected branch:** Codex creates one focused branch only after `CONTINUE`
 - **Review authority:** FXD Review-Control chat
-- **Builder/repair session:** Codex, only after `CONTINUE`
+- **Builder/repair session:** Codex
+
+## IN SCOPE
+
+- A versioned, CAD-neutral, source-SHA-bound product/manufacturing reconstruction contract.
+- Exact component, transform, body, OCP face/hole/axis/plane evidence needed by the first supported fixture family.
+- Bounded classifications such as plate/sheet, tube/structural, formed, machined, purchased, or `unknown`.
+- Candidate datum/contact features, weld candidates, engineer-confirmed weld intent, confidence, provenance, and unresolved ambiguity.
+- Explicit `ai_design_live` and `deterministic_offline` execution modes.
+- One intentional, bounded OpenAI request only when live mode is selected and triggered.
+- Visible and persisted provider/model/request/provenance state.
+- Live-AI failure that stops clearly with **no deterministic substitute**.
+- Opt-in exactly-one-request live acceptance separate from ordinary offline CI.
+- Focused tests, full repository checks, pinned OCP evidence, native UI evidence, privacy/secret checks, and exact-head review.
+
+## OUT OF SCOPE
+
+- Final typed fixture-strategy design contract.
+- Strategy-to-OCP fixture authoring.
+- AI repair cycles.
+- Final fixture generation.
+- Multiple fixture families.
+- Universal CAD/manufacturing reconstruction.
+- Private fixture-library upload or public disclosure of Chris's fixture knowledge.
+- Customer/employer CAD in public tests, prompts, logs, screenshots, or CI.
+- Claude/Anthropic integration, review, audit, fallback, or tie-break use.
+- M33.2 or later work.
+- Production approval, release, billing, SaaS, or deployment.
+
+## Protected boundaries
+
+- Source CAD remains byte-immutable and source-SHA-bound.
+- Unsupported meaning remains `unknown`; material ambiguity asks a focused question or blocks.
+- Live mode is explicit and never inferred from environment variables alone.
+- The OpenAI model is explicitly configured; FXD never guesses or silently switches it.
+- Missing key/model, timeout, provider failure, malformed/quarantined response, or cancellation cannot produce a fake AI success.
+- Secrets and unrestricted provider content never enter persistence or public evidence.
+- Offline tests cannot claim live-provider proof.
+- Software evidence cannot approve fixture practicality or production use.
+- M32 / Issue #57 / PR #54 remains superseded and cannot be resumed as current work.
+
+## Budgets
+
+- **Live requests per acceptance run:** 1
+- **Automatic provider retries:** 0
+- **Repair requests in M33.1:** 0
+- **Maximum request timeout:** 60 seconds
+- **Model policy:** explicitly configured high-capability OpenAI model; no default guess or silent switch
+
+These are ceilings, not targets. Missing or failed live-provider evidence blocks the live acceptance path; it does not authorize another request or a deterministic substitute.
+
+## Required evidence
+
+- **A — repository/deterministic:** focused tests, full suite, `bash scripts/ci.sh`, `git diff --check`, governance/secret checks.
+- **B — real geometry:** pinned OCP reconstruction evidence and source immutability.
+- **C — native UI:** unmistakable LIVE / FAILED-NO-FALLBACK / OFFLINE states.
+- **E — live provider:** one intentional OpenAI request, explicit model/provider, request count, timeout/retry evidence, safe provenance, no fallback.
+
+Profile E requires an intentional live request. Offline CI does not satisfy it.
 
 ## Held and superseded
 
-- Issue #57 — closed as superseded
-- PR #54 — closed unmerged; branch and evidence preserved for salvage
+- M32 / Issue #57 — SUPERSEDED
+- PR #54 — closed unmerged; branch and evidence preserved for selective salvage
 - Issue #59 — closed as superseded
 - Issue #63 — closed as superseded
-
-Do not reopen or continue these items unless Issue #66 or a later accepted decision explicitly authorizes it.
-
-## In scope
-
-- Replace the old Foreman operating model with a LaserX-style Review-Control ↔ Codex loop.
-- Make AI the typed fixture-strategy author.
-- Keep OCP/deterministic systems responsible for authoring, validation, and failure evidence.
-- Prohibit silent live-AI fallback.
-- Define product reconstruction and structured fixture-precedent requirements.
-- Define the milestone transition that supersedes M32 without calling it complete.
-- Define one bounded AI-driven fixture-synthesis proof before broader work.
-- Repair deterministic governance/state validation exposed by PR #67 without broadening into product runtime work.
-
-## Out of scope
-
-- Product runtime implementation in this governance gate.
-- Merging or deleting PR #54.
-- Production fixture approval or release.
-- Multiple fixture families.
-- Full general-purpose CAD.
-- Customer or employer CAD in public automation.
-- Supplier scraping or unauthorized CAD redistribution.
-
-## Success evidence
-
-- `AGENTS.md`, Product Direction, Architecture, Engineering Constitution, milestone governance, operator protocol, and Codex prompt all agree.
-- `docs/CONTROL_STATE.json` and this file agree and pass deterministic validation.
-- No active instruction or executable workflow authorizes the advisory-AI/deterministic-template product path.
-- The autonomous Foreman workflow and automatic selector fail closed.
-- The next bounded product gate has measurable acceptance criteria.
-- The old milestone registry is preserved byte-for-byte as historical evidence rather than silently rewritten.
-- Review-Control can issue one `CONTINUE`; Codex can repair one bounded pass and stop `AWAITING_REVIEW`.
+- `docs/MILESTONE_STATE.json` — frozen historical evidence only
 
 ## Next valid action
 
-**Check PR #67's exact head and CI.** If repository-control validation fails, write bounded findings and issue `CONTINUE` for Codex to repair the same PR. Do not begin product implementation before this governance head is accepted.
+**CONTINUE**
+
+Codex must read Issue #69 and repository truth, implement the smallest complete M33.1 vertical slice on one focused draft PR, run the required evidence, and stop `AWAITING_REVIEW`. It must not begin M33.2, merge, advance, or reinterpret the gate.
