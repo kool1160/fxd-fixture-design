@@ -167,7 +167,7 @@ class GovernanceResetTests(unittest.TestCase):
             validator,
         )
         self.assertIn(
-            '(root / "docs/MILESTONE_STATE.json").read_bytes()',
+            'canonical_worktree_blob(root, "docs/MILESTONE_STATE.json")',
             validator,
         )
 

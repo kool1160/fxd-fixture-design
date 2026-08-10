@@ -25,7 +25,7 @@ from .connectors import (ApprovalRequired, CompatibilityProbe, ConnectorCapabili
                          ConnectorDescriptor, ConnectorError, NeutralStepConnector,
                          connector_registry, probe_solidworks,
                          require_destructive_approval)
-from .kernel import (KernelAssembly, KernelCapabilities, KernelComponent, KernelEdgeRecord, KernelFace,
+from .kernel import (KernelAssembly, KernelBody, KernelCapabilities, KernelComponent, KernelEdgeRecord, KernelFace,
                      KernelTriangleMesh, KernelOperationError, KernelUnavailable, RealKernel,
                      TopologyCounts, installed_backend_candidates)
 from .review_kernel import OcpKernel
@@ -55,6 +55,12 @@ from .component_geometry import (ComponentClassification, ComponentExport, Compo
                                  generate_manufacturing_assembly, generate_manufacturing_assembly_for_product,
                                  validate_manufacturing_assembly, write_manufacturing_export_package)
 from .workbench import WorkbenchDocument, load_step_for_workbench
+from .product_reconstruction import (
+    RECONSTRUCTION_SCHEMA, AxisEvidence, HoleEvidence, InterpretedFeature,
+    ManufacturingClassification, PlaneEvidence, ProductReconstruction,
+    ProductReconstructionError, ReconstructionBody, ReconstructionComponent,
+    ReconstructionFace, ReconstructionQuestion, reconstruct_product,
+)
 from .vtk_viewer import (RenderDiagnostics, VtkSceneController,
                          VtkViewerUnavailable, VtkWorkbenchViewer)
 from .drawings import (APPROVAL_TEXT, NOT_RELEASED_TEXT, BomEntry, DrawingAnnotation,
@@ -110,7 +116,13 @@ from .ai_fixture_engineer import (
     apply_recommended_intent, build_ai_request, decide_proposal,
     decide_recommendation, deterministic_baseline_proposal, edit_recommendation,
     generate_fixture_proposal, minimal_intent_questions, proposal_from_ai_response,
-    proposal_engineering_context_identity, validate_fixture_proposal,
+    prepare_proposal_project, proposal_engineering_context_identity,
+    validate_fixture_proposal,
+)
+from .ai_execution import (
+    AI_EXECUTION_SCHEMA, AiExecutionError, AiExecutionProvenance,
+    DesignExecutionOutcome, ExecutionMode, FailureCategory, RequestStatus,
+    execute_design_mode, selected_mode_provenance,
 )
 
 
@@ -125,7 +137,7 @@ def require_real_kernel() -> RealKernel:
     return kernel
 
 
-__all__ = ["Aabb", "AccessAnalysis", "AccessAnalysisError", "AccessEnvelope", "AccessFinding", "AnnotationError", "ApprovalRequired", "Assumption", "Body", "Box", "CompatibilityProbe", "Component", "CompleteFixtureConcept", "ConceptScore", "ConnectorCapabilities", "ConnectorDescriptor", "ConnectorError", "ConstraintAnalysis", "ConstraintAnalysisError", "ConstraintFinding", "CorrectionRecord", "CriticalCharacteristic", "Edge", "EngineeringAnnotations", "ExportError", "FabricationPackage", "Face", "FixtureConcept", "FixtureCorrection", "FixtureEdit", "FixtureFeature", "FixtureFinding", "FixtureGenerationError", "FixtureParameters", "GeometryReference", "KernelAssembly", "KernelCapabilities", "KernelComponent", "KernelEdgeRecord", "KernelFace", "KernelOperationError", "KernelTriangleMesh", "KernelUnavailable", "KnowledgeError", "KnowledgeStore", "LocatorContact", "LocatingAnalysis", "LocatingStrategy", "ManufacturingGeometry", "ManufacturingSolid", "ManufacturingSpec", "NeutralStepConnector", "OcpKernel", "ProductModel", "ProjectRevision", "ProposedFeature", "RealKernel", "RankedFixtureConcepts", "ReviewGeometry", "ReviewVisualItem", "StepImportError", "ToolingItem", "ToolingLibrary", "ToolingLibraryError", "ToolingSelection", "TopologyCounts", "Transform", "ValidationFinding", "ValidationResult", "VALIDATION_VERSION", "Vec3", "VisualEdge", "WeldAccessRequest", "WeldJoint", "WeldRecommendation", "WeldRuleAnalysis", "WeldRuleConfig", "WeldRuleError", "WeldRuleFinding", "analyze_locating_strategy", "build_fabrication_package", "build_review_geometry", "connector_registry", "digest_text", "evaluate_access", "evaluate_weld_rules", "generate_fixture_concepts", "generate_fixture_primitives", "generate_manufacturing_geometry", "generic_tooling_library", "import_step", "installed_backend_candidates", "neutral_export", "private_knowledge_path", "probe_solidworks", "require_destructive_approval", "require_real_kernel", "validate_fixture_concept", "write_fabrication_package"]
+__all__ = ["Aabb", "AccessAnalysis", "AccessAnalysisError", "AccessEnvelope", "AccessFinding", "AnnotationError", "ApprovalRequired", "Assumption", "Body", "Box", "CompatibilityProbe", "Component", "CompleteFixtureConcept", "ConceptScore", "ConnectorCapabilities", "ConnectorDescriptor", "ConnectorError", "ConstraintAnalysis", "ConstraintAnalysisError", "ConstraintFinding", "CorrectionRecord", "CriticalCharacteristic", "Edge", "EngineeringAnnotations", "ExportError", "FabricationPackage", "Face", "FixtureConcept", "FixtureCorrection", "FixtureEdit", "FixtureFeature", "FixtureFinding", "FixtureGenerationError", "FixtureParameters", "GeometryReference", "KernelAssembly", "KernelBody", "KernelCapabilities", "KernelComponent", "KernelEdgeRecord", "KernelFace", "KernelOperationError", "KernelTriangleMesh", "KernelUnavailable", "KnowledgeError", "KnowledgeStore", "LocatorContact", "LocatingAnalysis", "LocatingStrategy", "ManufacturingGeometry", "ManufacturingSolid", "ManufacturingSpec", "NeutralStepConnector", "OcpKernel", "ProductModel", "ProjectRevision", "ProposedFeature", "RealKernel", "RankedFixtureConcepts", "ReviewGeometry", "ReviewVisualItem", "StepImportError", "ToolingItem", "ToolingLibrary", "ToolingLibraryError", "ToolingSelection", "TopologyCounts", "Transform", "ValidationFinding", "ValidationResult", "VALIDATION_VERSION", "Vec3", "VisualEdge", "WeldAccessRequest", "WeldJoint", "WeldRecommendation", "WeldRuleAnalysis", "WeldRuleConfig", "WeldRuleError", "WeldRuleFinding", "analyze_locating_strategy", "build_fabrication_package", "build_review_geometry", "connector_registry", "digest_text", "evaluate_access", "evaluate_weld_rules", "generate_fixture_concepts", "generate_fixture_primitives", "generate_manufacturing_geometry", "generic_tooling_library", "import_step", "installed_backend_candidates", "neutral_export", "private_knowledge_path", "probe_solidworks", "require_destructive_approval", "require_real_kernel", "validate_fixture_concept", "write_fabrication_package"]
 __all__ += ["ReviewZone", "SequencePlan", "WorkflowComparison", "WorkflowEnvelope", "WorkflowError",
             "WorkflowFinding", "WorkflowReport", "WorkflowStep", "WorkflowVariant",
             "WorkflowVisualItem",
@@ -146,6 +158,11 @@ __all__ += ["ComponentClassification", "ComponentExport", "ComponentGeometryErro
             "generate_manufacturing_assembly_for_product", "validate_manufacturing_assembly",
             "write_manufacturing_export_package"]
 __all__ += ["WorkbenchDocument", "load_step_for_workbench"]
+__all__ += ["RECONSTRUCTION_SCHEMA", "AxisEvidence", "HoleEvidence",
+            "InterpretedFeature", "ManufacturingClassification", "PlaneEvidence",
+            "ProductReconstruction", "ProductReconstructionError", "ReconstructionBody",
+            "ReconstructionComponent", "ReconstructionFace", "ReconstructionQuestion",
+            "reconstruct_product"]
 __all__ += ["RenderDiagnostics", "VtkSceneController", "VtkViewerUnavailable",
             "VtkWorkbenchViewer"]
 __all__ += ["APPROVAL_TEXT", "NOT_RELEASED_TEXT", "BomEntry", "DrawingAnnotation", "DrawingDimension",
@@ -186,4 +203,7 @@ __all__ += ["PROMPT_CONTRACT_VERSION", "PROPOSAL_REQUEST_SCHEMA", "PROPOSAL_SCHE
             "apply_recommended_intent", "build_ai_request", "decide_proposal",
             "decide_recommendation", "deterministic_baseline_proposal", "edit_recommendation",
             "generate_fixture_proposal", "minimal_intent_questions", "proposal_from_ai_response",
-            "validate_fixture_proposal"]
+            "prepare_proposal_project", "validate_fixture_proposal"]
+__all__ += ["AI_EXECUTION_SCHEMA", "AiExecutionError", "AiExecutionProvenance",
+            "DesignExecutionOutcome", "ExecutionMode", "FailureCategory", "RequestStatus",
+            "execute_design_mode", "selected_mode_provenance"]

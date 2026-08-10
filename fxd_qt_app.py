@@ -74,6 +74,7 @@ from fxd_geometry import (
     FixtureBuildRequirements,
     FixtureBuildError,
     ExportError,
+    ExecutionMode,
     GeometryReference,
     InteractiveWorkflow,
     InteractiveWorkflowError,
@@ -100,6 +101,7 @@ from fxd_geometry import (
     product_from_workbench_document,
     generate_fixture_build_plan as generate_m30_fixture_build_plan,
     generate_fixture_proposal,
+    execute_design_mode,
     minimal_intent_questions,
     orientation_from_face,
     orientation_from_faces,
@@ -107,6 +109,7 @@ from fxd_geometry import (
     recommend_orientations,
     reference_plane_orientation,
     proposal_engineering_context_identity,
+    selected_mode_provenance,
     tooling_record_from_file,
 )
 from fxd_geometry.operations import (
@@ -228,7 +231,8 @@ class _ProposalTask(QRunnable):
 
     def __init__(self, document: WorkbenchDocument, workflow: InteractiveWorkflow,
                  request_id: int, provider: AiFixtureProvider | None,
-                 cancellation: CancellationToken, prior_proposal: object | None = None,
+                 cancellation: CancellationToken, mode: ExecutionMode,
+                 prior_proposal: object | None = None,
                  current_project: FxdProject | None = None) -> None:
         super().__init__()
         self.document = document
@@ -236,14 +240,15 @@ class _ProposalTask(QRunnable):
         self.request_id = request_id
         self.provider = provider
         self.cancellation = cancellation
+        self.mode = mode
         self.prior_proposal = prior_proposal
         self.current_project = current_project
         self.signals = _ProposalSignals()
 
     def run(self) -> None:
         try:
-            outcome = generate_fixture_proposal(
-                self.document, self.workflow, provider=self.provider,
+            outcome = execute_design_mode(
+                self.document, self.workflow, self.mode, provider=self.provider,
                 cancellation=self.cancellation, prior_proposal=self.prior_proposal,
                 current_project=self.current_project,
             )
@@ -633,6 +638,7 @@ class FxdWorkbenchWindow(QMainWindow):
         self._proposal_cancellation: CancellationToken | None = None
         self._first_successful_source_import = False
         self.ai_provider = ai_provider
+        self._execution_mode = ExecutionMode.DETERMINISTIC_OFFLINE
         self._proposal_records: dict[str, object] = {}
         self._guided_issue_records: dict[str, object] = {}
         self._active_guided_issue: str | None = None
@@ -956,12 +962,29 @@ class FxdWorkbenchWindow(QMainWindow):
             "engineering validation remains authoritative.", host,
         )
         introduction.setWordWrap(True)
+        self.ai_mode_banner = QLabel(
+            "DETERMINISTIC / OFFLINE — NO LIVE AI REQUEST", host,
+        )
+        self.ai_mode_banner.setObjectName("aiDesignModeBanner")
+        self.ai_mode_banner.setWordWrap(True)
+        self.ai_mode_banner.setProperty("sectionHeading", True)
+        self.proposal_execution_mode = QComboBox(host)
+        self.proposal_execution_mode.setObjectName("aiDesignExecutionMode")
+        self.proposal_execution_mode.addItem(
+            "Deterministic / Offline", ExecutionMode.DETERMINISTIC_OFFLINE.value,
+        )
+        self.proposal_execution_mode.addItem(
+            "AI Design — Live OpenAI", ExecutionMode.AI_DESIGN_LIVE.value,
+        )
+        self.proposal_execution_mode.currentIndexChanged.connect(
+            self._execution_mode_changed
+        )
         self.proposal_status = QLabel(
             "Accept manufacturing orientation to begin.", host,
         )
         self.proposal_status.setWordWrap(True)
         self.proposal_status.setObjectName("fixtureProposalStatus")
-        self.proposal_generate = QPushButton("Generate Fixture Proposal", host)
+        self.proposal_generate = QPushButton("Run Selected Design Mode", host)
         self.proposal_generate.setObjectName("generateFixtureProposal")
         self.proposal_generate.setProperty("role", "primary")
         self.proposal_generate.clicked.connect(self.generate_fixture_proposal_action)
@@ -1053,6 +1076,10 @@ class FxdWorkbenchWindow(QMainWindow):
 
         layout.addWidget(heading)
         layout.addWidget(introduction)
+        layout.addWidget(self.ai_mode_banner)
+        mode_form = QFormLayout()
+        mode_form.addRow("Execution mode:", self.proposal_execution_mode)
+        layout.addLayout(mode_form)
         layout.addWidget(self.proposal_status)
         layout.addWidget(self.proposal_generate)
         layout.addWidget(self.proposal_cancel)
@@ -1806,20 +1833,54 @@ class FxdWorkbenchWindow(QMainWindow):
             review.raise_()
         self.review_tabs.setCurrentIndex(1)
 
+    def _selected_execution_mode(self) -> ExecutionMode:
+        value = self.proposal_execution_mode.currentData()
+        if value is None:
+            raise InteractiveWorkflowError("select an explicit AI Design or offline mode")
+        return ExecutionMode(str(value))
+
+    def _execution_mode_changed(self) -> None:
+        mode = self._selected_execution_mode()
+        self._execution_mode = mode
+        if self.project is not None:
+            reconstruction_identity = (
+                self.project.product_reconstruction.reconstruction_identity
+                if self.project.product_reconstruction is not None else None
+            )
+            provenance = selected_mode_provenance(
+                mode, self.project.product.source_sha256, reconstruction_identity,
+            )
+            self._replace_project(
+                self.project.with_ai_execution(provenance, clear_proposal=True)
+            )
+            scene = self._scene()
+            if scene is not None:
+                scene.set_review_geometry(())
+        self._populate_proposal()
+        self.statusBar().showMessage(
+            "Execution mode selected explicitly; no provider request has occurred."
+        )
+
     def generate_fixture_proposal_now(self, provider: AiFixtureProvider | None = None):
         """Synchronous seam used by focused tests and non-threaded integrations."""
         if self.document is None or self.workflow is None:
             raise InteractiveWorkflowError("import a STEP model before generating a proposal")
         self._persist_process_setup_from_controls()
-        outcome = generate_fixture_proposal(
-            self.document, self.workflow,
+        mode = self._selected_execution_mode()
+        outcome = execute_design_mode(
+            self.document, self.workflow, mode,
             provider=provider if provider is not None else self.ai_provider,
             prior_proposal=self.project.fixture_proposal if self.project else None,
             current_project=self.project,
         )
         self.workflow = outcome.project.workflow
         self._replace_project(outcome.project)
-        self._show_active_concept_geometry()
+        if outcome.proposal is not None:
+            self._show_active_concept_geometry()
+        else:
+            scene = self._scene()
+            if scene is not None:
+                scene.set_review_geometry(())
         self._refresh_all()
         return outcome
 
@@ -1848,6 +1909,7 @@ class FxdWorkbenchWindow(QMainWindow):
         self._proposal_cancellation = cancellation
         task = _ProposalTask(
             self.document, self.workflow, request_id, self.ai_provider, cancellation,
+            self._selected_execution_mode(),
             self.project.fixture_proposal if self.project else None,
             self.project,
         )
@@ -1861,7 +1923,7 @@ class FxdWorkbenchWindow(QMainWindow):
         self.proposal_generate.setEnabled(False)
         self.proposal_cancel.setVisible(True)
         self.proposal_status.setText(
-            "Generating proposal. Source geometry remains local and unchanged."
+            "Running the explicitly selected design mode. Source geometry remains local and unchanged."
         )
         self.analysis_pool.start(task)
 
@@ -1937,7 +1999,12 @@ class FxdWorkbenchWindow(QMainWindow):
         self.proposal_generate.setEnabled(True)
         self.workflow = outcome.project.workflow
         self._replace_project(outcome.project)
-        self._show_active_concept_geometry()
+        if outcome.proposal is not None:
+            self._show_active_concept_geometry()
+        else:
+            scene = self._scene()
+            if scene is not None:
+                scene.set_review_geometry(())
         self._refresh_all()
         self.statusBar().showMessage(outcome.message)
 
@@ -1983,6 +2050,44 @@ class FxdWorkbenchWindow(QMainWindow):
         self._proposal_records.clear()
         self.proposal_recommendations.clear()
         proposal = self.project.fixture_proposal if self.project else None
+        execution = self.project.ai_execution if self.project else None
+        if execution is not None:
+            self._execution_mode = execution.mode
+            index = self.proposal_execution_mode.findData(execution.mode.value)
+            if index >= 0 and index != self.proposal_execution_mode.currentIndex():
+                self.proposal_execution_mode.blockSignals(True)
+                self.proposal_execution_mode.setCurrentIndex(index)
+                self.proposal_execution_mode.blockSignals(False)
+        else:
+            self._execution_mode = self._selected_execution_mode()
+        if execution is not None and execution.mode == ExecutionMode.AI_DESIGN_LIVE:
+            if execution.request_status.value == "live_request_succeeded":
+                self.ai_mode_banner.setText(
+                    f"AI DESIGN — LIVE — {execution.provider_identity} / {execution.model_identity}"
+                )
+            elif execution.request_status.value in {
+                    "live_request_failed", "live_request_cancelled"}:
+                self.ai_mode_banner.setText(
+                    "AI DESIGN — FAILED — NO FALLBACK USED"
+                )
+            else:
+                self.ai_mode_banner.setText(
+                    "AI DESIGN — LIVE — openai / NOT CONFIGURED OR NOT YET RUN"
+                )
+        elif self._execution_mode == ExecutionMode.AI_DESIGN_LIVE:
+            configured_model = None
+            if (self.ai_provider is not None
+                    and getattr(self.ai_provider, "identity", None) == "openai"):
+                configured_model = getattr(self.ai_provider, "engine_identifier", None)
+            if not configured_model:
+                configured_model = os.environ.get("FXD_OPENAI_MODEL", "").strip() or None
+            self.ai_mode_banner.setText(
+                f"AI DESIGN — LIVE — openai / {configured_model or 'NOT CONFIGURED'}"
+            )
+        else:
+            self.ai_mode_banner.setText(
+                "DETERMINISTIC / OFFLINE — NO LIVE AI REQUEST"
+            )
         orientation = self.workflow.setup.manufacturing_orientation if self.workflow else None
         orientation_identity = orientation.identity if orientation else None
         orientation_ready = bool(
@@ -1990,14 +2095,40 @@ class FxdWorkbenchWindow(QMainWindow):
         )
         self.proposal_generate.setEnabled(orientation_ready and not self._proposal_tasks)
         if proposal is None:
-            self.proposal_summary.setText("No fixture proposal has been generated.")
-            self.proposal_status.setText(
-                "Ready to generate from accepted manufacturing orientation."
-                if orientation_ready else "Accept manufacturing orientation to begin."
-            )
+            reconstruction = self.project.product_reconstruction if self.project else None
+            if reconstruction is not None:
+                self.proposal_summary.setText(
+                    f"Native reconstruction: {len(reconstruction.components)} components, "
+                    f"{len(reconstruction.faces)} exact faces, "
+                    f"{reconstruction.blocker_count} material ambiguity blockers."
+                )
+            else:
+                self.proposal_summary.setText("No fixture proposal has been generated.")
+            if execution is not None and execution.request_status.value in {
+                    "live_request_failed", "live_request_cancelled"}:
+                self.proposal_status.setText(
+                    f"Live AI Design failed safely ({execution.failure_category.value}); "
+                    "no deterministic substitute was created."
+                )
+            else:
+                self.proposal_status.setText(
+                    "Ready to run the explicitly selected mode from accepted manufacturing orientation."
+                    if orientation_ready else "Accept manufacturing orientation to begin."
+                )
             self.proposal_accept.setEnabled(False)
             self.proposal_reject.setEnabled(False)
-            self.proposal_technical_details.setText("")
+            self.proposal_technical_details.setText(
+                "" if execution is None else
+                f"Execution identity: {execution.execution_identity}\n"
+                f"Mode: {execution.mode.value}\n"
+                f"Provider: {execution.provider_identity or 'none'}\n"
+                f"Model: {execution.model_identity or 'not configured'}\n"
+                f"Request attempted: {'Yes' if execution.request_attempted else 'No'}\n"
+                f"Request count: {execution.request_count}\n"
+                f"Status: {execution.request_status.value}\n"
+                f"Failure category: {execution.failure_category.value}\n"
+                "Fallback used: No"
+            )
             return
         stale = proposal.stale_reason(
             self.project.product.source_sha256, orientation_identity,
@@ -2006,10 +2137,14 @@ class FxdWorkbenchWindow(QMainWindow):
             else None,
         )
         state = "STALE - " + stale if stale else proposal.validation_status.upper()
-        ai_assisted = proposal.provenance.source.value == "ai"
+        ai_assisted = bool(
+            execution is not None
+            and execution.mode == ExecutionMode.AI_DESIGN_LIVE
+            and execution.request_status.value == "live_request_succeeded"
+        )
         source_label = (
-            "AI-assisted fixture proposal; deterministic validation remains authoritative"
-            if ai_assisted else "Deterministic baseline proposal; AI assistance unavailable"
+            "Live AI Design proposal; deterministic validation remains authoritative"
+            if ai_assisted else "Deterministic/offline proposal; no live AI request"
         )
         self.proposal_status.setText(
             f"{source_label}. Provider state: {proposal.provenance.provider_state.value}."
@@ -2036,11 +2171,18 @@ class FxdWorkbenchWindow(QMainWindow):
             f"Source SHA-256: {proposal.source_sha256}\n"
             f"Orientation identity: {proposal.manufacturing_orientation_identity}\n"
             f"Provider: {proposal.provenance.provider_identity}\n"
-            f"Mode: {'AI-assisted' if ai_assisted else 'Deterministic baseline'}\n"
+            f"Mode: {execution.mode.value if execution else 'legacy_unspecified'}\n"
             f"Model: {proposal.provenance.engine_identifier}\n"
-            f"Fallback used: {'No' if ai_assisted else 'Yes'}\n"
+            "Fallback used: No\n"
             f"Prompt contract: {proposal.provenance.prompt_contract_version}\n"
             f"Response contract: {proposal.provenance.response_contract_version}"
+            + (
+                f"\nRequest attempted: {'Yes' if execution.request_attempted else 'No'}"
+                f"\nRequest count: {execution.request_count}"
+                f"\nUsage: {execution.usage_status}"
+                f"\nReconstruction: {execution.reconstruction_identity}"
+                if execution is not None else ""
+            )
             + (
                 f"\nProvider failure: {proposal.provenance.provider_message}"
                 if proposal.provenance.provider_state == ProviderState.FAILED
@@ -3810,6 +3952,15 @@ class FxdWorkbenchWindow(QMainWindow):
             raise RuntimeError("source STEP identity changed during engineering analysis")
         if self.document.source_path and self.document.source_path.read_bytes() != source_bytes:
             raise RuntimeError("source STEP file changed during engineering analysis")
+        if project.ai_execution is None:
+            reconstruction_identity = (
+                project.product_reconstruction.reconstruction_identity
+                if project.product_reconstruction is not None else None
+            )
+            project = project.with_ai_execution(selected_mode_provenance(
+                self._selected_execution_mode(), project.product.source_sha256,
+                reconstruction_identity,
+            ))
         self._replace_project(project)
         self.workflow = project.workflow
         self.project_path = None

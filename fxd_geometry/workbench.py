@@ -7,7 +7,10 @@ from pathlib import Path
 
 import logging
 
-from .kernel import KernelAssembly, KernelOperationError, KernelTriangleMesh
+from .kernel import (
+    KernelAssembly, KernelBody, KernelEdgeRecord, KernelFace, KernelOperationError,
+    KernelTriangleMesh,
+)
 from .review_kernel import OcpKernel
 
 
@@ -24,6 +27,9 @@ class WorkbenchDocument:
     shape: object
     assembly: KernelAssembly
     meshes: tuple[KernelTriangleMesh, ...]
+    bodies: tuple[KernelBody, ...]
+    faces: tuple[KernelFace, ...]
+    edges: tuple[KernelEdgeRecord, ...]
     source_path: Path | None = None
 
     @property
@@ -65,7 +71,13 @@ def load_step_for_workbench(source: str | Path | bytes, *, kernel: OcpKernel | N
     meshes = active_kernel.tessellate(shape)
     if not meshes:
         raise ValueError("STEP source produced no displayable faces")
+    bodies = active_kernel.body_records(shape)
+    if not bodies:
+        raise ValueError("STEP source produced no exact solid/body evidence")
+    faces = active_kernel.face_records(shape)
+    edges = active_kernel.edge_records(shape)
     return WorkbenchDocument(
         source_name or (path.name if path else "<memory>"), sha256(data).hexdigest(),
-        data, shape, assembly, meshes, path.resolve() if path is not None else None,
+        data, shape, assembly, meshes, bodies, faces, edges,
+        path.resolve() if path is not None else None,
     )

@@ -42,6 +42,7 @@ python -m pip install --disable-pip-version-check --only-binary=:all: -r require
 python -m json.tool .github/codex/schemas/planning-handoff.schema.json >/dev/null
 python -m unittest discover -s tests >/dev/null
 python -u scripts/kernel_proof.py
+python -u scripts/m33_1_self_check.py
 
 if grep -RInE '(sk-[A-Za-z0-9_-]{20,}|OPENAI_API_KEY=.+)' \
   --exclude-dir=.git --exclude-dir=.venv \

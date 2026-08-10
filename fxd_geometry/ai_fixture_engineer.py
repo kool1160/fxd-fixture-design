@@ -654,6 +654,8 @@ class OpenAiResponsesProvider:
     def __init__(self, api_key: str, model: str) -> None:
         self._api_key = api_key
         self.engine_identifier = model
+        self.request_count = 0
+        self.last_usage: dict[str, int] | None = None
 
     @property
     def available(self) -> bool:
@@ -662,8 +664,7 @@ class OpenAiResponsesProvider:
     @classmethod
     def from_environment(cls) -> AiFixtureProvider:
         api_key = os.environ.get("OPENAI_API_KEY", "").strip()
-        model = (os.environ.get("FXD_OPENAI_MODEL", "").strip()
-                 or os.environ.get("FXD_AI_MODEL", "").strip())
+        model = os.environ.get("FXD_OPENAI_MODEL", "").strip()
         if not api_key or not model:
             return UnavailableAiProvider()
         return cls(api_key, model)
@@ -766,6 +767,7 @@ class OpenAiResponsesProvider:
         )
         bounded_timeout = min(max(float(timeout_seconds), 0.1), OPENAI_MAX_TIMEOUT_SECONDS)
         try:
+            self.request_count += 1
             with urlopen(http_request, timeout=bounded_timeout) as response:
                 response_bytes = response.read()
         except TimeoutError as exc:
@@ -781,6 +783,14 @@ class OpenAiResponsesProvider:
         except (UnicodeDecodeError, json.JSONDecodeError) as exc:
             raise FixtureProposalError("OpenAI response was malformed") from exc
         cancellation.raise_if_cancelled()
+        usage = raw.get("usage") if isinstance(raw, dict) else None
+        if isinstance(usage, dict):
+            safe_usage: dict[str, int] = {}
+            for key in ("input_tokens", "output_tokens", "total_tokens"):
+                value = usage.get(key)
+                if isinstance(value, int) and value >= 0:
+                    safe_usage[key] = value
+            self.last_usage = safe_usage or None
         return self._extract_output(raw)
 
 
@@ -988,7 +998,11 @@ def _infer_minimum_annotations(document: WorkbenchDocument,
         face = faces[0]
         component = next(item for item in document.assembly.components
                          if face in item.faces)
-        body_identity = "body:" + sha256(component.reference.encode()).hexdigest()[:20]
+        body = next(
+            item for item in component.bodies
+            if any(owned.reference == face.reference for owned in item.faces)
+        )
+        body_identity = body.reference
         candidates.append((GeometryReference(component.reference, body_identity, face.reference),
                            AnnotationRole.TERTIARY_DATUM))
     result = workflow
@@ -1048,7 +1062,10 @@ def build_ai_request(project: FxdProject) -> AiProposalRequest:
         "annotations": [{"identity": item.identity, "role": item.role.value,
                          "reference": item.reference.__dict__, "area_mm2": item.surface_area_mm2,
                          "normal": item.normal.__dict__}
-                        for item in workflow.geometry_annotations],
+                        for item in sorted(
+                            workflow.geometry_annotations,
+                            key=lambda value: value.identity,
+                        )],
         "customer_tooling": [{
             "identity": item.identity,
             "kind": item.kind,
@@ -1704,16 +1721,16 @@ def _reanalyze_preserving_authored_state(
         project, hidden_layers=current_project.hidden_layers,
         decisions=current_project.decisions,
         revisions=tuple(revisions.values()), approved_revision=None,
+        product_reconstruction=current_project.product_reconstruction,
+        ai_execution=current_project.ai_execution,
     )
 
 
-def generate_fixture_proposal(
+def prepare_proposal_project(
     document: WorkbenchDocument, workflow: InteractiveWorkflow,
-    *, provider: AiFixtureProvider | None = None, allow_fallback: bool = True,
-    timeout_seconds: float = 45.0, cancellation: CancellationToken | None = None,
-    prior_proposal: FixtureProposal | None = None,
-    current_project: FxdProject | None = None,
-) -> ProposalGenerationOutcome:
+    *, current_project: FxdProject | None = None,
+) -> FxdProject:
+    """Prepare current deterministic evidence without invoking an AI provider."""
     if workflow.source_sha256 != document.source_sha256:
         raise FixtureProposalError("workflow and immutable STEP source do not match")
     orientation = workflow.setup.manufacturing_orientation
@@ -1726,8 +1743,6 @@ def generate_fixture_proposal(
     questions = minimal_intent_questions(workflow)
     if questions:
         raise MissingIntentError(questions)
-    token = cancellation or CancellationToken.create()
-    token.raise_if_cancelled()
     if current_project is not None:
         if (current_project.product.source_sha256 != document.source_sha256
                 or current_project.product.source_bytes != document.source_bytes):
@@ -1746,6 +1761,21 @@ def generate_fixture_proposal(
         project = analyze_engineering_workflow(document, prepared)
         prepared = replace(project.workflow, concepts_generated=True, active_stage="Proposal")
         project = project.with_workflow(prepared)
+    return project
+
+
+def generate_fixture_proposal(
+    document: WorkbenchDocument, workflow: InteractiveWorkflow,
+    *, provider: AiFixtureProvider | None = None, allow_fallback: bool = True,
+    timeout_seconds: float = 45.0, cancellation: CancellationToken | None = None,
+    prior_proposal: FixtureProposal | None = None,
+    current_project: FxdProject | None = None,
+) -> ProposalGenerationOutcome:
+    token = cancellation or CancellationToken.create()
+    token.raise_if_cancelled()
+    project = prepare_proposal_project(
+        document, workflow, current_project=current_project,
+    )
     request = build_ai_request(project)
     provider = provider or HttpJsonAiProvider.from_environment()
     proposal: FixtureProposal

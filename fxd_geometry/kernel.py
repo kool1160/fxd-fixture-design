@@ -1,7 +1,7 @@
 """CAD-neutral boundary and reviewed OCP implementation for real B-Rep geometry."""
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import hashlib
 import logging
 from importlib.util import find_spec
@@ -77,6 +77,42 @@ class KernelFace:
     normal: tuple[float, float, float]
     surface_type: str = "unknown"
     is_planar: bool = False
+    axis_origin_mm: tuple[float, float, float] | None = None
+    axis_direction: tuple[float, float, float] | None = None
+    radius_mm: float | None = None
+    orientation: str = "forward"
+    legacy_reference: str | None = field(default=None, repr=False, compare=False)
+    legacy_surface_type: str | None = field(default=None, repr=False, compare=False)
+
+
+class _LegacyKernelFaceRepr:
+    """Exact six-field dataclass repr used in pre-M33 component hashes."""
+
+    def __init__(self, face: KernelFace) -> None:
+        self._face = face
+
+    def __repr__(self) -> str:
+        face = self._face
+        if face.legacy_reference is None or face.legacy_surface_type is None:
+            raise KernelOperationError("pre-M33 face identity evidence is unavailable")
+        return (
+            f"KernelFace(reference={face.legacy_reference!r}, "
+            f"area_mm2={face.area_mm2!r}, center_mm={face.center_mm!r}, "
+            f"normal={face.normal!r}, surface_type={face.legacy_surface_type!r}, "
+            f"is_planar={face.is_planar!r})"
+        )
+
+
+@dataclass(frozen=True)
+class KernelBody:
+    """Exact solid record with deterministic face ownership and mass evidence."""
+
+    reference: str
+    minimum_mm: tuple[float, float, float]
+    maximum_mm: tuple[float, float, float]
+    volume_mm3: float
+    topology: TopologyCounts
+    faces: tuple[KernelFace, ...]
 
 
 @dataclass(frozen=True)
@@ -86,7 +122,9 @@ class KernelComponent:
     name: str
     transform: tuple[float, ...]
     topology: TopologyCounts
+    bodies: tuple[KernelBody, ...]
     faces: tuple[KernelFace, ...]
+    legacy_reference: str | None = None
 
 
 @dataclass(frozen=True)
@@ -112,6 +150,7 @@ class RealKernel(Protocol):
     def boolean(self, operation: str, left: object, right: object) -> object: ...
     def clearance(self, left: object, right: object) -> float: ...
     def topology_counts(self, model: object) -> TopologyCounts: ...
+    def body_records(self, model: object) -> tuple[KernelBody, ...]: ...
     def face_records(self, model: object) -> tuple[KernelFace, ...]: ...
     def make_box(self, minimum: tuple[float, float, float], maximum: tuple[float, float, float]) -> object: ...
     def make_cylinder(self, center: tuple[float, float, float], radius: float, height: float) -> object: ...
@@ -242,11 +281,28 @@ class OcpKernel:
                 name = self._label_name(label) or "component-" + ".".join(map(str, path))
                 transform = self._location_record(location)
                 topology = self.topology_counts(transformed)
+                bodies = self.body_records(transformed)
                 faces = self.face_records(transformed)
-                payload = repr((path, name, transform, topology, faces)).encode()
+                if any(face.legacy_reference is None for face in faces):
+                    raise KernelOperationError(
+                        "pre-M33 face identity evidence is unavailable"
+                    )
+                legacy_faces = tuple(
+                    _LegacyKernelFaceRepr(face) for face in sorted(
+                        faces, key=lambda item: item.legacy_reference or "",
+                    )
+                )
+                legacy_payload = repr((
+                    path, name, transform, topology, legacy_faces,
+                )).encode()
+                legacy_reference = (
+                    "component:" + hashlib.sha256(legacy_payload).hexdigest()[:24]
+                )
+                payload = repr((path, name, transform, topology, bodies, faces)).encode()
                 reference = "component:" + hashlib.sha256(payload).hexdigest()[:24]
                 components.append(KernelComponent(reference, parent_reference, name,
-                                                  transform, topology, faces))
+                                                  transform, topology, bodies, faces,
+                                                  legacy_reference))
                 try:
                     color = Quantity_Color()
                     for color_type in (XCAFDoc_ColorType.XCAFDoc_ColorGen,
@@ -473,9 +529,49 @@ class OcpKernel:
         return TopologyCounts(*(len(self._subshapes(model, kind))
                                 for kind in ("solid", "shell", "face", "edge")))
 
+    def body_records(self, model: object) -> tuple[KernelBody, ...]:
+        """Return one exact record per OCP solid, including owned faces."""
+        from OCP.Bnd import Bnd_Box
+        from OCP.BRepBndLib import BRepBndLib
+        from OCP.BRepGProp import BRepGProp
+        from OCP.GProp import GProp_GProps
+
+        records: list[KernelBody] = []
+        for solid in self._subshapes(model, "solid"):
+            bounds = Bnd_Box()
+            BRepBndLib.AddOptimal_s(solid, bounds)
+            raw_bounds = tuple(round(float(value), 9) for value in bounds.Get())
+            minimum = raw_bounds[:3]
+            maximum = raw_bounds[3:]
+            props = GProp_GProps()
+            BRepGProp.VolumeProperties_s(solid, props)
+            volume = round(float(props.Mass()), 9)
+            topology = self._unique_topology_counts(solid)
+            faces = self.face_records(solid)
+            payload = repr((minimum, maximum, volume, topology, faces)).encode()
+            records.append(KernelBody(
+                "body:" + hashlib.sha256(payload).hexdigest()[:24],
+                minimum, maximum, volume, topology, faces,
+            ))
+        return tuple(sorted(records, key=lambda item: item.reference))
+
+    @staticmethod
+    def _unique_topology_counts(model: object) -> TopologyCounts:
+        """Count unique owned subshapes rather than explorer occurrences."""
+        from OCP.TopAbs import TopAbs_EDGE, TopAbs_FACE, TopAbs_SHELL, TopAbs_SOLID
+        from OCP.TopExp import TopExp
+        from OCP.TopTools import TopTools_IndexedMapOfShape
+
+        counts = []
+        for kind in (TopAbs_SOLID, TopAbs_SHELL, TopAbs_FACE, TopAbs_EDGE):
+            mapped = TopTools_IndexedMapOfShape()
+            TopExp.MapShapes_s(model, kind, mapped)
+            counts.append(int(mapped.Extent()))
+        return TopologyCounts(*counts)
+
     def face_records(self, model: object) -> tuple[KernelFace, ...]:
         from OCP.BRepAdaptor import BRepAdaptor_Surface
-        from OCP.GeomAbs import GeomAbs_Plane
+        from OCP.GeomAbs import GeomAbs_Cylinder, GeomAbs_Plane
         from OCP.BRepGProp import BRepGProp
         from OCP.GProp import GProp_GProps
         from OCP.TopAbs import TopAbs_REVERSED
@@ -500,11 +596,36 @@ class OcpKernel:
             direction = tuple(round(x, 9) for x in (normal.X(), normal.Y(), normal.Z()))
             surface_type = surface.GetType()
             planar = surface_type == GeomAbs_Plane
-            token = hashlib.sha256(repr((area, center, direction,
-                                         int(surface_type))).encode()).hexdigest()[:24]
+            cylindrical = surface_type == GeomAbs_Cylinder
+            axis_origin = axis_direction = None
+            radius = None
+            if cylindrical:
+                cylinder = surface.Cylinder()
+                axis = cylinder.Axis()
+                location = axis.Location()
+                axis_vector = axis.Direction()
+                axis_origin = tuple(round(float(value), 9) for value in (
+                    location.X(), location.Y(), location.Z(),
+                ))
+                axis_direction = tuple(round(float(value), 9) for value in (
+                    axis_vector.X(), axis_vector.Y(), axis_vector.Z(),
+                ))
+                radius = round(float(cylinder.Radius()), 9)
+            orientation = "reversed" if face.Orientation() == TopAbs_REVERSED else "forward"
+            legacy_token = hashlib.sha256(repr((
+                area, center, direction, int(surface_type),
+            )).encode()).hexdigest()[:24]
+            legacy_surface_type = "plane" if planar else str(surface_type)
+            token = hashlib.sha256(repr((
+                area, center, direction, int(surface_type), axis_origin,
+                axis_direction, radius, orientation,
+            )).encode()).hexdigest()[:24]
             records.append(KernelFace(
                 "face:" + token, area, center, direction,
-                "plane" if planar else str(surface_type), planar,
+                "plane" if planar else ("cylinder" if cylindrical else str(surface_type)),
+                planar, axis_origin, axis_direction, radius, orientation,
+                legacy_reference="face:" + legacy_token,
+                legacy_surface_type=legacy_surface_type,
             ))
         return tuple(sorted(records, key=lambda item: item.reference))
 
