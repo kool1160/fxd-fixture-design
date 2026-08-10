@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -44,6 +46,59 @@ class GovernanceResetTests(unittest.TestCase):
             self.assertFalse(context.exists())
         self.assertNotEqual(0, result.returncode)
         self.assertIn("automatic milestone selection is retired by Issue #66", result.stderr)
+
+    def test_control_state_keeps_selector_retired_without_operator_protocol(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            scripts = root / "scripts"
+            docs = root / "docs"
+            scripts.mkdir()
+            docs.mkdir()
+            shutil.copy2(ROOT / "scripts" / "fxd-backlog.mjs", scripts / "fxd-backlog.mjs")
+            # This test isolates selector authority. Historical registry semantics
+            # are covered separately by the real legacy validator suite.
+            (scripts / "validate_legacy_milestones.py").write_text(
+                "raise SystemExit(0)\n", encoding="utf-8"
+            )
+            (docs / "CONTROL_STATE.json").write_text("{}\n", encoding="utf-8")
+            (docs / "MILESTONE_STATE.json").write_text(
+                json.dumps(
+                    {
+                        "product_lane": {"paused": False, "active_milestone": 32},
+                        "milestones": [],
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            self.assertFalse((docs / "OPERATOR_PROTOCOL.md").exists())
+            result = subprocess.run(
+                ["node", "scripts/fxd-backlog.mjs", "select"],
+                cwd=root,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("automatic milestone selection is retired by Issue #66", result.stderr)
+        self.assertNotIn("Selected", result.stdout)
+
+    def test_control_state_validator_pins_exact_historical_registry_path(self) -> None:
+        validator = (ROOT / "scripts" / "validate_control_state.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            'FROZEN_MILESTONE_REGISTRY_PATH = "docs/MILESTONE_STATE.json"',
+            validator,
+        )
+        self.assertIn(
+            'legacy.get("path") != FROZEN_MILESTONE_REGISTRY_PATH',
+            validator,
+        )
+        self.assertIn(
+            "legacy_path = repo_root / FROZEN_MILESTONE_REGISTRY_PATH",
+            validator,
+        )
 
     def test_historical_validation_never_prints_m32_as_current_authority(self) -> None:
         result = subprocess.run(
