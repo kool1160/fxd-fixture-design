@@ -5,6 +5,10 @@ from pathlib import Path
 
 
 REQUIRED_PROMPT_TOKENS = (
+    "## Current-main authority preflight",
+    "Before trusting branch-local project state",
+    "If current `main` cannot be inspected",
+    "stale branch governance",
     "`CONTINUE` **never authorizes an OpenAI API request.**",
     "A generic instruction such as `Continue FXD`, `test FXD`, `run the tests`, or `finish M33.1` is not API-spend authorization.",
     "must not:",
@@ -27,11 +31,17 @@ def validate(root: Path) -> list[str]:
 
     for token in REQUIRED_PROMPT_TOKENS:
         if token not in prompt:
-            errors.append(f"standing Codex prompt lacks API-spend firewall token: {token!r}")
+            errors.append(f"standing Codex prompt lacks API-spend/current-main firewall token: {token!r}")
 
     evidence_section = prompt.split("## Evidence", 1)[-1]
     if "explicit opt-in live OpenAI evidence;" in evidence_section:
         errors.append("standing Codex prompt still authorizes live evidence by generic applicability")
+
+    work_order = prompt.split("## Work order", 1)[-1]
+    if "current `main` `CURRENT.md` is `HELD`" not in work_order:
+        errors.append("standing Codex prompt does not fail closed on a current-main hold")
+    if "product_implementation_held: true" not in work_order:
+        errors.append("standing Codex prompt does not bind implementation to current-main hold state")
 
     return errors
 
@@ -44,7 +54,7 @@ def main() -> int:
         for error in errors:
             print(f"- {error}")
         return 1
-    print("FXD API spend firewall validated: CONTINUE and ordinary testing cannot authorize provider spend.")
+    print("FXD API spend firewall validated: stale branches, CONTINUE, and ordinary testing cannot authorize provider spend.")
     return 0
 
 
