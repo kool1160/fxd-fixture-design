@@ -1,0 +1,168 @@
+name: M33.1 Observed Continue Trigger
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/dispatch/m33-1-continue.json
+  workflow_dispatch:
+
+# This workflow does not implement FXD. It provides one observable, exact-branch
+# trigger for the already-merged bounded M33.1 dispatcher. It dispatches the
+# default-branch workflow, discovers the resulting run ID, waits for completion,
+# and mirrors the result so Review-Control can inspect it through the trigger PR.
+
+permissions:
+  actions: write
+  contents: read
+
+concurrency:
+  group: fxd-m33-1-observed-trigger
+  cancel-in-progress: false
+
+jobs:
+  dispatch-and-observe:
+    name: Dispatch and observe bounded M33.1 Codex pass
+    if: >-
+      github.repository == 'kool1160/fxd-fixture-design' &&
+      (
+        github.event_name == 'workflow_dispatch' ||
+        github.head_ref == 'dispatch/m33-1-observed-continue'
+      )
+    runs-on: ubuntu-latest
+    timeout-minutes: 170
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TARGET_WORKFLOW: m33-1-codex-continue.yml
+      TARGET_BRANCH: main
+    steps:
+      - name: Check out authoritative main
+        uses: actions/checkout@v5
+        with:
+          ref: main
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Validate current M33.1 authority before dispatch
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/validate_control_state.py
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          state = json.loads(Path('docs/CONTROL_STATE.json').read_text(encoding='utf-8'))
+          gate = state.get('active_gate', {})
+          expected = {
+              'lane': 'product',
+              'milestone': 33,
+              'id': 'M33.1',
+              'issue': 69,
+              'pull_request': None,
+              'branch': None,
+              'expected_pr_state': 'none_until_codex_continue',
+          }
+          problems = [
+              f"{key}: expected {value!r}, got {gate.get(key)!r}"
+              for key, value in expected.items()
+              if gate.get(key) != value
+          ]
+          if state.get('state') != 'ACTIVE':
+              problems.append(f"state must be ACTIVE, got {state.get('state')!r}")
+          if state.get('product_implementation_held') is not False:
+              problems.append('product implementation is held')
+          if problems:
+              raise SystemExit('M33.1 dispatch authority failed:\n- ' + '\n- '.join(problems))
+          PY
+
+      - name: Snapshot prior dispatcher runs
+        id: before
+        shell: bash
+        run: |
+          set -euo pipefail
+          prior_id="$(gh api \
+            -H 'Accept: application/vnd.github+json' \
+            "/repos/$GITHUB_REPOSITORY/actions/workflows/$TARGET_WORKFLOW/runs?event=workflow_dispatch&branch=$TARGET_BRANCH&per_page=1" \
+            --jq '.workflow_runs[0].id // 0')"
+          echo "prior_id=$prior_id" >> "$GITHUB_OUTPUT"
+          echo "Prior dispatcher run ID: $prior_id"
+
+      - name: Dispatch the bounded M33.1 workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh workflow run "$TARGET_WORKFLOW" --repo "$GITHUB_REPOSITORY" --ref "$TARGET_BRANCH"
+          echo "Dispatched $TARGET_WORKFLOW on $TARGET_BRANCH"
+
+      - name: Discover the new dispatcher run
+        id: discover
+        shell: bash
+        env:
+          PRIOR_ID: ${{ steps.before.outputs.prior_id }}
+        run: |
+          set -euo pipefail
+          deadline=$((SECONDS + 120))
+          run_id=""
+          while (( SECONDS < deadline )); do
+            run_id="$(gh api \
+              -H 'Accept: application/vnd.github+json' \
+              "/repos/$GITHUB_REPOSITORY/actions/workflows/$TARGET_WORKFLOW/runs?event=workflow_dispatch&branch=$TARGET_BRANCH&per_page=10" \
+              --jq --arg prior "$PRIOR_ID" '[.workflow_runs[] | select((.id|tostring) != $prior)] | sort_by(.created_at) | reverse | .[0].id // empty')"
+            if [[ -n "$run_id" ]]; then
+              break
+            fi
+            sleep 3
+          done
+          [[ -n "$run_id" ]] || { echo "No new dispatcher run appeared within 120 seconds" >&2; exit 1; }
+          run_url="https://github.com/$GITHUB_REPOSITORY/actions/runs/$run_id"
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+          echo "run_url=$run_url" >> "$GITHUB_OUTPUT"
+          echo "Dispatcher run: $run_url"
+
+      - name: Wait for dispatcher completion
+        id: wait
+        shell: bash
+        env:
+          RUN_ID: ${{ steps.discover.outputs.run_id }}
+          RUN_URL: ${{ steps.discover.outputs.run_url }}
+        run: |
+          set -euo pipefail
+          deadline=$((SECONDS + 9900))
+          status=""
+          conclusion=""
+          while (( SECONDS < deadline )); do
+            run_json="$(gh api -H 'Accept: application/vnd.github+json' "/repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID")"
+            status="$(jq -r '.status' <<<"$run_json")"
+            conclusion="$(jq -r '.conclusion // empty' <<<"$run_json")"
+            echo "Dispatcher status: $status${conclusion:+ / $conclusion}"
+            if [[ "$status" == "completed" ]]; then
+              break
+            fi
+            sleep 15
+          done
+          [[ "$status" == "completed" ]] || { echo "Dispatcher did not complete before timeout: $RUN_URL" >&2; exit 1; }
+          echo "conclusion=$conclusion" >> "$GITHUB_OUTPUT"
+          if [[ "$conclusion" != "success" ]]; then
+            echo "Bounded M33.1 dispatcher failed: $RUN_URL" >&2
+            exit 1
+          fi
+
+      - name: Publish observed result
+        if: always()
+        shell: bash
+        env:
+          RUN_ID: ${{ steps.discover.outputs.run_id }}
+          RUN_URL: ${{ steps.discover.outputs.run_url }}
+          CONCLUSION: ${{ steps.wait.outputs.conclusion }}
+        run: |
+          {
+            echo "## M33.1 observed Continue"
+            echo
+            echo "- Dispatcher run ID: ${RUN_ID:-not discovered}"
+            echo "- Dispatcher run: ${RUN_URL:-not discovered}"
+            echo "- Conclusion: ${CONCLUSION:-not completed}"
+            echo "- Product live-provider acceptance request consumed: no"
+            echo "- Expected result on success: one draft M33.1 implementation PR and Issue #69 AWAITING_REVIEW comment"
+          } >> "$GITHUB_STEP_SUMMARY"
