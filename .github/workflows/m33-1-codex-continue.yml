@@ -1,37 +1,36 @@
 name: M33.1 Codex Continue — one bounded pass
 
+# Trigger revision 2: this workflow already existed on the branch before this push.
 on:
   push:
     branches:
       - dispatch/m33-1-codex-continue
-    paths:
-      - .github/workflows/m33-1-codex-continue.yml
   workflow_dispatch:
 
 # This is a one-gate dispatcher, not a milestone selector or autonomous Foreman.
-# It is safe to re-run only while authoritative control state still names
-# M33.1 / Issue #69 with no implementation PR or branch. Preflight fails closed
-# after the first implementation PR is published.
+# Preflight allows exactly M33.1 / Issue #69 with no existing implementation
+# branch or pull request. After one PR exists, every re-run fails closed before
+# a paid model call.
 
 concurrency:
   group: fxd-m33-1-codex-continue
   cancel-in-progress: false
 
 jobs:
-  implement:
-    name: Codex implements one M33.1 pass
+  continue:
+    name: Implement one M33.1 pass and publish one draft PR
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 150
     permissions:
-      contents: read
-      issues: read
-      pull-requests: read
-    outputs:
-      model_name: ${{ steps.model.outputs.name }}
-      validation_outcome: ${{ steps.validation.outcome }}
-      has_changes: ${{ steps.changes.outputs.has_changes }}
+      contents: write
+      issues: write
+      pull-requests: write
+    env:
+      EXPECTED_REPOSITORY: kool1160/fxd-fixture-design
+      IMPLEMENTATION_BRANCH: codex/m33-1-native-reconstruction-live-ai
+      IMPLEMENTATION_MODEL: gpt-5.6-sol
     steps:
-      - name: Check out authoritative main
+      - name: Check out authoritative main without persisted credentials
         uses: actions/checkout@v5
         with:
           ref: main
@@ -48,18 +47,16 @@ jobs:
         with:
           python-version: '3.13'
 
-      - name: Validate exact M33.1 authority and duplicate safety
+      - name: Validate authority, issue, and duplicate safety
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          EXPECTED_REPOSITORY: kool1160/fxd-fixture-design
-          IMPLEMENTATION_BRANCH: codex/m33-1-native-reconstruction-live-ai
         run: |
           set -euo pipefail
-          if [[ "$GITHUB_REPOSITORY" != "$EXPECTED_REPOSITORY" ]]; then
+          [[ "$GITHUB_REPOSITORY" == "$EXPECTED_REPOSITORY" ]] || {
             echo "repository mismatch: expected $EXPECTED_REPOSITORY, got $GITHUB_REPOSITORY" >&2
             exit 1
-          fi
+          }
 
           python scripts/validate_control_state.py
 
@@ -118,7 +115,13 @@ jobs:
           printf '%s\n' "$issue_body" > .fxd/issue-69.md
           printf '.fxd/\n' >> .git/info/exclude
 
-      - name: Build bounded implementation prompt
+      - name: Create the one implementation branch locally
+        shell: bash
+        run: |
+          set -euo pipefail
+          git switch -c "$IMPLEMENTATION_BRANCH"
+
+      - name: Build bounded Codex prompt
         shell: bash
         run: |
           set -euo pipefail
@@ -166,23 +169,14 @@ jobs:
 
           Inspect the current implementation instead of starting over. Salvage proven provider-neutral proposal, OCP, persistence, and PySide6/VTK infrastructure where it fits the accepted architecture. Remove or bypass silent-fallback behavior only on the explicit live-design path; keep honestly labeled offline behavior available.
 
-          Add documentation only where needed to make the implemented contract reproducible. Run focused tests as useful. The workflow will run the full repository health command against a cleanly applied patch.
+          Add documentation only where needed to make the implemented contract reproducible. Run focused tests as useful. The workflow will run the full repository health command against your exact workspace.
 
           Finish after one bounded implementation pass. Do not search backlog or begin another gate.
           PROMPT
-
           {
             printf '\n\n## Complete authoritative Issue #69 body\n\n'
             cat .fxd/issue-69.md
           } >> .fxd/m33-1-codex-prompt.md
-
-      - name: Pin explicit implementation model
-        id: model
-        shell: bash
-        run: |
-          set -euo pipefail
-          echo "name=gpt-5.6-sol" >> "$GITHUB_OUTPUT"
-          echo "Using explicit implementation model: gpt-5.6-sol"
 
       - name: Run one bounded Codex implementation pass
         id: codex
@@ -191,20 +185,20 @@ jobs:
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           prompt-file: .fxd/m33-1-codex-prompt.md
-          model: ${{ steps.model.outputs.name }}
+          model: ${{ env.IMPLEMENTATION_MODEL }}
           effort: xhigh
           codex-args: '["--ephemeral"]'
           sandbox: workspace-write
           safety-strategy: drop-sudo
           output-file: ${{ runner.temp }}/m33-1-codex-final.txt
 
-      - name: Remove runtime-only context
+      - name: Remove runtime-only prompt and issue copy
         if: always()
         shell: bash
         run: rm -rf .fxd
 
-      - name: Enforce protected project-control paths
-        id: changes
+      - name: Enforce scope and protected project-control paths
+        id: scope
         if: steps.codex.outcome == 'success'
         shell: bash
         run: |
@@ -215,23 +209,17 @@ jobs:
             git ls-files --others --exclude-standard
           } | sed '/^$/d' | sort -u > "$changed"
           cat "$changed"
-
-          if [[ ! -s "$changed" ]]; then
-            echo "Codex produced no repository changes" >&2
-            echo "has_changes=false" >> "$GITHUB_OUTPUT"
-            exit 1
-          fi
+          [[ -s "$changed" ]] || { echo "Codex produced no repository changes" >&2; exit 1; }
 
           protected='^(AGENTS\.md|CURRENT\.md|docs/CONTROL_STATE\.json|docs/MILESTONE_STATE\.json|docs/OPERATOR_PROTOCOL\.md|docs/MILESTONE_CONTRACT\.md|\.github/workflows/fxd-foreman\.yml|scripts/fxd-backlog\.mjs|scripts/validate_control_state\.py|tests/test_governance_reset\.py)$'
           if grep -E "$protected" "$changed"; then
             echo "Codex changed Review-Control-owned paths" >&2
             exit 1
           fi
-          echo "has_changes=true" >> "$GITHUB_OUTPUT"
 
-      - name: Validate Codex workspace
+      - name: Validate the exact Codex workspace
         id: validation
-        if: steps.codex.outcome == 'success' && steps.changes.outputs.has_changes == 'true'
+        if: steps.codex.outcome == 'success' && steps.scope.outcome == 'success'
         continue-on-error: true
         shell: bash
         run: |
@@ -239,126 +227,33 @@ jobs:
           git diff --check
           bash scripts/ci.sh
 
-      - name: Export exact patch and audit artifact
-        if: always()
-        shell: bash
-        env:
-          CODEX_OUTCOME: ${{ steps.codex.outcome }}
-          VALIDATION_OUTCOME: ${{ steps.validation.outcome }}
-          HAS_CHANGES: ${{ steps.changes.outputs.has_changes }}
-          MODEL_NAME: ${{ steps.model.outputs.name }}
-        run: |
-          set -euo pipefail
-          artifact="$RUNNER_TEMP/fxd-m33-1"
-          mkdir -p "$artifact"
-          git add -A
-          git diff --cached --binary --full-index origin/main -- . > "$artifact/m33-1.patch"
-          cp "$RUNNER_TEMP/m33-1-codex-final.txt" "$artifact/codex-final.txt" 2>/dev/null || true
-          jq -n \
-            --arg codex_outcome "${CODEX_OUTCOME:-skipped}" \
-            --arg validation_outcome "${VALIDATION_OUTCOME:-skipped}" \
-            --arg has_changes "${HAS_CHANGES:-false}" \
-            --arg model "$MODEL_NAME" \
-            --arg source_sha "$GITHUB_SHA" \
-            '{codex_outcome:$codex_outcome,validation_outcome:$validation_outcome,has_changes:$has_changes,model:$model,dispatch_sha:$source_sha,gate:"M33.1",issue:69}' \
-            > "$artifact/metadata.json"
-
-      - name: Upload implementation artifact
+      - name: Upload exact patch and Codex final message
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: fxd-m33-1-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/fxd-m33-1
-          if-no-files-found: error
+          path: |
+            ${{ runner.temp }}/m33-1-codex-final.txt
+            ${{ runner.temp }}/m33-1-changed-files.txt
+          if-no-files-found: warn
           retention-days: 14
 
-      - name: Fail clearly when Codex did not complete
-        if: steps.codex.outcome != 'success' || steps.changes.outputs.has_changes != 'true'
+      - name: Fail clearly when Codex did not produce a scoped change
+        if: steps.codex.outcome != 'success' || steps.scope.outcome != 'success'
         shell: bash
         run: |
-          echo "M33.1 Codex pass did not produce a publishable patch. Check OPENAI_API_KEY, model access, and the run artifact." >&2
+          echo "M33.1 Codex pass failed or violated scope. Check OPENAI_API_KEY, model access, logs, and the artifact." >&2
           exit 1
 
-  publish:
-    name: Publish one focused M33.1 draft PR
-    needs: implement
-    if: needs.implement.result == 'success' && needs.implement.outputs.has_changes == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 90
-    permissions:
-      contents: write
-      pull-requests: write
-      issues: write
-    steps:
-      - name: Check out clean authoritative main
-        uses: actions/checkout@v5
-        with:
-          ref: main
-          fetch-depth: 0
-          persist-credentials: false
-
-      - name: Download implementation artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: fxd-m33-1-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/fxd-m33-1
-
-      - name: Apply patch to clean main
-        id: patch
-        shell: bash
-        env:
-          PATCH_FILE: ${{ runner.temp }}/fxd-m33-1/m33-1.patch
-        run: |
-          set -euo pipefail
-          [[ -s "$PATCH_FILE" ]] || { echo "implementation patch is empty" >&2; exit 1; }
-          git apply --index --3way "$PATCH_FILE"
-          git diff --cached --check
-
-          changed="$RUNNER_TEMP/m33-1-publish-files.txt"
-          git diff --cached --name-only | sort -u > "$changed"
-          protected='^(AGENTS\.md|CURRENT\.md|docs/CONTROL_STATE\.json|docs/MILESTONE_STATE\.json|docs/OPERATOR_PROTOCOL\.md|docs/MILESTONE_CONTRACT\.md|\.github/workflows/fxd-foreman\.yml|scripts/fxd-backlog\.mjs|scripts/validate_control_state\.py|tests/test_governance_reset\.py)$'
-          if grep -E "$protected" "$changed"; then
-            echo "cleanly applied patch contains Review-Control-owned paths" >&2
-            exit 1
-          fi
-
-      - name: Set up Node.js 22
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-
-      - name: Set up Python 3.13
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.13'
-
-      - name: Validate cleanly applied patch
-        id: validation
-        continue-on-error: true
-        shell: bash
-        run: |
-          set -euo pipefail
-          bash scripts/ci.sh
-
-      - name: Commit, push, and open one draft PR
-        id: publish
+      - name: Commit and push the implementation branch
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          IMPLEMENTATION_BRANCH: codex/m33-1-native-reconstruction-live-ai
-          MODEL_NAME: ${{ needs.implement.outputs.model_name }}
-          IMPLEMENT_VALIDATION: ${{ needs.implement.outputs.validation_outcome }}
-          CLEAN_VALIDATION: ${{ steps.validation.outcome }}
-          METADATA_FILE: ${{ runner.temp }}/fxd-m33-1/metadata.json
         run: |
           set -euo pipefail
-          if git ls-remote --exit-code --heads origin "$IMPLEMENTATION_BRANCH" >/dev/null 2>&1; then
-            echo "implementation branch already exists: $IMPLEMENTATION_BRANCH" >&2
-            exit 1
-          fi
-
+          git add -A
+          git diff --cached --check
           git config --local core.hooksPath /dev/null
-          git switch -c "$IMPLEMENTATION_BRANCH"
           git config user.name "FXD Codex implementation"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -m "feat: implement FXD M33.1 foundation"
@@ -369,33 +264,34 @@ jobs:
           git -c credential.helper= -c credential.helper="$helper" push --set-upstream origin "$IMPLEMENTATION_BRANCH"
           rm -f "$helper"
 
+      - name: Open exactly one draft implementation PR
+        id: publish
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CODEX_OUTCOME: ${{ steps.codex.outcome }}
+          VALIDATION_OUTCOME: ${{ steps.validation.outcome }}
+        run: |
+          set -euo pipefail
           body="$RUNNER_TEMP/m33-1-pr-body.md"
           {
             echo "Implements #69"
             echo
             echo "## M33.1 bounded Codex pass"
             echo
-            echo "This draft PR contains one implementation pass for the sole active FXD product gate."
-            echo
             echo "- Gate: \`M33.1\`"
             echo "- Issue: \`#69\`"
-            echo "- Development model: \`$MODEL_NAME\` with explicit xhigh reasoning"
-            echo "- Codex workspace validation: \`$IMPLEMENT_VALIDATION\`"
-            echo "- Cleanly applied patch validation: \`$CLEAN_VALIDATION\`"
-            echo "- Product live OpenAI acceptance request: **not run by the development dispatcher**"
+            echo "- Development model: \`$IMPLEMENTATION_MODEL\` with explicit xhigh reasoning"
+            echo "- Codex outcome: \`$CODEX_OUTCOME\`"
+            echo "- Exact workspace validation: \`$VALIDATION_OUTCOME\`"
+            echo "- Product live OpenAI acceptance request: **not run by this development dispatcher**"
             echo "- Automatic merge/advance: **disabled**"
             echo
             echo "The product live-provider Profile E request remains an explicit later Review-Control action on reviewed code. A failed or missing product request may not silently fall back."
             echo
             echo "## Required next action"
             echo
-            echo "Review-Control must update the PR branch's control-state projection, inspect the exact diff and checks, then return \`CONTINUE\`, \`OWNER_DECISION\`, \`BLOCKED\`, or \`COMPLETE\`. Codex must stop \`AWAITING_REVIEW\`."
-            echo
-            echo "## Dispatcher metadata"
-            echo
-            echo '```json'
-            jq . "$METADATA_FILE"
-            echo '```'
+            echo "Review-Control updates the branch control-state projection, independently checks the exact diff and evidence, then returns \`CONTINUE\`, \`OWNER_DECISION\`, \`BLOCKED\`, or \`COMPLETE\`. Codex stops \`AWAITING_REVIEW\`."
           } > "$body"
 
           pr_url="$(gh pr create \
@@ -410,7 +306,7 @@ jobs:
           echo "pr_number=$pr_number" >> "$GITHUB_OUTPUT"
 
           gh issue comment 69 --repo "$GITHUB_REPOSITORY" --body \
-            "AWAITING_REVIEW — Codex published draft PR #$pr_number on branch \`$IMPLEMENTATION_BRANCH\`. Development model: \`$MODEL_NAME\`. Workspace validation: \`$IMPLEMENT_VALIDATION\`; clean-patch validation: \`$CLEAN_VALIDATION\`. No product live-provider acceptance request was consumed by this dispatcher."
+            "AWAITING_REVIEW — Codex published draft PR #$pr_number on branch \`$IMPLEMENTATION_BRANCH\`. Development model: \`$IMPLEMENTATION_MODEL\`. Exact workspace validation: \`$VALIDATION_OUTCOME\`. No product live-provider acceptance request was consumed by this dispatcher."
 
       - name: Workflow summary
         if: always()
@@ -424,6 +320,6 @@ jobs:
             if [[ -n "$PR_URL" ]]; then
               echo "Created draft implementation PR: $PR_URL"
             else
-              echo "No PR was created. Review the failed publish step and implementation artifact."
+              echo "No PR was created. Review the failed step and exact logs."
             fi
           } >> "$GITHUB_STEP_SUMMARY"
