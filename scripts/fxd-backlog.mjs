@@ -1,15 +1,17 @@
 #!/usr/bin/env node
 
 // Compatibility entrypoint for validating the historical milestone registry.
-// Automatic work selection is retired when the Review-Control protocol exists.
+// Automatic work selection is retired whenever the durable Issue #66 control
+// state or operator protocol is present. Missing one file cannot revive it.
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const controlState = path.join(repoRoot, 'docs', 'CONTROL_STATE.json');
 const operatorProtocol = path.join(repoRoot, 'docs', 'OPERATOR_PROTOCOL.md');
-const reviewControlActive = fs.existsSync(operatorProtocol);
+const reviewControlActive = fs.existsSync(controlState) || fs.existsSync(operatorProtocol);
 
 function fail(message) {
   console.error(`FXD milestone registry error: ${message}`);
@@ -119,17 +121,17 @@ if (args.command === 'validate') {
 }
 if (args.command !== 'select') fail(`unknown command ${args.command}`);
 
-// Issue #66 replaced automatic milestone selection with a human-legible,
-// repository-owned active gate. Keep legacy selection behavior only for old
-// isolated regression fixtures that do not contain the new protocol; the real
-// FXD repository must fail closed.
+// Current FXD always has CONTROL_STATE.json and normally also has the operator
+// protocol. Either file is enough to keep automatic selection retired. The
+// compatibility path below exists only for isolated pre-reset validator tests
+// that contain neither current-control artifact.
 if (reviewControlActive) {
   fail(
-    'automatic milestone selection is retired by Issue #66; read CURRENT.md and docs/OPERATOR_PROTOCOL.md, then let Review-Control issue CONTINUE',
+    'automatic milestone selection is retired by Issue #66; read docs/CONTROL_STATE.json, CURRENT.md, and docs/OPERATOR_PROTOCOL.md, then let Review-Control issue CONTINUE',
   );
 }
 
-// Historical compatibility path for isolated governance tests only.
+// Historical compatibility path for isolated registry-validation fixtures.
 if (registry.product_lane.paused) fail('the product lane is formally paused; no milestone may be selected');
 
 const selected = registry.milestones.find((milestone) => milestone.status === 'Active');
@@ -149,7 +151,7 @@ if (args.number.trim()) {
 const context = [
   '# Selected FXD Milestone',
   '',
-  '> Historical compatibility output. Current FXD operation uses CURRENT.md and docs/OPERATOR_PROTOCOL.md.',
+  '> Historical compatibility output. Current FXD operation uses CONTROL_STATE.json, CURRENT.md, and OPERATOR_PROTOCOL.md.',
   '',
   `- Number: ${selected.number}`,
   `- Name: ${selected.title}`,
