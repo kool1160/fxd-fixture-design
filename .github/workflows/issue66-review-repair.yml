@@ -1,5 +1,6 @@
 name: Issue 66 bounded review repair
 
+# One-time branch-local repair runner. It is removed after the generated repair commit lands.
 on:
   push:
     branches:
