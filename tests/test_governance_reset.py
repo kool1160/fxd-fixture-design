@@ -56,7 +56,10 @@ class GovernanceResetTests(unittest.TestCase):
         self.assertEqual(0, result.returncode, result.stderr)
         self.assertIn("immutable legacy FXD milestone records", result.stdout)
         self.assertIn("historical FXD milestone records", result.stdout)
-        self.assertNotIn("Validated 32 FXD milestones; product lane: Active milestone 32", result.stdout)
+        self.assertIn("frozen historical projection only", result.stdout)
+        self.assertIn("pre-reset milestone marker 32 recorded", result.stdout)
+        self.assertNotIn("Active milestone 32", result.stdout)
+        self.assertNotIn("Active Milestone 32", result.stdout)
 
     def test_current_state_holds_product_work_and_targets_reset_pr(self) -> None:
         current = (ROOT / "CURRENT.md").read_text(encoding="utf-8")
