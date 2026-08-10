@@ -1,3 +1,4 @@
+<!-- FXD-MILESTONE-STATE: docs/MILESTONE_STATE.json -->
 # FXD — Intelligent Fixture Design
 
 FXD is an AI-driven industrial fixture-design platform for manufacturing and fabrication.
@@ -12,11 +13,13 @@ The first product focus is practical weld fixturing for sheet-metal, plate, tube
 
 **Governance and architecture reset active under Issue #66. Product implementation is held.**
 
-The previous Milestone 32 / Issue #57 / PR #54 path is closed as superseded. It proved substantial OCP, VTK, geometry, validation, persistence, fixture-library, and export capability, but it did not prove FXD's product value: AI remained advisory while deterministic templates generated the fixture, and repeated human reviews rejected fixture practicality.
+The previous Issue #57 / PR #54 path is closed as superseded. It proved substantial OCP, VTK, geometry, validation, persistence, fixture-library, and export capability, but it did not prove FXD's product value: AI remained advisory while deterministic templates generated the fixture, and repeated human reviews rejected fixture practicality.
 
 The closed branch and evidence are preserved for selective salvage. They are not authorization to continue the old flow.
 
 Read [`CURRENT.md`](CURRENT.md) for the exact active scope and next valid action.
+
+The pre-reset machine registry remains at [`docs/MILESTONE_STATE.json`](docs/MILESTONE_STATE.json) for historical and deterministic migration evidence. During Issue #66 it cannot override `CURRENT.md` or reopen closed work.
 
 ## Accepted product architecture
 
