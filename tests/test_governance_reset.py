@@ -41,16 +41,16 @@ class GovernanceResetTests(unittest.TestCase):
                 capture_output=True,
                 check=False,
             )
+            self.assertFalse(context.exists())
         self.assertNotEqual(0, result.returncode)
         self.assertIn("automatic milestone selection is retired by Issue #66", result.stderr)
-        self.assertFalse(context.exists())
 
     def test_current_state_holds_product_work_and_targets_reset_pr(self) -> None:
         current = (ROOT / "CURRENT.md").read_text(encoding="utf-8")
         self.assertIn("AWAITING_REVIEW — GOVERNANCE RESET", current)
-        self.assertIn("Product implementation held", current)
-        self.assertIn("Issue: #66", current)
-        self.assertIn("Implementation PR: #67", current)
+        self.assertIn("PRODUCT IMPLEMENTATION HELD", current)
+        self.assertIn("Issue:** #66", current)
+        self.assertIn("Implementation PR:** #67", current)
         self.assertIn("PR #54 — closed unmerged", current)
 
     def test_operator_protocol_separates_builder_and_review_control(self) -> None:
