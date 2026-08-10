@@ -1,84 +1,154 @@
-# FXD AI Agent Instructions
+# FXD Agent Instructions
 
-All AI coding agents working on FXD must read and follow, in order:
+## Mission
 
-1. `AGENTS.md`
-2. `docs/PRODUCT_DIRECTION.md`
-3. `docs/ENGINEERING_CONSTITUTION.md`
-4. `docs/ARCHITECTURE.md`
-5. `docs/ENGINEERING_TEAM.md`
-6. `docs/MILESTONE_CONTRACT.md`
-7. `docs/MILESTONE_STATE.json`
-8. the Active milestone's authoritative GitHub issue
-9. `BACKLOG.md`
-10. `docs/ROADMAP_QUEUE.md`
-11. `docs/STRATEGY_HANDOFF.md`
+Build FXD into an AI-driven industrial fixture-design system that turns trustworthy product/manufacturing evidence into practical, editable fixture geometry, then subjects that geometry to deterministic validation and qualified human engineering review.
 
-The Engineering Constitution is the highest-priority engineering standard. Product Direction governs what FXD is becoming. Accepted architecture and decision records govern technical boundaries, and the Engineering Team charter defines discipline ownership and collaboration. `docs/MILESTONE_CONTRACT.md` governs milestone sequence and completion. `docs/MILESTONE_STATE.json` is the sole current status projection. The Active milestone issue governs its approved scope. Backlogs, roadmaps, strategy handoffs, project records, workbench guides, and binders are derived context and cannot override those authorities.
+The product is not complete merely because it can author valid solids. It must produce tooling an experienced fixture engineer would actually build and use.
 
-## Product identity
+## Authority order
 
-FXD is industrial fixture-design software, beginning with weld fixtures for sheet-metal and fabricated products. It is not a generic chatbot, a contour-skeleton generator, a replacement CAD kernel, or a system that may claim a fixture is production-safe without engineering validation.
+Read and obey these sources in order:
 
-## Working style
+1. Explicit current instruction from Chris Hilton for a product/authority decision
+2. `CURRENT.md`
+3. The active GitHub issue and any explicitly linked decision record
+4. `docs/PRODUCT_DIRECTION.md`
+5. `docs/OPERATOR_PROTOCOL.md`
+6. `docs/ENGINEERING_CONSTITUTION.md`
+7. `docs/AI_DRIVEN_SYNTHESIS_ARCHITECTURE.md`
+8. `docs/ARCHITECTURE.md`
+9. `docs/MILESTONE_CONTRACT.md`
+10. The active pull request, exact head, review threads, and required CI
+11. `docs/ENGINEERING_TEAM.md`
+12. `BACKLOG.md` and historical records
 
-- Treat each selected milestone as one complete outcome.
-- Inspect the real repository before editing.
-- Make routine technical decisions without asking Chris when the governing documents are clear.
-- Prefer runnable evidence over architecture theater.
-- Keep the CAD-neutral core separate from vendor-specific connectors.
-- Keep critical engineering decisions deterministic, testable, and explainable.
-- Apply every materially relevant specialist perspective from `docs/ENGINEERING_TEAM.md`.
-- Record specialist disagreement, assumptions, and unresolved risk rather than silently averaging them away.
-- Do not publish proprietary fixture heuristics, unreleased invention details, customer geometry, employer data, or confidential shop standards.
+A lower source cannot silently override a higher source. Conflict means `BLOCKED`.
 
-## Engineering-team model
+`docs/MILESTONE_STATE.json` remains historical governance evidence during the Issue #66 reset. It does not authorize reopening superseded Issue #57 or PR #54. Current work comes from `CURRENT.md` and the active issue until the accepted governance transition replaces that temporary rule.
 
-The FXD Foreman coordinates an engineering organization, not a collection of generic coding personas.
+## Operating model
 
-`docs/ENGINEERING_TEAM.md` is the authoritative role charter. The older `docs/AGENT_ROSTER.md` is a concise compatibility summary and must not override the team charter.
+> **Review-Control decides and reviews. GitHub remembers. Codex implements one bounded gate. Pull requests hold the evidence.**
 
-For each milestone, the Foreman must identify which disciplines are materially affected, apply their required questions and responsibility boundaries, and integrate one reviewable result.
+- One repository.
+- One active gate.
+- One implementation PR.
+- The FXD Review-Control chat is the sole normal planning/scope/review authority.
+- Codex implements or repairs only the active gate and stops `AWAITING_REVIEW`.
+- Codex never chooses the next gate, merges, advances, deploys, approves its own work, or searches backlog for more work.
+- Review-Control independently inspects the exact pushed head.
+- New ideas and unrelated cleanup go to backlog.
+- Claude / Anthropic is not an implementation, audit, review, fallback, or tie-break route.
 
-No specialist may override the Engineering Constitution, deterministic validation, or protected approval boundaries.
+Read `docs/OPERATOR_PROTOCOL.md` before any implementation or review action.
 
-## Stop-and-ask boundaries
+## Current reset
 
-Stop and obtain explicit approval immediately before:
+Issue #66 governs the current product and governance reset.
 
-- publishing a proprietary rule pack, secret algorithm, patent-sensitive method, or private research material
-- adding a dependency with unclear, viral, commercial, or incompatible licensing
-- purchasing or enabling a paid service
-- accepting a vendor SDK agreement or distributing vendor-owned binaries
-- changing the product from assistive engineering software into unattended production release
-- representing generated fixtures as certified, validated, or safe for production without evidence
-- processing real customer or employer CAD data in public CI
-- deploying a public service, authentication system, billing system, or customer-data backend
-- destructive repository, artifact, or data operations
-- filing or publicly describing a potentially patentable implementation beyond the approved disclosure level
+- Issue #57 and PR #54 are closed as superseded.
+- Preserve their branch/evidence for selective salvage.
+- Do not continue the advisory-AI/deterministic-template architecture.
+- Do not begin product runtime implementation until the governance-reset head is accepted and one bounded next gate is active.
 
-Agents may prepare code, tests, documents, and exact execution plans up to these boundaries.
+## Product architecture rules
 
-## Milestone execution
+### AI authors fixture strategy
 
-For each milestone:
+In live AI Design mode, the configured OpenAI model must produce a strict typed fixture strategy that actually drives downstream build planning and geometry authoring.
 
-1. Read the governing documents.
-2. Validate the registry and confirm exactly one Active product milestone, or a formally paused lane.
-3. Read the complete authoritative milestone issue and any bounded child issues.
-4. Inspect the repository and report material differences.
-5. Identify the engineering disciplines materially affected.
-6. Apply those specialist perspectives before finalizing implementation decisions.
-7. Complete all safe internal phases inside the issue and implementation-PR boundaries.
-8. Add tests or reproducible evidence for every required evidence profile.
-9. Run `bash scripts/ci.sh` and relevant project checks.
-10. Fix failures caused by the work.
-11. Review the final diff.
-12. Update derived records only when evidence supports the update; never change status outside the registry.
-13. Preserve the post-governance closeout boundary: a closeout evidence PR while the milestone remains Active, followed after merge by a distinct state-finalization PR that records the now-existing merge SHA.
-14. Stop only at a real approval boundary or material blocker.
-15. Finish with the structured Planning Handoff required by the Foreman schema.
+The strategy must cover the material engineering choices required by the gate: datum hierarchy, supports, locators/stops/pins, clamps and reaction paths, base/construction, loading/unloading, weld/access intent, alternatives, assumptions, and cited precedents.
 
-## Completion standard
+### Deterministic systems enforce truth
 
-A milestone is not complete because a plan exists or an implementation PR merges. Completion requires the contract gates, reviewable results for all selected evidence profiles, changed files, checks, discipline impacts, risks, disagreements, and unresolved items to be reconciled in a separate closeout evidence PR, then finalized only after that PR's merge commit exists in local history.
+OCP and deterministic logic own:
+
+- source identity and geometry references;
+- typed-command validation;
+- units, dimensions, topology, locating, collision, clearance, access, and manufacturability;
+- persistence, stale-state, BOM, STEP, DXF, and export gates;
+- structured failure evidence.
+
+AI may repair a failed strategy only through an allowlisted bounded repair contract. It may never override a deterministic failure.
+
+### No silent AI fallback
+
+When AI Design is selected:
+
+- provider and model must be explicitly configured;
+- the UI must show provider, model, request state, and whether a live request occurred;
+- missing configuration, provider failure, timeout, cancellation, quarantine, or malformed output stops the AI path clearly;
+- deterministic/offline mode is a separate explicit mode;
+- no deterministic fixture may be quietly substituted and presented as AI-designed.
+
+### Product reconstruction and precedents
+
+Do not design around an anonymous solid when component/manufacturing meaning is required. Product reconstruction must preserve source immutability and record uncertainty.
+
+Fixture precedents must express product-feature-to-fixture-response relationships and reasoning. Opaque fixture STEP files and abstract prose alone are insufficient.
+
+## Permanent engineering rules
+
+- Source customer/product CAD is immutable.
+- The core remains CAD-neutral and vendor-independent.
+- Every authored feature is traceable to product evidence, strategy, rule/command, parameters, assumptions, and edits.
+- Units, tolerances, clearances, and manufacturing allowances are explicit.
+- Access, removability, weld/torch/operator/robot behavior, maintenance, and loading sequence are first-class.
+- Prefer manufacturable simplicity and standard tooling.
+- No generated fixture is certified, production-approved, structurally verified, weld-process-approved, or safe merely because software checks pass.
+- Qualified human fixture-engineering approval remains mandatory.
+- Private fixture geometry, customer/employer data, proprietary heuristics, and patent-sensitive material stay out of public prompts, tests, screenshots, logs, and repository evidence.
+- Dependencies and provider services require explicit licensing/cost/security boundaries.
+- `bash scripts/ci.sh` remains the repository health command.
+
+## Codex behavior after `CONTINUE`
+
+1. Confirm repository identity, branch, active issue, current PR, and clean/non-destructive worktree handling.
+2. Read the authority stack above.
+3. Repair unresolved blocking findings on the same PR before new implementation.
+4. Repair required CI failures only inside the active gate.
+5. Otherwise implement the smallest complete active-gate slice.
+6. Run focused and full deterministic checks plus risk-appropriate native/live-provider evidence.
+7. Push the exact evidence to the same branch/PR.
+8. Stop `AWAITING_REVIEW`.
+
+Never continue merely because context remains or another useful idea exists.
+
+## Stop-and-escalate boundaries
+
+Return `BLOCKED` or request `OWNER_DECISION` before:
+
+- changing product scope or the accepted architecture materially;
+- destructive repository/data operations;
+- production release or external deployment;
+- paid services or billing changes beyond an already approved bounded test;
+- secrets or permission expansion;
+- dependency/license uncertainty;
+- public disclosure of private fixture knowledge or customer/employer data;
+- claiming fixture practicality, certification, or production safety without qualified review;
+- repeated AI/validator disagreement beyond the active repair budget.
+
+## Completion format
+
+Codex stops with:
+
+```text
+AWAITING_REVIEW
+Gate: <issue / objective>
+PR: #__
+Head: <full SHA>
+CI: green | failing | running
+Work: <one sentence>
+Blocker: none | <one sentence>
+```
+
+or:
+
+```text
+BLOCKED
+Gate: <issue / objective>
+Reason: <one sentence>
+```
+
+Builder confidence is never acceptance evidence.
