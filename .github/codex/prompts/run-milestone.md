@@ -35,6 +35,23 @@ Before editing:
 
 Use non-destructive Git. Never force-push, rewrite shared history, delete branches, discard unknown work, or merge.
 
+## API spend authorization firewall
+
+`CONTINUE` **never authorizes an OpenAI API request.** ChatGPT Codex implementation and product-runtime OpenAI API use are separate authority domains.
+
+Unless Review-Control has separately recorded an explicit, current product-runtime API authorization in the active GitHub issue/work order **after an owner instruction to run the live test**, treat the product API request budget as zero.
+
+Without that separate authorization, you must not:
+
+- set, read, forward, print, test, or otherwise use `OPENAI_API_KEY` or another provider credential;
+- set `FXD_M33_1_LIVE_ACCEPTANCE` or any equivalent live-provider opt-in;
+- run `scripts/m33_1_live_acceptance.py` or another command capable of making a product-runtime provider request;
+- select or exercise `ai_design_live` against a real provider;
+- use `curl`, an SDK, a CLI, or any other route to `api.openai.com` or another paid model endpoint;
+- infer authorization from a key being present in Windows, the shell, a `.env` file, GitHub secrets, repository settings, or prior conversation/history.
+
+When live evidence is not separately authorized, use only deterministic/offline or synthetic-provider evidence and leave Profile E unspent. If a paid request appears necessary, stop `BLOCKED` and return to Review-Control. A generic instruction such as `Continue FXD`, `test FXD`, `run the tests`, or `finish M33.1` is not API-spend authorization.
+
 ## Work order
 
 1. If `CURRENT.md` is `HELD` or the governance reset has not authorized product implementation, stop `BLOCKED`.
@@ -63,7 +80,8 @@ Run the exact checks required by the issue and the risk layer, including as appl
 - `git diff --check`;
 - pinned real-OCP evidence;
 - native Windows PySide6/VTK evidence;
-- explicit opt-in live OpenAI evidence;
+- deterministic/offline or synthetic-provider AI evidence;
+- **live OpenAI evidence only when separately and explicitly authorized under the API spend firewall above**;
 - persistence and output reconciliation;
 - secret, privacy, dependency, and licensing checks.
 
@@ -76,6 +94,7 @@ Stop `BLOCKED` rather than guessing when:
 - the requested work is outside the active gate;
 - product meaning or engineering intent is materially ambiguous;
 - a protected authority, secret, paid service, destructive action, production action, or licensing decision is required;
+- live/provider evidence would require API spend that has not been separately authorized;
 - the repair budget is exhausted;
 - deterministic evidence and requested behavior conflict;
 - the work would revive superseded PR #54 or the old advisory-AI architecture.
