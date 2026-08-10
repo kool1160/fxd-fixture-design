@@ -8,6 +8,8 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const operatorProtocol = path.join(repoRoot, 'docs', 'OPERATOR_PROTOCOL.md');
+const reviewControlActive = fs.existsSync(operatorProtocol);
 
 function fail(message) {
   console.error(`FXD milestone registry error: ${message}`);
@@ -50,14 +52,21 @@ function readRegistry(registryPath) {
 }
 
 function runAuthoritativeValidation(registryPath) {
-  const validator = path.join(repoRoot, 'scripts', 'validate_milestones.py');
+  const validator = path.join(
+    repoRoot,
+    'scripts',
+    reviewControlActive ? 'validate_legacy_milestones.py' : 'validate_milestones.py',
+  );
   const candidates = process.platform === 'win32'
     ? [['py', ['-3']], ['python', []]]
     : [['python', []], ['python3', []]];
   for (const [command, prefix] of candidates) {
+    const validatorArgs = reviewControlActive
+      ? [...prefix, validator]
+      : [...prefix, validator, '--repo-root', repoRoot, '--registry', registryPath];
     const result = spawnSync(
       command,
-      [...prefix, validator, '--repo-root', repoRoot, '--registry', registryPath],
+      validatorArgs,
       { cwd: repoRoot, encoding: 'utf8' },
     );
     if (result.error?.code === 'ENOENT') continue;
@@ -101,11 +110,10 @@ if (args.command === 'validate') {
 if (args.command !== 'select') fail(`unknown command ${args.command}`);
 
 // Issue #66 replaced automatic milestone selection with a human-legible,
-// repository-owned active gate.  Keep legacy selection behavior only for old
+// repository-owned active gate. Keep legacy selection behavior only for old
 // isolated regression fixtures that do not contain the new protocol; the real
 // FXD repository must fail closed.
-const operatorProtocol = path.join(repoRoot, 'docs', 'OPERATOR_PROTOCOL.md');
-if (fs.existsSync(operatorProtocol)) {
+if (reviewControlActive) {
   fail(
     'automatic milestone selection is retired by Issue #66; read CURRENT.md and docs/OPERATOR_PROTOCOL.md, then let Review-Control issue CONTINUE',
   );
