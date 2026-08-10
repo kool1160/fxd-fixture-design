@@ -8,6 +8,8 @@ Make FXD simple to operate without turning Chris into a human message bus or all
 
 One repository. One active gate. One implementation PR.
 
+Current state is stored in `docs/CONTROL_STATE.json` and projected concisely in `CURRENT.md`. They must agree before any work begins.
+
 ## Roles
 
 ### FXD Review-Control chat
@@ -16,9 +18,9 @@ The Review-Control chat is the sole planning, scope, status, and independent-rev
 
 It owns:
 
-- reading current GitHub truth before planning or review;
+- reading `docs/CONTROL_STATE.json`, `CURRENT.md`, the active issue, PR, exact head, findings, and CI fresh before planning or review;
 - product and architecture decisions within owner-approved direction;
-- durable scope in the active issue and `CURRENT.md`;
+- durable scope in the active issue and synchronized control state;
 - exact-head pull-request review;
 - writing bounded review findings to GitHub;
 - routine merge and next-gate activation only when already authorized and every guardrail passes;
@@ -115,9 +117,9 @@ Reason: <one sentence>
 
 ## What `CONTINUE` means
 
-Codex reads `AGENTS.md`, `CURRENT.md`, this protocol, Product Direction, Engineering Constitution, Architecture, the active issue, the active PR, exact review findings, and required checks. Then it follows this order:
+Codex reads `AGENTS.md`, `docs/CONTROL_STATE.json`, `CURRENT.md`, this protocol, Product Direction, Engineering Constitution, Architecture, the active issue, the active PR, exact review findings, and required checks. Then it follows this order:
 
-1. If FXD is held, the active gate is missing, or repository truth conflicts, stop `BLOCKED`.
+1. If control state and `CURRENT.md` disagree, FXD is held, the active gate is missing, or repository truth conflicts, stop `BLOCKED`.
 2. If the active PR has unresolved blocking findings, repair only those findings on the same PR.
 3. If required CI is failing, diagnose and repair only the failure inside the active gate.
 4. If the PR is green and no blocker remains, refresh exact-head evidence and stop `AWAITING_REVIEW`.
@@ -128,6 +130,7 @@ Codex reads `AGENTS.md`, `CURRENT.md`, this protocol, Product Direction, Enginee
 
 - keep finding useful things to do;
 - reopen superseded M32 work;
+- use the frozen pre-reset milestone registry to select work;
 - start a second implementation PR;
 - redesign unrelated architecture;
 - add speculative infrastructure;
@@ -141,13 +144,14 @@ After `AWAITING_REVIEW`, Review-Control must inspect the exact pushed SHA fresh.
 
 The review order is:
 
-1. **Scope:** every changed file maps to the active gate.
-2. **Architecture:** AI, OCP authoring, deterministic validation, persistence, UI, and provider boundaries remain correct.
-3. **Deterministic evidence:** required checks actually ran against the reviewed head.
-4. **Runtime proof:** browser/native/OCP/VTK/live-provider behavior is proven at the layer where it can fail.
-5. **Security/privacy/licensing:** secrets, private geometry, permissions, provider use, and dependencies remain bounded.
-6. **Product outcome:** the gate proves the intended engineering result, not merely that code exists.
-7. **Human boundary:** software does not claim qualified fixture approval.
+1. **State:** machine control state, `CURRENT.md`, issue, branch, and PR agree.
+2. **Scope:** every changed file maps to the active gate.
+3. **Architecture:** AI, OCP authoring, deterministic validation, persistence, UI, and provider boundaries remain correct.
+4. **Deterministic evidence:** required checks actually ran against the reviewed head.
+5. **Runtime proof:** browser/native/OCP/VTK/live-provider behavior is proven at the layer where it can fail.
+6. **Security/privacy/licensing:** secrets, private geometry, permissions, provider use, and dependencies remain bounded.
+7. **Product outcome:** the gate proves the intended engineering result, not merely that code exists.
+8. **Human boundary:** software does not claim qualified fixture approval.
 
 Any new commit invalidates the prior review.
 
@@ -179,7 +183,8 @@ Review-Control may perform routine merge and activate the next already-approved 
 - no unresolved blocking thread remains;
 - scope and acceptance criteria are satisfied;
 - rollback and remaining risks are recorded;
-- no owner-only boundary is crossed.
+- no owner-only boundary is crossed;
+- `docs/CONTROL_STATE.json`, `CURRENT.md`, and GitHub can be advanced coherently.
 
 Codex never merges or advances itself.
 
