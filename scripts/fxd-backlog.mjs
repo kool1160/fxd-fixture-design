@@ -108,8 +108,13 @@ runAuthoritativeValidation(registryPath);
 const registry = readRegistry(registryPath);
 
 if (args.command === 'validate') {
-  const lane = registry.product_lane.paused ? 'paused' : `legacy registry Active milestone ${registry.product_lane.active_milestone}`;
-  console.log(`Validated ${registry.milestones.length} historical FXD milestone records; product lane projection: ${lane}.`);
+  const projection = registry.product_lane.paused
+    ? 'pre-reset lane pause recorded'
+    : `pre-reset milestone marker ${registry.product_lane.active_milestone} recorded`;
+  console.log(
+    `Validated ${registry.milestones.length} historical FXD milestone records; `
+    + `frozen historical projection only: ${projection}.`,
+  );
   process.exit(0);
 }
 if (args.command !== 'select') fail(`unknown command ${args.command}`);
