@@ -40,7 +40,7 @@ The accepted transition:
 - preserves M32 history and useful technical evidence for selective salvage;
 - freezes `docs/MILESTONE_STATE.json` as byte-preserved historical evidence only.
 
-Issue #70 records the next legal transition: M33 / Issue #68 is active and M33.1 / Issue #69 is the sole active product gate.
+Issue #70 activated M33 / Issue #68 and M33.1 / Issue #69. Explicit owner direction now places M33.1 on **HELD — COST CONTROL** with draft PR #79 preserved as its sole implementation PR. The hold does not cancel or complete the gate; it removes implementation, paid product-runtime acceptance, merge, and advancement authority until explicit owner resume.
 
 ## Legal states
 
@@ -56,9 +56,9 @@ Current gate state must be one of:
 - `SUPERSEDED`
 - `CANCELLED`
 
-Only one gate may be `ACTIVE`, `AWAITING_REVIEW`, or `REPAIR` at a time.
+Only one gate may be `ACTIVE`, `AWAITING_REVIEW`, `REPAIR`, or `HELD` as the current product gate at a time.
 
-A milestone may contain ordered child gates, but only one child gate is active. Child gates do not create parallel product work.
+A milestone may contain ordered child gates, but only one child gate is current. Child gates do not create parallel product work.
 
 ## M32 disposition
 
@@ -81,18 +81,21 @@ No completion claim may use M32 software evidence as proof that FXD can design a
 
 - **Issue:** #68
 - **Status:** ACTIVE
+- **Current gate:** M33.1 / Issue #69 / PR #79 — **HELD — COST CONTROL**
 - **Goal:** prove one representative fixture from trustworthy product reconstruction through a live AI-authored strategy, real OCP authoring, deterministic validation, at most one bounded AI repair, persistence/provenance, and qualified human practicality acceptance.
 
-M33 is not Complete because its first gate is active. Later gates remain planned and unauthorized until Review-Control advances them after accepted evidence.
+M33 is not Complete because its first gate is held and incomplete. Later gates remain planned and unauthorized until Review-Control accepts evidence and advances them after a legal resume.
 
 ## Ordered M33 gates
 
 ### M33.1 — Product reconstruction and explicit AI mode
 
 - **Issue:** #69
-- **Status:** ACTIVE
+- **Implementation PR:** #79
+- **Branch:** `agent/m33-1-native-product-reconstruction`
+- **Status:** HELD — COST CONTROL
 
-Prove:
+After explicit owner resume, prove:
 
 - source-SHA-bound native product/manufacturing reconstruction;
 - material ambiguity is visible and blocks or asks a focused question;
@@ -101,6 +104,8 @@ Prove:
 - AI Design fails closed instead of silently falling back;
 - one opt-in live acceptance path makes exactly one bounded request;
 - zero automatic provider retries and zero repair requests in this gate.
+
+While held: no Codex implementation/repair pass, no Profile E live request, no PR #79 merge, and no M33.2 advancement is authorized.
 
 M33.1 does not authorize the final fixture-strategy schema, strategy-to-OCP authoring, fixture generation, or repair cycles.
 
@@ -150,7 +155,7 @@ Prove:
 - Claude/Anthropic implementation or audit;
 - production certification or automatic release.
 
-## Gate creation and activation
+## Gate creation, hold, and activation
 
 Every active gate requires one GitHub issue containing:
 
@@ -166,24 +171,31 @@ The issue is implementation scope. Conversation alone does not expand it.
 
 A gate becomes active only when `docs/CONTROL_STATE.json`, `CURRENT.md`, and GitHub agree. Codex cannot activate a gate.
 
+A gate becomes held when explicit owner/authority direction is durably projected into `docs/CONTROL_STATE.json` and `CURRENT.md`. While held, `CONTINUE` is illegal. Resumption requires explicit owner instruction and a coherent control-state update before any implementation or product-runtime paid request.
+
+## Development/API cost boundary
+
+Normal implementation and repair use ChatGPT Codex Remote under the user's ChatGPT agentic allowance. Repository GitHub Actions may not invoke paid Codex/provider development orchestration or receive repository OpenAI API credentials for development. Product-runtime API use is separate and requires explicit Review-Control authorization under the active gate budget. CI must fail closed if a paid repository development route is reintroduced.
+
 ## Implementation loop
 
 Review-Control returns `CONTINUE` only after confirming:
 
+- FXD is not held;
 - control state and `CURRENT.md` agree;
 - the active issue is unambiguous;
-- no duplicate implementation PR exists;
-- the selected branch/PR is correct when one exists;
+- the selected branch/PR is correct and no duplicate implementation PR exists;
 - unresolved findings and CI state are known;
 - the task is inside the active gate.
 
-When no implementation PR exists, Codex creates exactly one focused branch and one draft PR for the active gate. It then implements or repairs that same gate and stops `AWAITING_REVIEW`.
+When a valid implementation PR already exists, ChatGPT Codex Remote repairs or implements only that same gate/PR and stops `AWAITING_REVIEW`. When no implementation PR exists in a future gate, Codex creates exactly one focused branch and one draft PR for the active gate.
 
 Review-Control inspects the exact pushed head and returns:
 
-- `CONTINUE` for bounded repair or the next already-approved gate;
+- `CONTINUE` for bounded repair or the next already-approved gate when not held;
 - `OWNER_DECISION` for genuine product/authority ambiguity;
 - `BLOCKED` when evidence or prerequisites are missing;
+- `HOLD` while owner-authorized hold state is active;
 - `COMPLETE` only after accepted merged evidence.
 
 Codex never merges, advances, or selects a new gate.
@@ -209,7 +221,7 @@ Use only the profiles materially required by the gate, but deterministic reposit
 - **E — live AI/provider:** intentional live request, provider/model identity, strict contract, failure handling, credential isolation, usage/cost evidence, and no silent fallback.
 - **F — documentation/governance:** authority consistency, link/state integrity, and proof that docs do not authorize product behavior accidentally.
 
-Offline tests do not satisfy Profile E. Green software checks do not satisfy Profile D.
+Offline tests do not satisfy Profile E. Green software checks do not satisfy Profile D. A hold may prohibit a profile even when that profile is eventually required for gate completion.
 
 ## Completion
 
@@ -223,7 +235,7 @@ A gate is Complete only when:
 - the PR is merged through the approved repository method;
 - `docs/CONTROL_STATE.json`, `CURRENT.md`, and durable GitHub records are advanced together to the next already-approved state.
 
-A separate three-PR closeout ceremony is not required for routine gates. Review-Control may merge and advance inside the already-approved M33 sequence when the exact-head safety check passes.
+A separate three-PR closeout ceremony is not required for routine gates. Review-Control may merge and advance inside the already-approved M33 sequence when the exact-head safety check passes and no hold or owner-only boundary blocks it.
 
 Human approval remains required for product-direction changes, destructive actions, production release, secrets/permission expansion, paid-service changes beyond an approved bounded test, and qualified fixture practicality/release judgment.
 
