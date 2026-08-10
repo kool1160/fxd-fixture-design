@@ -1,83 +1,121 @@
-<!-- FXD-MILESTONE-STATE: docs/MILESTONE_STATE.json -->
-# FXD — Intelligent Fixturing Design
+# FXD — Intelligent Fixture Design
 
-FXD is an AI-assisted industrial fixture-design platform for manufacturing and fabrication.
+FXD is an AI-driven industrial fixture-design platform for manufacturing and fabrication.
 
-The first product focus is practical weld fixturing for sheet-metal, formed-part, plate, tube, and mixed fabricated assemblies. FXD is intended to help an engineer move from a customer assembly to an editable, manufacturable fixture concept—not merely generate a contour-matched skeleton or cradle.
+The first product focus is practical weld fixturing for sheet-metal, plate, tube, formed-part, and mixed fabricated assemblies. The intended outcome is not a contour-matched cradle or a geometrically valid demo. FXD must produce practical, editable fixture geometry that a qualified fixture engineer would actually build and use after review.
 
 ## Product mission
 
-> Import the assembly, describe the process and critical requirements, and produce fixture concepts that understand how the product is located, clamped, loaded, welded, accessed, and removed.
+> Import or reconstruct the assembly, describe the manufacturing job, use AI to author the fixture strategy, compile that strategy into real OCP geometry, challenge it deterministically, and present the result for qualified engineering approval.
 
-The long-term platform may support welding, robotic/cobot workholding, assembly, inspection, bonding, and other industrial fixture classes.
+## Current status
+
+**Governance and architecture reset active under Issue #66. Product implementation is held.**
+
+The previous Milestone 32 / Issue #57 / PR #54 path is closed as superseded. It proved substantial OCP, VTK, geometry, validation, persistence, fixture-library, and export capability, but it did not prove FXD's product value: AI remained advisory while deterministic templates generated the fixture, and repeated human reviews rejected fixture practicality.
+
+The closed branch and evidence are preserved for selective salvage. They are not authorization to continue the old flow.
+
+Read [`CURRENT.md`](CURRENT.md) for the exact active scope and next valid action.
+
+## Accepted product architecture
+
+```text
+Product CAD + manufacturing intent + approved precedents
+                          ↓
+       native product reconstruction and evidence
+                          ↓
+        typed live-AI fixture strategy
+                          ↓
+      restricted deterministic command compiler
+                          ↓
+              real OCP fixture authoring
+                          ↓
+       deterministic engineering validation
+               ↓ pass              ↓ fail
+       human review/export    bounded AI repair
+```
+
+AI reasons about fixture strategy. Deterministic systems own executable geometry, validation truth, and release blocking. Human engineering judgment owns practicality and production authority.
+
+See [`docs/AI_DRIVEN_SYNTHESIS_ARCHITECTURE.md`](docs/AI_DRIVEN_SYNTHESIS_ARCHITECTURE.md).
 
 ## Core principles
 
-- CAD-neutral core with STEP as the first interchange format
-- deterministic geometry and manufacturing rules for critical decisions
-- AI for interpretation, planning, explanation, and concept ranking
-- editable outputs rather than opaque generated geometry
-- traceable design decisions and explicit assumptions
-- human engineering approval before any production release
-- practical manufacturing over impressive-looking but unusable geometry
-
-## Initial target workflow
-
-1. Import a fabricated assembly.
-2. Identify components, interfaces, candidate datums, and accessible geometry.
-3. Capture critical dimensions, weld locations, loading direction, process, quantity, and shop constraints.
-4. Generate multiple fixture concepts optimized for cost, loading speed, or repeatability.
-5. Validate locating, clamping, weld access, load/unload clearance, and manufacturability.
-6. Export an editable fixture assembly, DXFs, STEP files, BOM, and setup information.
+- Source product CAD remains immutable and traceable.
+- The engineering core remains CAD-neutral and vendor-independent.
+- Product meaning is reconstructed before designing around anonymous geometry.
+- Live AI Design produces the typed fixture strategy that actually drives authoring.
+- OCP and deterministic checks own geometry, locating, collision, access, units, persistence, and export truth.
+- AI failures cannot be hidden by a silent deterministic fallback.
+- Every feature is traceable to source evidence, AI/manual strategy, commands, parameters, precedents, repairs, and edits.
+- Fixture examples become structured product-feature-to-fixture-response precedents, not opaque STEP files alone.
+- Qualified human fixture-engineering approval remains mandatory.
+- The first proof is one representative fixture, not a universal platform demo.
 
 ## Development model
 
-FXD uses a governed milestone-driven AI Foreman workflow. The Foreman selects the sole Active product milestone from `docs/MILESTONE_STATE.json`, loads its authoritative GitHub issue, executes safe in-scope work, validates the repository, and opens a pull request for review. `docs/MILESTONE_CONTRACT.md` governs sequence and completion. Specialist roles are defined in `docs/ENGINEERING_TEAM.md`.
+FXD now uses the same simple project-control shape proven in LaserX Design Studio:
 
-Read these first:
+> **Review-Control decides and reviews. GitHub remembers. Codex implements one bounded gate. Pull requests hold the evidence.**
+
+Normal loop:
+
+```text
+Review-Control -> CONTINUE
+Codex -> AWAITING_REVIEW
+Review-Control -> CONTINUE | OWNER_DECISION | BLOCKED | COMPLETE
+```
+
+One repository. One active gate. One implementation PR. Codex does not choose scope, merge, advance, deploy, or approve its own work. Claude/Anthropic is not part of the standard implementation or audit path.
+
+Read [`docs/OPERATOR_PROTOCOL.md`](docs/OPERATOR_PROTOCOL.md) and [`AGENTS.md`](AGENTS.md) before working.
+
+## Read order
 
 1. `AGENTS.md`
-2. `docs/PRODUCT_DIRECTION.md`
-3. `docs/ENGINEERING_CONSTITUTION.md`
-4. `docs/ARCHITECTURE.md`
-5. `docs/ENGINEERING_TEAM.md`
-6. `docs/MILESTONE_CONTRACT.md`
-7. `docs/MILESTONE_STATE.json`
+2. `CURRENT.md`
+3. active GitHub issue
+4. `docs/PRODUCT_DIRECTION.md`
+5. `docs/OPERATOR_PROTOCOL.md`
+6. `docs/ENGINEERING_CONSTITUTION.md`
+7. `docs/AI_DRIVEN_SYNTHESIS_ARCHITECTURE.md`
+8. `docs/ARCHITECTURE.md`
+9. `docs/MILESTONE_CONTRACT.md`
+10. active PR, exact head, review threads, and CI
 
-`BACKLOG.md`, the roadmap, strategy handoff, project records, and binders are derived context. They do not own current milestone status.
+Historical milestone registries, roadmaps, binders, and handoffs remain evidence and context. They do not override current control state.
 
-Foreman setup is documented in `docs/FOREMAN_SETUP.md`.
+## First new product proof
 
-## Project status
+The next product gate must prove one representative fixture:
 
-FXD is in early research and prototyping. It does not yet generate production-approved fixtures.
+1. trustworthy native product reconstruction;
+2. one intentional live OpenAI strategy request with visible provider/model provenance;
+3. typed supports, locators, clamps/reactions, base/construction, loading/unloading, and access intent;
+4. real OCP geometry authored from the AI strategy;
+5. deterministic validation;
+6. no more than one bounded AI repair cycle;
+7. persistence and coherent review/manufacturing outputs;
+8. qualified human judgment: **Would I actually build and use this?**
+
+A fixture that is merely geometrically valid fails.
 
 ## Local workbench
 
-On Windows, double-click `launch-fxd.bat` in the repository root. It uses the
-repository `.venv` and does not require a PowerShell execution-policy change.
-Drag a `.step` or `.stp` file onto the launcher to open it directly in FXD.
+On Windows, `launch-fxd.bat` starts the current engineering workbench using the repository `.venv`. Dragging a `.step` or `.stp` file onto the launcher opens that file.
 
-To add FXD to the desktop, right-click `launch-fxd.bat`, choose **Show more
-options** if necessary, then choose **Send to > Desktop (create shortcut)**.
-You can drag a STEP file onto that shortcut as well.
+The current launcher and application behavior predate the Issue #66 reset. Until the new AI-mode gate is implemented, do not assume normal launch proves that a live AI provider was configured or used. Provider provenance must become explicit in the next product gate.
 
-The PowerShell launcher remains available for command-line use:
+## Repository health
 
-```powershell
-.\scripts\launch-fxd.ps1
+Run:
+
+```text
+bash scripts/ci.sh
 ```
 
-Use **Import STEP** to load a model through the real OCP kernel into the
-embedded persistent VTK viewport. The workbench is engineering-review-only
-and never mutates customer source CAD.
-
-## Baseline checks
-
-Run `bash scripts/ci.sh` for repository health. The Milestone 1 synthetic
-geometry proof is `python scripts/geometry_proof.py`; the access proof is
-`python scripts/access_proof.py`. Their limitations and
-candidate-kernel evaluation are recorded in `docs/GEOMETRY_STACK_SPIKE.md`.
+Passing checks prove only the behavior they actually exercise. Offline tests do not prove live-provider use, and software checks do not approve fixture practicality or production release.
 
 ## Rights
 
