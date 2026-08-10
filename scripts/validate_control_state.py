@@ -88,8 +88,8 @@ def validate(repo_root: Path) -> list[str]:
         errors.append(f"unsupported control-state schema: {data.get('schema_version')!r}")
     if not _positive_int(data.get("revision")):
         errors.append("control-state revision must be a positive integer")
-    elif data.get("revision") != 2:
-        errors.append(f"post-merge repair control-state revision must be 2, got {data.get('revision')!r}")
+    elif data.get("revision") != 3:
+        errors.append(f"exact-head review control-state revision must be 3, got {data.get('revision')!r}")
     if data.get("state") not in LEGAL_STATES:
         errors.append(f"illegal control state: {data.get('state')!r}")
     if data.get("authority_issue") != 66:
@@ -116,15 +116,15 @@ def validate(repo_root: Path) -> list[str]:
         "issue": 74,
         "pull_request": 72,
         "branch": "governance/issue66-post-merge-repair",
-        "expected_pr_state": "open_draft",
+        "expected_pr_state": "open_ready",
     }
     for key, expected in expected_gate.items():
         if gate.get(key) != expected:
             errors.append(f"active_gate.{key} must be {expected!r}, got {gate.get(key)!r}")
-    if data.get("state") != "REPAIR":
-        errors.append("revision 2 must remain REPAIR until Issue #74 / PR #72 is accepted")
+    if data.get("state") != "AWAITING_REVIEW":
+        errors.append("revision 3 must remain AWAITING_REVIEW until Issue #74 / PR #72 is accepted")
     if data.get("product_implementation_held") is not True:
-        errors.append("product implementation must remain held during governance repair")
+        errors.append("product implementation must remain held during governance repair review")
 
     superseded = data.get("superseded")
     if not isinstance(superseded, list):
@@ -159,7 +159,7 @@ def validate(repo_root: Path) -> list[str]:
         errors.append("planned_product_milestone must be an object")
         planned = {}
     if (planned.get("number"), planned.get("issue"), planned.get("status")) != (33, 68, "PLANNED"):
-        errors.append("M33 must remain PLANNED on Issue #68 during governance repair")
+        errors.append("M33 must remain PLANNED on Issue #68 during governance repair review")
     first_gate = planned.get("first_gate")
     if not isinstance(first_gate, dict):
         errors.append("M33 first_gate must be an object")
@@ -218,15 +218,16 @@ def validate(repo_root: Path) -> list[str]:
 
     current = (repo_root / "CURRENT.md").read_text(encoding="utf-8")
     for token in (
-        "REPAIR — POST-MERGE GOVERNANCE FINDINGS",
+        "AWAITING_REVIEW — GOVERNANCE REPAIR",
         "PRODUCT IMPLEMENTATION HELD",
         "Issue:** #74",
         "Implementation PR:** #72",
+        "ready for exact-head review",
         "PR #54 — closed unmerged",
         ACCEPTED_RESET_MERGE,
     ):
         if token not in current:
-            errors.append(f"CURRENT.md is missing required repair token {token!r}")
+            errors.append(f"CURRENT.md is missing required review token {token!r}")
 
     workflow = (repo_root / ".github" / "workflows" / "fxd-foreman.yml").read_text(
         encoding="utf-8"
@@ -253,7 +254,7 @@ def validate(repo_root: Path) -> list[str]:
 
     next_action = data.get("next_valid_action")
     if not isinstance(next_action, str) or "PR #72" not in next_action or "M33.1" not in next_action:
-        errors.append("next_valid_action must keep PR #72 repair ahead of M33.1")
+        errors.append("next_valid_action must keep PR #72 review ahead of M33.1")
 
     return errors
 
@@ -266,7 +267,7 @@ def main() -> int:
         for error in errors:
             print(f"- {error}", file=sys.stderr)
         return 1
-    print("FXD control state validated: Issue #74 / PR #72; product implementation held.")
+    print("FXD control state validated: Issue #74 / PR #72 awaiting exact-head review; product implementation held.")
     return 0
 
 
