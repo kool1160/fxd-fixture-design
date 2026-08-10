@@ -1,5 +1,9 @@
 # AI-Driven Fixture Synthesis Architecture
 
+## Authority
+
+This architecture is the product reset approved by Chris Hilton and recorded in **Issue #66**. It replaces the rejected M32 assumption that a deterministic fixture generator plus an advisory AI proposal is the intended FXD product path.
+
 ## Decision
 
 FXD's defining product loop is no longer “deterministic fixture generator plus advisory AI.”
