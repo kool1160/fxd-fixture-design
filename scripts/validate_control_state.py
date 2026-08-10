@@ -52,6 +52,7 @@ FORBIDDEN_CURRENT_CLAIMS = (
     "Issue #56 authorizes Milestone 32 as the sole Active",
     "PR #54 is the active implementation",
 )
+FROZEN_MILESTONE_REGISTRY_PATH = "docs/MILESTONE_STATE.json"
 
 
 def _positive_int(value: Any) -> bool:
@@ -163,7 +164,12 @@ def validate(repo_root: Path) -> list[str]:
     if not isinstance(legacy, dict):
         errors.append("legacy_milestone_registry must be an object")
         legacy = {}
-    legacy_path = repo_root / str(legacy.get("path", ""))
+    if legacy.get("path") != FROZEN_MILESTONE_REGISTRY_PATH:
+        errors.append(
+            "legacy milestone registry path must remain "
+            f"{FROZEN_MILESTONE_REGISTRY_PATH!r}, got {legacy.get('path')!r}"
+        )
+    legacy_path = repo_root / FROZEN_MILESTONE_REGISTRY_PATH
     if legacy.get("authority") != "historical_only":
         errors.append("legacy milestone registry must be classified historical_only")
     try:
