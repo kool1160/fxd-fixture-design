@@ -1,0 +1,56 @@
+{
+  "schema_version": "fxd-control-state-v1",
+  "revision": 1,
+  "updated_at_utc": "2026-08-10T01:00:00Z",
+  "authority_issue": 66,
+  "state": "AWAITING_REVIEW",
+  "product_implementation_held": true,
+  "active_gate": {
+    "lane": "governance",
+    "issue": 66,
+    "pull_request": 67,
+    "branch": "governance/ai-driven-fxd-reset",
+    "expected_pr_state": "open_draft",
+    "objective": "Replace advisory-AI fixture generation and autonomous Foreman control with AI-driven synthesis and Review-Control/Codex operation."
+  },
+  "superseded": [
+    {
+      "kind": "product_milestone",
+      "number": 32,
+      "issue": 57,
+      "pull_request": 54,
+      "disposition": "closed_unmerged_preserve_for_salvage"
+    },
+    {
+      "kind": "governance_issue",
+      "issue": 59,
+      "disposition": "closed_superseded"
+    },
+    {
+      "kind": "governance_issue",
+      "issue": 63,
+      "disposition": "closed_superseded"
+    }
+  ],
+  "planned_product_milestone": {
+    "number": 33,
+    "issue": 68,
+    "status": "PLANNED",
+    "title": "AI-Driven Fixture Synthesis Proof",
+    "first_gate": {
+      "id": "M33.1",
+      "issue": 69,
+      "status": "BLOCKED_BY_GOVERNANCE",
+      "title": "Native product reconstruction and explicit live-AI mode"
+    }
+  },
+  "operator_protocol": "docs/OPERATOR_PROTOCOL.md",
+  "current_human_surface": "CURRENT.md",
+  "legacy_milestone_registry": {
+    "path": "docs/MILESTONE_STATE.json",
+    "git_blob_sha": "f667797f1ea59e508ebd46b97cc89061f56b1c1a",
+    "authority": "historical_only",
+    "note": "The pre-reset registry is preserved byte-for-byte as historical evidence and cannot select current work."
+  },
+  "next_valid_action": "Review PR #67 exact head and required checks; repair the same PR if needed; do not begin M33.1 until the governance reset is merged and control state is advanced."
+}
