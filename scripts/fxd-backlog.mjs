@@ -1,12 +1,15 @@
 #!/usr/bin/env node
 
-// Compatibility entrypoint: milestone selection now comes only from the registry.
+// Compatibility entrypoint for validating the historical milestone registry.
+// Automatic work selection is retired when the Review-Control protocol exists.
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const operatorProtocol = path.join(repoRoot, 'docs', 'OPERATOR_PROTOCOL.md');
+const reviewControlActive = fs.existsSync(operatorProtocol);
 
 function fail(message) {
   console.error(`FXD milestone registry error: ${message}`);
@@ -29,7 +32,7 @@ function parseArgs(argv) {
     if (key === '--registry') args.registry = value;
     else if (key === '--backlog') {
       if (value !== 'BACKLOG.md') fail('--backlog is retired; use --registry docs/MILESTONE_STATE.json');
-      console.error('Warning: --backlog is retired; selecting from docs/MILESTONE_STATE.json.');
+      console.error('Warning: --backlog is retired; validating docs/MILESTONE_STATE.json.');
     } else if (key === '--number') args.number = value;
     else if (key === '--context') args.context = value;
     else fail(`unknown option ${key}`);
@@ -49,21 +52,33 @@ function readRegistry(registryPath) {
 }
 
 function runAuthoritativeValidation(registryPath) {
-  const validator = path.join(repoRoot, 'scripts', 'validate_milestones.py');
+  const validator = path.join(
+    repoRoot,
+    'scripts',
+    reviewControlActive ? 'validate_legacy_milestones.py' : 'validate_milestones.py',
+  );
   const candidates = process.platform === 'win32'
     ? [['py', ['-3']], ['python', []]]
     : [['python', []], ['python3', []]];
   for (const [command, prefix] of candidates) {
+    const validatorArgs = [
+      ...prefix,
+      validator,
+      '--repo-root',
+      repoRoot,
+      '--registry',
+      registryPath,
+    ];
     const result = spawnSync(
       command,
-      [...prefix, validator, '--repo-root', repoRoot, '--registry', registryPath],
+      validatorArgs,
       { cwd: repoRoot, encoding: 'utf8' },
     );
     if (result.error?.code === 'ENOENT') continue;
     if (result.status !== 0) {
       if (result.stdout?.trim()) console.error(result.stdout.trim());
       if (result.stderr?.trim()) console.error(result.stderr.trim());
-      fail('authoritative Python governance validation failed; milestone selection did not run');
+      fail('authoritative Python governance validation failed; command did not run');
     }
     if (result.stdout?.trim()) console.log(result.stdout.trim());
     return;
@@ -93,11 +108,28 @@ runAuthoritativeValidation(registryPath);
 const registry = readRegistry(registryPath);
 
 if (args.command === 'validate') {
-  const lane = registry.product_lane.paused ? 'paused' : `Active milestone ${registry.product_lane.active_milestone}`;
-  console.log(`Validated ${registry.milestones.length} FXD milestones; product lane: ${lane}.`);
+  const projection = registry.product_lane.paused
+    ? 'pre-reset lane pause recorded'
+    : `pre-reset milestone marker ${registry.product_lane.active_milestone} recorded`;
+  console.log(
+    `Validated ${registry.milestones.length} historical FXD milestone records; `
+    + `frozen historical projection only: ${projection}.`,
+  );
   process.exit(0);
 }
 if (args.command !== 'select') fail(`unknown command ${args.command}`);
+
+// Issue #66 replaced automatic milestone selection with a human-legible,
+// repository-owned active gate. Keep legacy selection behavior only for old
+// isolated regression fixtures that do not contain the new protocol; the real
+// FXD repository must fail closed.
+if (reviewControlActive) {
+  fail(
+    'automatic milestone selection is retired by Issue #66; read CURRENT.md and docs/OPERATOR_PROTOCOL.md, then let Review-Control issue CONTINUE',
+  );
+}
+
+// Historical compatibility path for isolated governance tests only.
 if (registry.product_lane.paused) fail('the product lane is formally paused; no milestone may be selected');
 
 const selected = registry.milestones.find((milestone) => milestone.status === 'Active');
@@ -117,7 +149,7 @@ if (args.number.trim()) {
 const context = [
   '# Selected FXD Milestone',
   '',
-  '> Current status is authoritative only in `docs/MILESTONE_STATE.json` and the linked GitHub issue.',
+  '> Historical compatibility output. Current FXD operation uses CURRENT.md and docs/OPERATOR_PROTOCOL.md.',
   '',
   `- Number: ${selected.number}`,
   `- Name: ${selected.title}`,
@@ -131,8 +163,6 @@ const context = [
   '```json',
   JSON.stringify(selected, null, 2),
   '```',
-  '',
-  'The workflow must append the complete authoritative issue body before invoking Codex.',
   '',
 ].join('\n');
 
@@ -151,4 +181,4 @@ writeOutput('issue_number', selected.issue);
 writeOutput('evidence_profiles', selected.evidence_profiles.join(','));
 writeOutput('recommended_level', selected.evidence_profiles.some((profile) => ['B', 'C', 'D', 'E'].includes(profile)) ? 'Sol' : 'Terra');
 writeOutput('branch', `codex/milestone-${selected.number}-${slug}`);
-console.log(`Selected Active Milestone ${selected.number}: ${selected.title} (Issue #${selected.issue})`);
+console.log(`Selected compatibility Milestone ${selected.number}: ${selected.title} (Issue #${selected.issue})`);

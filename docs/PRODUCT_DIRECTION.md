@@ -1,85 +1,164 @@
 # FXD Product Direction
 
-## What FXD is
+## Product identity
 
-FXD is an intelligent industrial fixture-design platform. It begins with weld fixturing for sheet-metal products and fabricated assemblies, but its architecture must support other manufacturing fixture classes later.
+FXD is an intelligent industrial fixture-design platform. It begins with weld fixturing for fabricated assemblies and is intended to expand later to gauges, nests, inspection tooling, assembly fixtures, and other workholding.
 
 The defining workflow is:
 
-> Give FXD the product assembly and manufacturing intent; receive practical, editable fixture concepts that understand locating, clamping, access, loading, welding, manufacturability, and removal.
+> Give FXD the product assembly, manufacturing intent, and approved fixture precedents; receive a practical, editable fixture strategy authored into real geometry, deterministically challenged, and presented for qualified engineering approval.
 
-## Who it serves
+## The product problem
 
-Initial users are manufacturing engineers, fixture designers, weld engineers, toolmakers, fabrication shops, and integrators working with:
+Existing fixture automation commonly produces contour-matched skeletons, generic cradles, or mathematically valid geometry that ignores how a real fixture is loaded, located, clamped, welded, maintained, and removed.
 
-- laser-cut sheet and plate
-- formed sheet-metal parts
-- tube, angle, channel, and structural members
-- manual MIG/TIG welding
-- cobot and robotic welding
-- low-volume through repeat-production fixtures
+FXD must reason about the manufacturing job, not just surround a finished solid.
 
-## The problem
+A successful fixture is not one that passes software checks. It is one a qualified fixture engineer would actually build and use after review.
 
-Existing automated fixture tools commonly create contour-matched skeletons or cradles. Those can be expensive, difficult to edit, awkward to load, hostile to weld access, and disconnected from how a real fixture locates individual components.
+## Current product reset
 
-FXD must reason about the manufacturing job, not only the outer shape of the finished solid.
+Issue #66 supersedes the prior Milestone 32 direction.
+
+The closed M32 implementation proved substantial OCP, VTK, geometry, persistence, validation, fixture-library, and export capability. It did not prove the product because AI remained advisory while deterministic templates generated the fixture, and repeated human reviews rejected practical fixture quality.
+
+The branch and evidence remain available for selective salvage. The old product flow is not the continuing authority.
 
 ## Product differentiators
 
-- understands assembly components rather than treating the weldment as one anonymous body
-- separates locating from clamping
-- reasons about six degrees of freedom and intentional floating directions
-- considers torch, operator, robot, tack, and unload access
-- prefers standard and laser-cut construction before unnecessary machining
-- produces several tradeoff-driven concepts instead of pretending one answer is universally best
-- exposes assumptions and lets the engineer correct them
-- creates reusable manufacturing knowledge from corrections
+FXD must:
 
-## Initial product boundary
+- reconstruct or derive enough native product meaning to distinguish components, features, transforms, holes, planes, axes, contacts, and weld intent;
+- understand assemblies rather than treating the weldment as one anonymous body;
+- use AI to author the fixture strategy—not merely explain a deterministic result;
+- separate locating from clamping;
+- reason about six degrees of freedom and intentional float;
+- select supports, locators, stops, pins, clamp targets, and reaction paths from exact product evidence;
+- consider torch, operator, robot, loading, unloading, cleaning, and maintenance access;
+- prefer standard and laser-cut/fabricated construction before unnecessary machining;
+- use private structured precedents that explain why a fixture was designed as it was;
+- produce alternatives and visible tradeoffs instead of one opaque answer;
+- expose assumptions and let the engineer correct them;
+- preserve deterministic validation and qualified human approval.
 
-The first useful release targets flat-base weld fixtures for fabricated sheet, plate, and structural components using supports, pins, stops, laser-cut risers, tab-and-slot construction, and standard clamps.
+## Accepted authority split
 
-It will not initially promise:
+### AI designs the strategy
 
-- universal fixturing for every geometry or process
-- certified thermal-distortion prediction
-- structural certification of the fixture
-- automatic production release
-- complete robot offline programming
-- replacement of a full CAD system
-- unattended changes to customer CAD
+In explicit live AI Design mode, the configured OpenAI model returns a strict typed fixture strategy covering the material design choices required by the supported fixture family.
 
-## Product architecture direction
+It may interpret geometry and intent, retrieve approved precedents, choose/rank strategies, propose typed repairs, and explain tradeoffs.
 
-FXD should be a standalone application with a CAD-neutral engineering core. STEP is the first neutral input/output. CAD connectors are optional thin adapters added after the core workflow works.
+### Deterministic systems execute and police it
 
-The core product must remain useful to users of SOLIDWORKS, Inventor, Creo, Fusion, Onshape, CATIA, NX, and other systems through neutral formats.
+The geometry engine compiles only allowlisted typed commands, authors real OCP geometry, and runs deterministic checks for source identity, units, topology, locating, collision, access, manufacturability, persistence, and export.
 
-## AI boundary
+A failed deterministic check cannot be overridden by AI confidence.
 
-AI may interpret instructions, propose plans, rank concepts, explain tradeoffs, and help classify ambiguous geometry. Deterministic geometry and manufacturing rules must own safety-critical constraints, dimensions, collision results, and export decisions.
+### The engineer approves reality
+
+FXD does not certify structure, clamp force, weld process, distortion, ergonomics, safety, or production release. Qualified engineering approval remains mandatory.
+
+## No silent fallback
+
+AI Design and deterministic/offline mode are different product modes.
+
+When AI Design is selected:
+
+- the provider and model are explicit;
+- the application proves whether a live request occurred;
+- provenance and request state are visible;
+- provider failure, missing configuration, timeout, quarantine, or cancellation stops clearly;
+- FXD may not quietly substitute a deterministic fixture and present it as AI-designed.
+
+Offline mode remains valuable for analysis, validation, tests, and manually specified plans, but it must be labeled honestly.
+
+## Product reconstruction
+
+Before fixture strategy, FXD must create a trustworthy source-SHA-bound native product model sufficient for the active fixture family.
+
+Where evidence supports it, the model should identify:
+
+- components and transforms;
+- plate, sheet, tube, formed, machined, and purchased-part roles;
+- planes, axes, holes, edges, bends, profiles, and contacts;
+- candidate datums and permitted/forbidden contacts;
+- weld candidates and engineer-confirmed weld intent;
+- critical characteristics;
+- uncertainty and missing intent.
+
+When ambiguity materially changes fixture design, FXD asks a focused question or blocks. It does not design confidently around unknown meaning.
+
+## Fixture precedents
+
+Chris's fixture library is a high-value private product asset, but geometry alone is not enough.
+
+FXD must convert accepted examples and corrections into structured relationships:
+
+```text
+product feature / intent
+→ fixture response
+→ reason
+→ parameters / units
+→ constraint or intentional float
+→ access and sequence
+→ correction / failure history
+```
+
+Private geometry and proprietary shop knowledge remain local and separately controlled. Public repository content is limited to contracts, synthetic examples, and legally shareable generic knowledge.
+
+## First proof boundary
+
+Before broad scope, FXD must prove one representative fixture from end to end:
+
+1. trustworthy product reconstruction;
+2. one intentional live OpenAI strategy request using an explicitly selected high-capability model;
+3. typed supports, locators, clamps/reactions, base/construction, loading/unloading, and access intent;
+4. real OCP authoring driven by that strategy;
+5. deterministic validation;
+6. at most one bounded AI repair cycle;
+7. persistence and visible provenance;
+8. qualified human review answering: **Would I actually build and use this?**
+
+A fixture that is merely geometrically valid fails this proof.
+
+## Initial fixture scope
+
+The first proof targets one deliberately bounded weld-fixture family for a representative fabricated assembly. It does not promise universal fixturing.
+
+Multiple fixture families, multi-station optimization, robot simulation, broad learned rules, or commercialization infrastructure do not begin until the first proof passes.
+
+## Integrated CAD direction
+
+FXD ultimately needs a fixture-focused native CAD workspace sufficient to inspect, correct, and finish routine fixture work without forcing every ordinary edit into another CAD package.
+
+That workspace should support a bounded set of fixture-native operations—plates, blocks, tubes, supports, stops, pins, clamp mounts, holes, slots, tabs, notches, reliefs, markings, transforms, patterns, replacement, persistence, and synchronized outputs.
+
+It must not distract from the first AI-driven synthesis proof. Issue #62 remains a product decision for later governed planning.
+
+## CAD-neutral boundary
+
+FXD remains standalone and CAD-neutral. STEP is the first neutral input/output. Future SOLIDWORKS, Inventor, Fusion, Creo, Onshape, CATIA, NX, and other connectors are thin adapters around the same product and fixture contracts.
+
+CAD-neutral means vendor-independent, not CAD-disconnected.
 
 ## Commercial direction
 
-FXD may become commercial software, but the current repository is an early public development scaffold with no open-source license. Do not add billing, public accounts, or SaaS infrastructure until the local engineering product proves value.
+FXD may become commercial software. Do not add billing, public accounts, SaaS infrastructure, or broad cloud storage until the local engineering product proves value.
 
-## Future runtime AI boundary
+The base product should remain useful without unbounded paid AI usage. Live AI use must be explicit, budgeted, attributable, and replaceable behind a stable provider interface.
 
-The base local FXD product must remain useful without paid AI calls. Future AI
-capacity may use included usage and explicit add-on analysis packages, with
-replaceable runtime providers. Routine explanation may use a balanced model
-and difficult interpretation may use a higher-reasoning model, but customers
-must never be led to believe unbounded inference is free. Structured evidence,
-assumptions, and deterministic results remain the authority; provider-specific
-AI code does not belong in the engineering kernel.
+## Permanent non-goals
 
-## Supplier and private tooling direction
+FXD does not initially promise:
 
-FXD may recommend an exact commercial component for customer approval. Without
-an authorized supplier integration, FXD may provide the official source link,
-but the customer downloads CAD under the supplier's terms and imports it into
-their private tooling library. FXD may then place and validate that exact local
-geometry. Built-in supplier catalogs require licensing, permission, an approved
-feed, API, or partnership. FXD does not scrape supplier sites or redistribute
-unauthorized catalog geometry.
+- universal fixturing for every geometry or process;
+- certified thermal-distortion prediction;
+- structural or clamp-force certification;
+- weld-process or safety approval;
+- automatic production release;
+- complete robot offline programming;
+- replacement of every general-purpose CAD capability;
+- unattended modification of customer CAD;
+- supplier scraping or unauthorized CAD redistribution;
+- hidden provider use or silent AI fallback.

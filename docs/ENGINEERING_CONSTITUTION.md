@@ -2,66 +2,114 @@
 
 ## 1. Source geometry is immutable
 
-Imported product geometry is evidence, not a workspace for destructive edits. Store annotations, fixture features, derived geometry, and user corrections separately. Preserve source identity and transforms.
+Imported customer/product geometry is evidence, not a destructive editing workspace. Store reconstruction, annotations, fixture features, derived geometry, and corrections separately. Preserve source bytes, identity, units, hierarchy, and transforms.
 
 ## 2. Use a CAD-neutral domain model
 
-The engineering core may not depend on SOLIDWORKS, Inventor, or another vendor object model. Connectors translate between vendor APIs and the neutral FXD model.
+The engineering core may not depend on SOLIDWORKS, Inventor, Fusion, or another vendor object model. Connectors translate through the neutral FXD contracts.
 
-## 3. Deterministic systems own engineering truth
+## 3. Reconstruct product meaning before designing around it
 
-Language models may interpret and propose. They may not be the sole authority for dimensions, topology, constraints, collision, clearances, units, quantities, or safety claims.
+A valid B-Rep is not automatically a sufficient manufacturing model. When fixture strategy depends on component, feature, hole, plane, axis, bend, contact, or weld meaning, FXD must derive or obtain that meaning with traceable confidence. Material ambiguity blocks synthesis or asks the engineer; it is never silently guessed.
 
-## 4. Every generated feature must be traceable
+## 4. AI owns fixture strategy in AI Design mode
 
-A support, stop, pin, clamp mount, relief, or baseplate feature must identify:
+When the operator selects live AI Design, the configured OpenAI model must author the strict typed fixture strategy that drives downstream build planning. AI is not merely an explainer attached after deterministic templates generate the fixture.
 
-- the input geometry or annotation that caused it
-- the rule or command that generated it
-- its parameters and units
-- assumptions and warnings
-- later user edits
+The strategy must contain the material locating, supporting, clamping, reaction, base/construction, loading/unloading, access, assumptions, alternatives, and precedent decisions required by the supported gate.
 
-## 5. Units and tolerances are explicit
+## 5. Deterministic systems own executable engineering truth
 
-Use one documented internal unit system, initially millimeters and radians unless the chosen kernel requires another representation. Never infer units silently. Separate nominal geometry, manufacturing allowance, contact clearance, and process tolerance.
+Language models may reason, interpret, propose, and repair. They are not the sole authority for source identity, dimensions, units, topology, constraints, collision, clearances, access, persistence, quantities, or safety/release claims.
 
-## 6. Fixture design is constraint design
+Only validated typed commands may reach the geometry engine. OCP authors the B-Rep. Deterministic failures remain authoritative.
 
-Represent the intended removal of translational and rotational degrees of freedom. Detect likely underconstraint, redundant constraint, contradictory contact, and intentional float. Clamping direction should be evaluated relative to locating geometry.
+## 6. Live AI may not fail invisibly
 
-## 7. Access and removability are first-class
+AI Design and deterministic/offline mode are separate explicit modes.
 
-A geometrically valid fixture is invalid if the product, operator, torch, clamp, robot, or finished assembly cannot access or leave the required space. Load sequence and unload path must be represented explicitly as the product matures.
+When AI Design is selected, missing configuration, timeout, provider failure, quarantine, cancellation, or malformed output must stop clearly. FXD may not quietly substitute deterministic fixture generation and present it as AI-designed.
 
-## 8. Prefer manufacturable simplicity
+Provider, model, request state, whether a live request occurred, and strategy provenance must be visible and persisted without exposing secrets.
 
-Favor standard purchased components, laser-cut plates, formed parts, tab-and-slot construction, replaceable wear points, and understandable adjustment over unnecessary custom machining or mathematically clever geometry.
+## 7. Every generated feature must be traceable
 
-## 9. Human approval is mandatory
+A support, stop, pin, clamp mount, reaction support, relief, rail, riser, station, or base feature must identify:
 
-FXD produces engineering proposals and evidence. It does not certify a fixture, approve a weld process, guarantee distortion, or authorize production. Release states and warnings must be honest.
+- the source product/reconstruction evidence that caused it;
+- the AI strategy decision or manual command;
+- the compiled rule/command that authored it;
+- parameters and units;
+- cited precedents;
+- assumptions, warnings, and validation findings;
+- repair lineage and later user edits.
 
-## 10. Validation requires representative geometry
+## 8. Units and tolerances are explicit
 
-Use synthetic and legally shareable golden models covering repeated parts, nested transforms, thin sheet, tubes, holes, inaccessible welds, trapped products, tolerance variation, and deliberately invalid fixtures. Tests must include numeric tolerances appropriate to the kernel.
+Use one documented internal unit system, initially millimeters and radians unless the kernel requires another representation. Never infer units silently. Separate nominal geometry, manufacturing allowance, contact clearance, process tolerance, and inspection intent.
 
-## 11. AI output must be bounded
+## 9. Fixture design is constraint design
 
-Natural-language requests must compile into a restricted command model. Validate commands before execution. Destructive or high-impact actions require preview and approval.
+Represent the intended removal of translational and rotational degrees of freedom. Detect underconstraint, redundant or contradictory restraint, tolerance binding, and intentional float. Clamping direction and reaction must be evaluated relative to locating/support geometry.
 
-## 12. Privacy is local-first
+## 10. Access and removability are first-class
 
-Do not upload customer or employer CAD to external services by default. Cloud or AI use must disclose exactly what geometry, metadata, images, or derived information leaves the machine.
+A geometrically valid fixture is invalid when the product, operator, torch, clamp, robot, cable, finished assembly, cleaning tool, or service action cannot enter or leave the required space. Loading, welding/tacking, unloading, maintenance, and changeover sequences must be represented honestly.
 
-## 13. Dependency licensing is an architecture concern
+## 11. Prefer manufacturable simplicity
 
-Record the license, redistribution obligations, binary requirements, and commercial implications of every geometry, CAD, UI, AI, and export dependency. Do not assume that a package being downloadable makes it commercially safe.
+Favor standard purchased components, laser-cut plates, formed parts, tube/plate structures, tab-and-slot construction, replaceable wear points, understandable adjustment, and shop-buildable geometry over unnecessary machining or visually impressive complexity.
 
-## 14. Proprietary knowledge stays separated
+## 12. Fixture precedents must contain reasoning
 
-Public code may define interfaces and generic rules. Confidential shop knowledge, patent-sensitive methods, customer corrections, and commercial rule packs must live in ignored or separately controlled storage.
+An opaque part/fixture STEP pair is not sufficient durable knowledge. Accepted precedents must connect product features and manufacturing intent to fixture responses, reasons, constraints, access/sequence, parameters, corrections, and failure history.
 
-## 15. One health command
+Private precedents and proprietary shop heuristics remain separately controlled.
 
-`scripts/ci.sh` must remain the authoritative repository-health command. Every milestone keeps it working and extends it when new technologies are introduced.
+## 13. Bounded repair, not open-ended agent loops
+
+Deterministic failures may be returned to AI only through a structured repair contract with frozen accepted decisions, legal commands, and explicit cost/turn/retry limits. Repeated failure becomes `BLOCKED`; it does not justify unlimited retries or weakened validation.
+
+## 14. Human approval is mandatory
+
+FXD produces fixture designs, real geometry, evidence, and warnings. It does not certify a fixture, approve a weld process, guarantee distortion, certify clamp force/structure, or authorize production. Qualified human engineering review remains mandatory.
+
+The decisive product question is:
+
+> Would an experienced fixture engineer actually build and use this?
+
+Software that cannot earn that answer has not passed the product gate.
+
+## 15. Validation requires representative geometry and real failure layers
+
+Use synthetic and legally shareable golden models covering assemblies, transforms, thin sheet, plates, tubes, holes, inaccessible welds, trapped products, tolerance variation, ambiguous reconstruction, invalid AI strategies, and deliberately poor fixtures.
+
+Test pure logic, OCP B-Rep, persistence, native UI/VTK behavior, and live-provider integration at the layer where each can fail. Offline tests do not prove a live AI request.
+
+## 16. AI output is bounded untrusted data
+
+Natural-language intent compiles into restricted versioned contracts. Validate schema, identities, source/reconstruction versions, units, parameters, commands, and provenance before authoring. Provider output never executes arbitrary code or receives unrestricted tools.
+
+## 17. Privacy is local-first
+
+Do not upload customer/employer CAD, private fixture geometry, proprietary corrections, file paths, secrets, or hidden project dumps to external services by default. AI use must disclose exactly what structured information leaves the machine.
+
+## 18. Dependency licensing and paid services are architecture concerns
+
+Record license, redistribution obligations, binary requirements, commercial implications, provider terms, and cost boundaries for every geometry, CAD, UI, AI, and export dependency. Availability is not commercial permission.
+
+## 19. Proprietary knowledge stays separated
+
+Public code may define interfaces, synthetic fixtures, generic rules, and legally shareable precedent metadata. Confidential shop knowledge, patent-sensitive methods, customer corrections, real fixture libraries, and commercial rule packs live in ignored or separately controlled storage.
+
+## 20. One active gate and one independent review path
+
+Development follows `docs/OPERATOR_PROTOCOL.md`: one active gate, one implementation PR, Review-Control as planning/review authority, Codex as bounded builder, and exact-head evidence. Claude/Anthropic is not a standard implementation, review, audit, or fallback route.
+
+## 21. One health command
+
+`scripts/ci.sh` remains the authoritative repository-health command. Every accepted gate keeps it working and extends it only when the new risk requires deterministic coverage.
+
+## 22. Prove the core product before expanding scope
+
+Before multiple fixture families, multi-station optimization, broad native CAD, SaaS, billing, learned universal rules, or model routing, FXD must pass one representative AI-driven fixture synthesis proof with live provenance, real authoring, deterministic validation, bounded repair, and qualified practicality acceptance.

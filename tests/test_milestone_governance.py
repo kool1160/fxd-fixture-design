@@ -1,3 +1,4 @@
+# ISSUE66_TEST_MIGRATION_COMPLETE
 from __future__ import annotations
 
 import copy
@@ -1103,6 +1104,8 @@ class MilestoneGovernanceTests(unittest.TestCase):
         self.assertIsNone(candidate["product_milestone"])
 
     def test_registry_selector_selects_only_active_m32(self) -> None:
+        # The frozen registry still validates M32 history, but the real repository
+        # selector must not turn that historical projection into executable work.
         with tempfile.TemporaryDirectory() as temp:
             context = Path(temp) / "selection.md"
             selected = subprocess.run(
@@ -1112,12 +1115,10 @@ class MilestoneGovernanceTests(unittest.TestCase):
                 capture_output=True,
                 check=False,
             )
-            selected_context = context.read_text(encoding="utf-8")
-        self.assertEqual(0, selected.returncode, selected.stderr)
-        self.assertIn("Selected Active Milestone 32", selected.stdout)
-        self.assertIn("Issue #57", selected.stdout)
-        self.assertIn("Authoritative issue: #57", selected_context)
-        self.assertIn("Implementation PRs: #54", selected_context)
+            self.assertFalse(context.exists())
+        self.assertNotEqual(0, selected.returncode)
+        self.assertIn("automatic milestone selection is retired by Issue #66", selected.stderr)
+
 
     def test_registry_selector_rejects_active_milestone_with_blocked_predecessor(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -1201,6 +1202,8 @@ class MilestoneGovernanceTests(unittest.TestCase):
         self.assertNotIn("Selected Active Milestone", selected.stdout)
 
     def test_registry_selector_does_not_consult_backlog(self) -> None:
+        # Isolated historical-registry fixtures retain compatibility coverage and
+        # contain no current Review-Control protocol.
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             self.build_selector_repository(root)
@@ -1213,7 +1216,8 @@ class MilestoneGovernanceTests(unittest.TestCase):
                 check=False,
             )
         self.assertEqual(0, selected.returncode, selected.stderr)
-        self.assertIn("Selected Active Milestone 32", selected.stdout)
+        self.assertIn("Selected compatibility Milestone 32", selected.stdout)
+
 
     def test_registry_selector_cannot_silently_choose_m20(self) -> None:
         selected = subprocess.run(
@@ -1224,7 +1228,8 @@ class MilestoneGovernanceTests(unittest.TestCase):
             check=False,
         )
         self.assertNotEqual(0, selected.returncode)
-        self.assertIn("Milestone 20 is not Active", selected.stderr)
+        self.assertIn("automatic milestone selection is retired by Issue #66", selected.stderr)
+
 
     def test_hosted_acceptance_fetches_history_and_runs_for_every_pr(self) -> None:
         workflow = json.loads((ROOT / ".github" / "workflows" / "kernel-acceptance.yml").read_text(encoding="utf-8"))
@@ -1245,80 +1250,45 @@ class MilestoneGovernanceTests(unittest.TestCase):
 
     def test_foreman_validates_governance_before_selection(self) -> None:
         workflow = (ROOT / ".github" / "workflows" / "fxd-foreman.yml").read_text(encoding="utf-8")
-        validation = workflow.index("name: Validate authoritative milestone governance")
-        selection = workflow.index("name: Select milestone")
-        self.assertLess(validation, selection)
-        self.assertIn("python scripts/validate_milestones.py", workflow[validation:selection])
+        self.assertIn("RETIRED BY ISSUE #66", workflow)
+        self.assertIn("Use docs/OPERATOR_PROTOCOL.md", workflow)
+        self.assertNotIn("name: Select milestone", workflow)
+
 
     def test_foreman_rejects_closed_authoritative_milestone_issue(self) -> None:
         workflow = (ROOT / ".github" / "workflows" / "fxd-foreman.yml").read_text(encoding="utf-8")
-        issue_step = workflow[workflow.index("name: Load authoritative milestone issue") :]
-        self.assertIn("--json number,state,body,url", issue_step)
-        self.assertRegex(issue_step, r'issue_state=.*state')
-        self.assertIn('"$issue_state" != "OPEN"', issue_step)
-        self.assertIn("authoritative milestone issue is not OPEN", issue_step)
-        self.assertIn("failed to fetch authoritative milestone issue", issue_step)
+        self.assertIn("contents: read", workflow)
+        self.assertNotIn("gh issue view", workflow)
+        self.assertNotIn("issues: write", workflow)
+
 
     def test_foreman_rejects_whitespace_only_authoritative_issue_body(self) -> None:
         workflow = (ROOT / ".github" / "workflows" / "fxd-foreman.yml").read_text(encoding="utf-8")
-        issue_validation = workflow.index("name: Load authoritative milestone issue")
-        body_append = workflow.index(">> .fxd/selected-milestone.md", issue_validation)
-        validation_script = workflow[issue_validation:body_append]
-        predicate = '[[ "$issue_body" =~ [^[:space:]] ]]'
-        self.assertIn('if [[ ! "$issue_body" =~ [^[:space:]] ]]; then', validation_script)
+        self.assertNotIn("selected-milestone.md", workflow)
+        self.assertNotIn("issue_body", workflow)
+        self.assertIn("exit 1", workflow)
 
-        for label, body in {
-            "empty": "",
-            "spaces": "   ",
-            "tabs": "\t\t",
-            "newlines": "\n\n",
-            "mixed whitespace": " \t\n\t ",
-        }.items():
-            with self.subTest(label=label):
-                result = subprocess.run(
-                    ["bash", "-c", f'issue_body="$1"; {predicate}', "bash", body],
-                    capture_output=True,
-                    check=False,
-                )
-                self.assertNotEqual(0, result.returncode)
-
-        meaningful = subprocess.run(
-            ["bash", "-c", f'issue_body="$1"; {predicate}', "bash", "Milestone 32 scope"],
-            capture_output=True,
-            check=False,
-        )
-        self.assertEqual(0, meaningful.returncode)
 
     def test_foreman_loads_open_issue_before_codex_execution(self) -> None:
         workflow = (ROOT / ".github" / "workflows" / "fxd-foreman.yml").read_text(encoding="utf-8")
-        issue_validation = workflow.index("name: Load authoritative milestone issue")
-        body_append = workflow.index(">> .fxd/selected-milestone.md", issue_validation)
-        codex = workflow.index("name: Run Codex milestone Foreman")
-        self.assertLess(issue_validation, body_append)
-        self.assertLess(body_append, codex)
-        validation_script = workflow[issue_validation:body_append]
-        self.assertIn("set -euo pipefail", validation_script)
-        self.assertIn("issue_state", validation_script)
-        self.assertIn("issue_number", validation_script)
-        self.assertIn("GITHUB_REPOSITORY", validation_script)
+        self.assertNotIn("openai/codex-action", workflow)
+        self.assertNotIn("Run Codex milestone Foreman", workflow)
+        self.assertIn("Refuse retired autonomous Foreman dispatch", workflow)
+
 
     def test_foreman_issue_number_matches_registry_selection(self) -> None:
         workflow = (ROOT / ".github" / "workflows" / "fxd-foreman.yml").read_text(encoding="utf-8")
-        issue_step = workflow[workflow.index("name: Load authoritative milestone issue") :]
-        self.assertIn("steps.milestone.outputs.issue_number", issue_step)
-        self.assertIn('"$issue_number" != "$selected_issue"', issue_step)
-        self.assertIn("authoritative milestone issue number mismatch", issue_step)
-        self.assertIn("kool1160/fxd-fixture-design", issue_step)
-        self.assertNotIn("gh issue view 57", issue_step)
+        self.assertNotIn("steps.milestone.outputs.issue_number", workflow)
+        self.assertNotIn("gh issue view 57", workflow)
+        self.assertIn("Issue #66 retired this autonomous workflow", workflow)
+
 
     def test_foreman_rejects_authoritative_issue_repository_mismatch(self) -> None:
         workflow = (ROOT / ".github" / "workflows" / "fxd-foreman.yml").read_text(encoding="utf-8")
-        issue_step = workflow[workflow.index("name: Load authoritative milestone issue") :]
-        repository_check = issue_step.index('"$GITHUB_REPOSITORY" != "$EXPECTED_REPOSITORY"')
-        issue_fetch = issue_step.index("gh issue view")
-        self.assertLess(repository_check, issue_fetch)
-        self.assertIn("authoritative milestone issue repository mismatch", issue_step)
-        self.assertIn('issue_url" != "https://github.com/$EXPECTED_REPOSITORY/issues/$selected_issue', issue_step)
+        self.assertNotIn("gh issue view", workflow)
+        self.assertNotIn("GITHUB_REPOSITORY", workflow)
+        self.assertNotIn("contents: write", workflow)
+
 
 
 if __name__ == "__main__":
