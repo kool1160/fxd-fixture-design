@@ -11,33 +11,35 @@ Development operation is governed by `docs/OPERATOR_PROTOCOL.md`.
 ## Authority order
 
 1. Explicit current decision from Chris Hilton
-2. `CURRENT.md`
-3. The active GitHub issue and accepted decision records
-4. `docs/PRODUCT_DIRECTION.md`
-5. `docs/OPERATOR_PROTOCOL.md`
-6. `docs/ENGINEERING_CONSTITUTION.md`
-7. `docs/AI_DRIVEN_SYNTHESIS_ARCHITECTURE.md`
-8. `docs/ARCHITECTURE.md`
-9. This contract
-10. The active PR, exact head, review findings, and CI
-11. Historical milestone registry, roadmaps, handoffs, records, and binders
+2. `docs/CONTROL_STATE.json` — machine-readable current state
+3. `CURRENT.md` — concise human projection; CI requires it to agree with control state
+4. The active GitHub issue and accepted decision records
+5. `docs/PRODUCT_DIRECTION.md`
+6. `docs/OPERATOR_PROTOCOL.md`
+7. `docs/ENGINEERING_CONSTITUTION.md`
+8. `docs/AI_DRIVEN_SYNTHESIS_ARCHITECTURE.md`
+9. `docs/ARCHITECTURE.md`
+10. This contract
+11. The active PR, exact head, review findings, and CI
+12. Historical milestone registry, roadmaps, handoffs, records, and binders
 
 A conflict stops work. A lower source cannot silently override a higher source.
 
-## Issue #66 reset exception
+## Issue #66 reset transition
 
 Issue #66 is an owner-approved product and governance sequence change.
 
-During this reset:
+During reset review:
 
 - product implementation is held;
-- `CURRENT.md` and Issue #66 own current state;
+- `docs/CONTROL_STATE.json`, `CURRENT.md`, and Issue #66 own current state;
 - Issue #57 and PR #54 are closed as superseded, not Complete;
 - Issues #59 and #63 are closed as superseded;
-- `docs/MILESTONE_STATE.json` is preserved as historical governance evidence and may still contain the pre-reset M32 projection until a dedicated migration updates or retires it;
-- agents must not use that stale projection to reopen M32 work.
+- `docs/MILESTONE_STATE.json` is frozen byte-for-byte as pre-reset historical evidence, with its Git blob identity pinned in control state;
+- the former autonomous Foreman workflow and automatic selector fail closed;
+- M33 / Issue #68 and M33.1 / Issue #69 remain planned and blocked until PR #67 is accepted and control state advances.
 
-This explicit exception exists to prevent the old governance machinery from making the rejected architecture authoritative merely because it was previously labeled Active.
+This explicit transition prevents old governance machinery from making the rejected architecture authoritative merely because it previously labeled M32 Active.
 
 ## Legal states
 
@@ -150,6 +152,7 @@ The issue is implementation scope. Conversation alone does not expand it.
 
 Review-Control returns `CONTINUE` only after confirming:
 
+- control state and `CURRENT.md` agree;
 - the active issue is unambiguous;
 - no duplicate implementation PR exists;
 - the selected branch/PR is correct;
@@ -198,7 +201,7 @@ A gate is Complete only when:
 - no hidden scope expansion entered the change;
 - no claim exceeds the evidence;
 - the PR is merged through the approved repository method;
-- `CURRENT.md` and durable GitHub records are updated to the next already-approved state.
+- `docs/CONTROL_STATE.json`, `CURRENT.md`, and durable GitHub records are advanced together to the next already-approved state.
 
 A separate three-PR closeout ceremony is not required for routine gates. Review-Control may merge and advance inside the already-approved M33 sequence when the exact-head safety check passes.
 
@@ -208,4 +211,4 @@ Human approval remains required for product-direction changes, destructive actio
 
 Milestones 1–31 and the superseded M32 materials remain historical evidence. Do not rewrite history or delete useful work.
 
-Historical records, binders, `docs/MILESTONE_STATE.json`, backlog snapshots, and strategy handoffs cannot select current work. They must point operators back to `CURRENT.md` and the active issue.
+Historical records, binders, `docs/MILESTONE_STATE.json`, backlog snapshots, and strategy handoffs cannot select current work. Current state comes only from `docs/CONTROL_STATE.json`, `CURRENT.md`, and the active issue.
