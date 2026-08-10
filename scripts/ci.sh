@@ -20,6 +20,7 @@ required_files=(
   docs/MILESTONE_STATE.json
   docs/decisions/0001-ai-driven-fixture-synthesis-reset.md
   scripts/validate_control_state.py
+  scripts/validate_api_spend_firewall.py
   scripts/validate_legacy_milestones.py
   scripts/validate_milestones.py
   .github/codex/prompts/run-milestone.md
@@ -35,6 +36,7 @@ done
 # pre-reset milestone registry. Both must validate: current authority may not
 # drift, and historical evidence may not be rewritten to make the reset easier.
 python scripts/validate_control_state.py
+python scripts/validate_api_spend_firewall.py
 python scripts/validate_legacy_milestones.py
 node scripts/fxd-backlog.mjs validate
 
