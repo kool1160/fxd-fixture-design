@@ -53,6 +53,7 @@ FORBIDDEN_CURRENT_CLAIMS = (
     "PR #54 is the active implementation",
 )
 FROZEN_MILESTONE_REGISTRY_PATH = "docs/MILESTONE_STATE.json"
+ACCEPTED_RESET_MERGE = "592876fefde118b5325bbb5b4949eeb1490cdf6c"
 
 
 def _positive_int(value: Any) -> bool:
@@ -87,29 +88,43 @@ def validate(repo_root: Path) -> list[str]:
         errors.append(f"unsupported control-state schema: {data.get('schema_version')!r}")
     if not _positive_int(data.get("revision")):
         errors.append("control-state revision must be a positive integer")
+    elif data.get("revision") != 2:
+        errors.append(f"post-merge repair control-state revision must be 2, got {data.get('revision')!r}")
     if data.get("state") not in LEGAL_STATES:
         errors.append(f"illegal control state: {data.get('state')!r}")
     if data.get("authority_issue") != 66:
-        errors.append("Issue #66 must remain the authority for reset revision 1")
+        errors.append("Issue #66 must remain the accepted reset authority")
+
+    accepted_reset = data.get("accepted_governance_reset")
+    if not isinstance(accepted_reset, dict):
+        errors.append("accepted_governance_reset must be an object")
+        accepted_reset = {}
+    expected_reset = {"issue": 66, "pull_request": 67, "merge_commit": ACCEPTED_RESET_MERGE}
+    for key, expected in expected_reset.items():
+        if accepted_reset.get(key) != expected:
+            errors.append(
+                f"accepted_governance_reset.{key} must be {expected!r}, "
+                f"got {accepted_reset.get(key)!r}"
+            )
 
     gate = data.get("active_gate")
     if not isinstance(gate, dict):
         errors.append("active_gate must be an object")
         gate = {}
     expected_gate = {
-        "lane": "governance",
-        "issue": 66,
-        "pull_request": 67,
-        "branch": "governance/ai-driven-fxd-reset",
+        "lane": "governance_repair",
+        "issue": 74,
+        "pull_request": 72,
+        "branch": "governance/issue66-post-merge-repair",
         "expected_pr_state": "open_draft",
     }
     for key, expected in expected_gate.items():
         if gate.get(key) != expected:
             errors.append(f"active_gate.{key} must be {expected!r}, got {gate.get(key)!r}")
-    if data.get("state") != "AWAITING_REVIEW":
-        errors.append("reset revision 1 must remain AWAITING_REVIEW until PR #67 is accepted")
+    if data.get("state") != "REPAIR":
+        errors.append("revision 2 must remain REPAIR until Issue #74 / PR #72 is accepted")
     if data.get("product_implementation_held") is not True:
-        errors.append("product implementation must remain held during reset review")
+        errors.append("product implementation must remain held during governance repair")
 
     superseded = data.get("superseded")
     if not isinstance(superseded, list):
@@ -144,7 +159,7 @@ def validate(repo_root: Path) -> list[str]:
         errors.append("planned_product_milestone must be an object")
         planned = {}
     if (planned.get("number"), planned.get("issue"), planned.get("status")) != (33, 68, "PLANNED"):
-        errors.append("M33 must remain PLANNED on Issue #68 during reset review")
+        errors.append("M33 must remain PLANNED on Issue #68 during governance repair")
     first_gate = planned.get("first_gate")
     if not isinstance(first_gate, dict):
         errors.append("M33 first_gate must be an object")
@@ -152,8 +167,8 @@ def validate(repo_root: Path) -> list[str]:
         first_gate.get("id"),
         first_gate.get("issue"),
         first_gate.get("status"),
-    ) != ("M33.1", 69, "BLOCKED_BY_GOVERNANCE"):
-        errors.append("M33.1 must remain blocked on Issue #69 until PR #67 is accepted")
+    ) != ("M33.1", 69, "BLOCKED_BY_GOVERNANCE_REPAIR"):
+        errors.append("M33.1 must remain blocked on Issue #69 until Issue #74 / PR #72 is accepted")
 
     if data.get("operator_protocol") != "docs/OPERATOR_PROTOCOL.md":
         errors.append("control state must point to docs/OPERATOR_PROTOCOL.md")
@@ -203,14 +218,15 @@ def validate(repo_root: Path) -> list[str]:
 
     current = (repo_root / "CURRENT.md").read_text(encoding="utf-8")
     for token in (
-        "AWAITING_REVIEW — GOVERNANCE RESET",
+        "REPAIR — POST-MERGE GOVERNANCE FINDINGS",
         "PRODUCT IMPLEMENTATION HELD",
-        "Issue:** #66",
-        "Implementation PR:** #67",
+        "Issue:** #74",
+        "Implementation PR:** #72",
         "PR #54 — closed unmerged",
+        ACCEPTED_RESET_MERGE,
     ):
         if token not in current:
-            errors.append(f"CURRENT.md is missing required reset token {token!r}")
+            errors.append(f"CURRENT.md is missing required repair token {token!r}")
 
     workflow = (repo_root / ".github" / "workflows" / "fxd-foreman.yml").read_text(
         encoding="utf-8"
@@ -232,10 +248,12 @@ def validate(repo_root: Path) -> list[str]:
     selector = (repo_root / "scripts" / "fxd-backlog.mjs").read_text(encoding="utf-8")
     if "automatic milestone selection is retired by Issue #66" not in selector:
         errors.append("legacy selector does not fail closed under Review-Control")
+    if "fs.existsSync(controlState) || fs.existsSync(operatorProtocol)" not in selector:
+        errors.append("selector retirement must survive a missing operator protocol")
 
     next_action = data.get("next_valid_action")
-    if not isinstance(next_action, str) or "PR #67" not in next_action or "M33.1" not in next_action:
-        errors.append("next_valid_action must keep PR #67 review ahead of M33.1")
+    if not isinstance(next_action, str) or "PR #72" not in next_action or "M33.1" not in next_action:
+        errors.append("next_valid_action must keep PR #72 repair ahead of M33.1")
 
     return errors
 
@@ -248,7 +266,7 @@ def main() -> int:
         for error in errors:
             print(f"- {error}", file=sys.stderr)
         return 1
-    print("FXD control state validated: Issue #66 / PR #67; product implementation held.")
+    print("FXD control state validated: Issue #74 / PR #72; product implementation held.")
     return 0
 
 
