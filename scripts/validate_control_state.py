@@ -35,6 +35,17 @@ KEY_CURRENT_DOCUMENTS = (
     "docs/FOREMAN_SETUP.md",
     "docs/decisions/0001-ai-driven-fixture-synthesis-reset.md",
 )
+RESET_AUTHORITY_DOCUMENTS = {
+    "AGENTS.md",
+    "CURRENT.md",
+    "README.md",
+    "docs/PRODUCT_DIRECTION.md",
+    "docs/AI_DRIVEN_SYNTHESIS_ARCHITECTURE.md",
+    "docs/ARCHITECTURE.md",
+    "docs/MILESTONE_CONTRACT.md",
+    "docs/FOREMAN_SETUP.md",
+    "docs/decisions/0001-ai-driven-fixture-synthesis-reset.md",
+}
 FORBIDDEN_CURRENT_CLAIMS = (
     "M32 is the sole Active",
     "Milestone 32 as the sole Active",
@@ -174,8 +185,12 @@ def validate(repo_root: Path) -> list[str]:
         except OSError as exc:
             errors.append(f"cannot read current authority document {relative}: {exc}")
             continue
-        if "#66" not in text and "Issue #66" not in text:
-            errors.append(f"current authority document {relative} does not identify reset Issue #66")
+        if (
+            relative in RESET_AUTHORITY_DOCUMENTS
+            and "#66" not in text
+            and "Issue #66" not in text
+        ):
+            errors.append(f"reset authority document {relative} does not identify Issue #66")
         for forbidden in FORBIDDEN_CURRENT_CLAIMS:
             if forbidden.casefold() in text.casefold():
                 errors.append(f"current authority document {relative} retains forbidden claim: {forbidden}")
