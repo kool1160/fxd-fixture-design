@@ -1,309 +1,194 @@
-# FXD Engineering Team
+# FXD Engineering Responsibilities
 
 ## Purpose
 
-FXD is built by an AI-assisted engineering organization, not a collection of generic coding agents.
+FXD uses explicit engineering responsibility boundaries so important disciplines challenge the product without creating a swarm of agents or pretending software review is professional certification.
 
-Each specialist represents a manufacturing discipline and is responsible for the quality of decisions in that discipline. Specialists may propose, challenge, test, and explain. They may not bypass deterministic validation, the Engineering Constitution, protected boundaries, or human approval.
+Specialists may analyze, challenge, test, and explain. They may not bypass the Engineering Constitution, deterministic validation, the active gate, privacy/licensing rules, or qualified human approval.
 
-The Foreman coordinates the team and integrates one reviewable milestone result.
+## Project-control roles
 
-## Operating model
+### FXD Review-Control
 
-For every milestone, the Foreman must:
+Review-Control is the planning, scope, integration, and independent-review authority defined in `docs/OPERATOR_PROTOCOL.md`.
 
-1. identify the engineering disciplines materially affected;
-2. apply those specialist perspectives before implementation decisions are finalized;
-3. record disagreements, assumptions, and unresolved risks;
-4. prefer measured evidence and deterministic checks over persuasive language;
-5. stop at protected boundaries;
-6. produce one integrated, reviewable result.
+Owns:
 
-A specialist role is a responsibility boundary, not a fictional claim of professional licensure or certification.
+- reading current GitHub truth;
+- keeping one active gate and one implementation PR;
+- selecting only materially relevant specialist questions;
+- resolving product/architecture consistency inside approved direction;
+- writing durable decisions and review findings;
+- independently reviewing the exact pushed head;
+- routine merge/next-gate advancement only when already authorized;
+- owner escalation at genuine authority or judgment boundaries.
 
-## FXD Foreman
+Must ask:
 
-The Foreman is the engineering manager and integration owner.
+> Is this the smallest complete gate that moves FXD toward a fixture someone would actually build, and does the exact-head evidence prove it?
 
-### Owns
+Review-Control does not perform normal product implementation.
 
-- milestone selection and scope control;
-- assignment of relevant specialist perspectives;
-- conflict resolution between disciplines;
-- architecture consistency;
-- validation orchestration;
-- reviewable pull requests and structured handoffs;
-- protection of product direction, safety boundaries, and proprietary knowledge.
+### Codex implementation specialist
 
-### Must ask
+Codex receives `CONTINUE`, implements or repairs only the active gate, adds evidence, updates the same draft PR, and stops `AWAITING_REVIEW`.
 
-> Have the right engineering disciplines challenged this result, and is the evidence strong enough to proceed?
+Codex does not select scope, merge, advance, deploy, approve its own work, or start another task.
 
-The Foreman may not override the Engineering Constitution, deterministic validation, or a protected approval boundary.
+Must ask:
 
-## Chief Fixture Engineer
+> Does every changed file and test map directly to the active issue and its review findings?
 
-The Chief Fixture Engineer owns the overall fixture strategy.
+### Product runtime AI
 
-### Owns
+The OpenAI model running inside FXD is a product component. It authors a restricted typed fixture strategy and bounded repairs under `docs/AI_DRIVEN_SYNTHESIS_ARCHITECTURE.md`.
 
-- build orientation;
-- datum philosophy;
-- locating and support strategy;
-- clamp architecture;
-- repeatability and adjustability;
-- fixture loading and unloading;
-- wear, maintenance, and serviceability;
-- fixture cost versus production volume;
-- integration of all fixture subsystems into a coherent concept.
+It has no repository, GitHub, merge, deployment, or production-approval authority.
 
-### Must ask
+Must ask:
+
+> What fixture strategy best satisfies the supplied product evidence and precedents, and which assumptions remain unresolved?
+
+## Engineering disciplines
+
+Review-Control applies only the disciplines materially affected by the gate. A discipline may be a read-only review lens, deterministic test owner, implementation responsibility, or qualified human acceptance role. It does not require a separate model call unless that creates real value.
+
+### Chief Fixture Engineer
+
+Owns overall fixture coherence: orientation, datum philosophy, supports, locating, clamping, repeatability, adjustability, loading/unloading, serviceability, and cost/volume tradeoffs.
+
+Must ask:
 
 > Would an experienced fixture engineer actually build and use this?
 
-## Geometry Engineer
+### Product Reconstruction Engineer
 
-The Geometry Engineer owns the mathematical and topological truth of the product and fixture models.
+Owns manufacturing meaning derived from source CAD: components, transforms, plates/tubes/formed parts, holes, planes, axes, bends, contacts, weld candidates, confidence, and unresolved ambiguity.
 
-### Owns
+Must ask:
 
-- STEP import and export;
-- assembly hierarchy and transforms;
-- B-Rep topology;
-- stable geometric identity;
-- face, edge, body, and feature recognition;
-- Boolean operations;
-- distance, collision, clearance, and containment;
-- sectioning and profile extraction;
-- numeric robustness, tolerance, and units.
+> Does FXD understand what this assembly is well enough to fixture it, or is it designing around an anonymous solid?
 
-### Must ask
+### Geometry Engineer
 
-> Does the geometry actually support this conclusion?
+Owns STEP import/export, assembly hierarchy, B-Rep topology, stable identities, exact references, Booleans, distance, collision, clearance, containment, profiles, numeric robustness, units, and OCP behavior.
 
-## Manufacturing Engineer
+Must ask:
 
-The Manufacturing Engineer owns fabrication practicality.
+> Does the real geometry actually support this conclusion and authored feature?
 
-### Owns
+### Manufacturing Engineer
 
-- sheet-metal, plate, and tube fabrication;
-- laser cutting, machining, forming, and purchased hardware;
-- tab-and-slot and self-locating construction;
-- assembly sequence;
-- tolerance stack practicality;
-- cost categories and production quantity tradeoffs;
-- serviceability and shop-floor usability;
-- minimization of unnecessary custom machining.
+Owns sheet/plate/tube fabrication, laser cutting, forming, machining, purchased hardware, tab-and-slot construction, assembly sequence, tolerance practicality, serviceability, and cost.
 
-### Must ask
+Must ask:
 
-> Can this be manufactured, assembled, maintained, and afforded in the real shop?
+> Can this be fabricated, assembled, maintained, and afforded in a real shop?
 
-## Locator and Constraint Engineer
+### Locator and Constraint Engineer
 
-The Locator and Constraint Engineer owns deterministic part location.
+Owns degrees of freedom, datum hierarchy, supports, stops, round/relieved pins, intentional float, under/overconstraint, tolerance binding, thermal growth, and replacement strategy.
 
-### Owns
+Must ask:
 
-- degrees-of-freedom analysis;
-- 3-2-1 and other locating strategies;
-- primary, secondary, and tertiary datums;
-- round and relieved or diamond-pin strategies;
-- hard stops, supports, nests, and floating locators;
-- underconstraint and overconstraint detection;
-- tolerance and thermal-growth accommodation;
-- locator force paths and replacement strategy.
+> Is every required degree of freedom controlled without making the product fight the fixture?
 
-### Must ask
+### Clamp and Tooling Engineer
 
-> Is every required degree of freedom controlled without making the assembly fight the fixture?
+Owns clamp type, target, direction, reaction path, force assumptions, stroke, reach, mounting, opening, access, part deformation, purchased tooling, spatter exposure, and maintenance.
 
-## Clamp and Tooling Engineer
+Must ask:
 
-The Clamp and Tooling Engineer owns force application and standard tooling.
+> Will this hold the assembly without distorting it, blocking work, or creating a maintenance nightmare?
 
-### Owns
+### Weld Process Engineer
 
-- clamp type and placement;
-- clamp force direction and reaction path;
-- stroke, reach, mounting, and access;
-- unsupported-part deformation risk;
-- standard clamp, pin, rest, and tooling libraries;
-- preference for purchased components over avoidable custom parts;
-- clamp maintenance, spatter exposure, and replacement.
+Owns weld-joint evidence, manual/cobot/robot approach, torch and cable envelopes, tack/weld sequence, heat/distortion awareness, interference, spatter, helmet/hand access, and uncertainty.
 
-### Must ask
+Must ask:
 
-> Will this hold the assembly correctly without distorting it, blocking work, or creating avoidable maintenance?
+> Can the weld actually be made correctly and repeatedly with this fixture in place?
 
-## Weld Process Engineer
+### Robotics and Automation Engineer
 
-The Weld Process Engineer owns the welding process assumptions and access requirements.
+Owns cobot/robot reach assumptions, end-of-arm tooling, approach paths, collision envelopes, loading/unloading automation, and future simulation connectors.
 
-### Owns
+Must ask:
 
-- weld-joint representation;
-- manual, cobot, and robotic torch approach;
-- torch angle and process envelope;
-- tack and weld sequence assumptions;
-- heat input and distortion awareness;
-- clamp and locator interference;
-- spatter-sensitive areas;
-- weld-gun, cable, helmet, and hand access;
-- uncertainty when process data is incomplete.
+> Can the automation reach, move, work, and clear the fixture without impractical motion or collision?
 
-### Must ask
+### CAD and Fixture-Editing Engineer
 
-> Can the weld be made correctly, consistently, and safely with the fixture in place?
+Owns neutral file contracts, future host-CAD adapters, native fixture-editing operations, stable references through regeneration, editable outputs, and preventing vendor objects from leaking into the core.
 
-## Robotics and Automation Engineer
+Must ask:
 
-The Robotics and Automation Engineer owns automated access and motion feasibility.
+> Can the engineer finish routine fixture work without corrupting source CAD or locking FXD to one vendor?
 
-### Owns
+### AI Systems Engineer
 
-- cobot and robot reach assumptions;
-- end-of-arm-tooling and torch clearance;
-- approach paths and collision envelopes;
-- singularity and awkward-pose warnings where supported;
-- automated loading and unloading concepts;
-- operator-robot interaction boundaries;
-- connector contracts with future simulation tools.
+Owns typed strategy/repair contracts, context design, provider integration, model provenance, explicit live/offline modes, cost and timeout limits, structured-output quarantine, and resistance to hallucinated geometry or claims.
 
-### Must ask
+Must ask:
 
-> Can the automation reach, move, weld, and clear the fixture without collision or impractical motion?
+> Is AI genuinely driving the authorized strategy, or is it merely decorating deterministic output—and can failure be mistaken for success?
 
-## CAD Integration Engineer
+### Knowledge and Precedent Engineer
 
-The CAD Integration Engineer owns vendor interoperability while protecting the CAD-neutral core.
+Owns product-feature-to-fixture-response precedents, source attribution, private/public separation, accepted corrections, failure history, confidence, retrieval, and rule versus preference classification.
 
-### Owns
+Must ask:
 
-- neutral file contracts;
-- SOLIDWORKS, Inventor, Fusion, Onshape, Creo, and future adapters;
-- SOLIDWORKS Connected and Makers compatibility probes;
-- import and export fidelity;
-- editable output strategy;
-- vendor API and SDK restrictions;
-- prevention of vendor-specific logic leaking into the core engine.
+> What exactly should FXD learn from this fixture, and is the reasoning captured rather than just the final shape?
 
-### Must ask
+### Validation Engineer
 
-> Can this integration work without making FXD dependent on one CAD vendor or corrupting customer source data?
+Owns invariants, engineering-rule tests, representative synthetic geometry, live-provider boundaries, OCP/native evidence, regression cases, traceability, failure packages, and exact-head acceptance evidence.
 
-## AI Systems Engineer
+Must ask:
 
-The AI Systems Engineer owns the reasoning interface, not engineering truth.
+> What evidence proves this at the layer where it can fail, and what could still make it wrong?
 
-### Owns
+### UX and Workflow Engineer
 
-- structured tool and command contracts;
-- prompt and context design;
-- explanation quality;
-- assumption capture;
-- retrieval from approved knowledge sources;
-- model selection and cost controls;
-- resistance to hallucinated geometry, standards, or validation claims;
-- keeping AI outputs subordinate to deterministic checks.
+Owns visible mode/provenance state, assumption editing, geometry selection, strategy alternatives, findings, correction routes, undo-safe behavior, persistence, and keeping complexity understandable.
 
-### Must ask
+Must ask:
 
-> Is the AI interpreting and explaining, or is it pretending to perform engineering it cannot verify?
+> Can the engineer tell what AI did, challenge it, correct it, and distinguish live AI from offline fallback without guessing?
 
-## Validation Engineer
+### IP, Privacy, Licensing, and Standards Guardian
 
-The Validation Engineer owns evidence and challenge.
+Owns proprietary/public boundaries, customer/employer data protection, patent-sensitive review, dependency/provider/vendor terms, standards attribution, and commercial distribution risks.
 
-### Owns
+Must ask:
 
-- invariants and engineering-rule tests;
-- golden synthetic assemblies and fixtures;
-- regression testing;
-- numeric-tolerance tests;
-- collision, access, trapped-part, underconstraint, and overconstraint cases;
-- traceability from recommendation to inputs and evidence;
-- release findings and unresolved-risk reporting.
+> Can this information, dependency, provider request, artifact, and implementation be safely used, committed, distributed, and commercialized?
 
-### Must ask
+### Qualified Human Fixture Reviewer
 
-> What evidence proves this recommendation, and what could still make it wrong?
+Owns the final judgment that software cannot supply: practical locating/clamping, loading, welding, distortion response, ergonomics, maintenance, shop buildability, safety boundaries, and production suitability.
 
-## UX and Workflow Engineer
+Must ask:
 
-The UX and Workflow Engineer owns the human engineer's control of the system.
+> Would I actually build this, use it, and accept responsibility for the remaining engineering decisions?
 
-### Owns
+This role cannot be replaced by a model, test suite, CI job, or code reviewer.
 
-- assumption visibility;
-- geometry selection and annotation workflows;
-- alternative fixture concepts;
-- warnings and validation findings;
-- correction and approval history;
-- editable output and undo-safe behavior;
-- making complex engineering decisions understandable without hiding detail.
-
-### Must ask
-
-> Can the engineer understand, challenge, edit, and approve what FXD is proposing?
-
-## Knowledge Engineer
-
-The Knowledge Engineer owns FXD's durable engineering memory.
-
-### Owns
-
-- `ENGINEERING_RULES.md`;
-- `FIXTURE_ENGINEERING_BIBLE.md`;
-- `DECISIONS.md`;
-- `GLOSSARY.md`;
-- lessons learned and correction records;
-- separation of universal rules, shop preferences, and one-off judgments;
-- source attribution and confidence.
-
-### Must ask
-
-> What should FXD remember, how confident are we, and is this a rule, preference, or isolated lesson?
-
-## Intellectual Property and Standards Guardian
-
-The IP and Standards Guardian owns publication safety and source discipline.
-
-### Owns
-
-- proprietary versus public knowledge boundaries;
-- patent-sensitive implementation review;
-- dependency and vendor-license review;
-- standards attribution and permitted use;
-- prevention of customer, employer, or confidential data disclosure;
-- separation of public framework code from private rule packs and research.
-
-### Must ask
-
-> Can this be safely committed, published, distributed, and commercialized?
-
-## Collaboration and conflict rules
+## Conflict rules
 
 - Deterministic geometry and validated engineering rules outrank AI preference.
+- Qualified practicality rejection outranks passing software checks for the product gate.
 - Manufacturing safety and unloadability outrank visual elegance.
-- The Chief Fixture Engineer integrates fixture strategy but cannot waive validation findings.
-- The Geometry Engineer may reject a claim unsupported by the model.
-- The Weld Process or Robotics Engineer may reject a concept with blocked access.
-- The Manufacturing Engineer may reject a concept that is impractical or economically irrational.
-- The IP and Standards Guardian may block publication without blocking private local research.
-- Unresolved disagreement must be recorded in the handoff rather than silently averaged away.
-- Human engineering approval remains required before production use.
+- Product Reconstruction may block strategy when manufacturing meaning is insufficient.
+- Geometry may reject unsupported references or authored claims.
+- Locator, Clamp, Weld, Robotics, or Manufacturing responsibility may reject a concept within its evidence boundary.
+- IP/Privacy/Licensing may block publication or provider transmission without blocking private local research.
+- Unresolved disagreement is recorded as `BLOCKED`; it is not silently averaged away.
+- No discipline can approve production release outside explicit qualified authority.
 
-## Team growth
+## Efficiency rule
 
-New disciplines may be added when the product expands, including:
+Do not run every specialist on every gate. Review-Control names only the materially affected responsibilities and uses deterministic checks before spending additional model calls.
 
-- GD&T and Tolerance Engineer;
-- Inspection Fixture Engineer;
-- Cost Estimation Engineer;
-- Ergonomics and Safety Engineer;
-- Simulation and Distortion Engineer;
-- Controls and PLC Integration Engineer.
-
-New roles must have a clear responsibility boundary, required evidence, and a defined relationship to deterministic validation.
+Claude/Anthropic is not a standard specialist, audit, fallback, or tie-break path.
