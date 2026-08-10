@@ -46,27 +46,37 @@ def mapping(data: dict[str, Any], key: str, errors: list[str]) -> dict[str, Any]
     return value
 
 
+def _active_workflow_text(text: str) -> str:
+    """Ignore comments while preserving every executable/configuration line."""
+    return "\n".join(
+        line for line in text.splitlines()
+        if not line.lstrip().startswith("#")
+    )
+
+
 def _validate_workflow_cost_boundary(root: Path, errors: list[str]) -> None:
+    """Reject any active GitHub workflow route capable of paid OpenAI development."""
     workflows = root / ".github" / "workflows"
     if not workflows.is_dir():
         errors.append(".github/workflows is missing")
         return
-    forbidden = (
-        "uses: openai/codex-action",
-        "openai-api-key:",
-        "secrets.OPENAI_API_KEY",
-    )
+
     for path in sorted((*workflows.glob("*.yml"), *workflows.glob("*.yaml"))):
-        text = path.read_text(encoding="utf-8")
-        active_lines = "\n".join(
-            line for line in text.splitlines()
-            if not line.lstrip().startswith("#")
-        )
-        for token in forbidden:
-            if token in active_lines:
-                errors.append(
-                    f"paid development/API route is forbidden in {path.relative_to(root)}: {token}"
-                )
+        active = _active_workflow_text(path.read_text(encoding="utf-8"))
+        normalized = active.casefold()
+        relative = path.relative_to(root)
+
+        # Case-insensitive and secret-name-independent. These cover the Codex
+        # action, conventional or alternate OPENAI_API_KEY forwarding, direct
+        # OpenAI HTTP calls, and SDK/provider use paired with any GitHub secret.
+        if "codex-action" in normalized:
+            errors.append(f"paid development Codex action is forbidden in {relative}")
+        if "openai_api_key" in normalized:
+            errors.append(f"OpenAI API key forwarding is forbidden in {relative}")
+        if "api.openai.com" in normalized:
+            errors.append(f"direct OpenAI API endpoint use is forbidden in {relative}")
+        if "openai" in normalized and "secrets." in normalized:
+            errors.append(f"OpenAI workflow use paired with a GitHub secret is forbidden in {relative}")
 
     retired = workflows / "m33-1-codex-continue.yml"
     if not retired.exists():
@@ -81,6 +91,47 @@ def _validate_workflow_cost_boundary(root: Path, errors: list[str]) -> None:
         ):
             if token not in text:
                 errors.append(f"retired paid dispatcher is missing {token!r}")
+        active = _active_workflow_text(text).casefold()
+        for forbidden in ("push:", "codex-action", "openai_api_key", "api.openai.com"):
+            if forbidden in active:
+                errors.append(f"retired paid dispatcher retains active route {forbidden!r}")
+
+
+def _validate_hold_projections(root: Path, errors: list[str]) -> None:
+    """Require every current operator projection to agree with the held PR state."""
+    required = {
+        "README.md": (
+            "HELD — COST CONTROL",
+            "draft PR #79",
+            "ChatGPT Codex Remote",
+            "paid GitHub Codex dispatcher is retired",
+        ),
+        "docs/FOREMAN_SETUP.md": (
+            "HELD — COST CONTROL",
+            "**Implementation PR:** #79",
+            "ChatGPT Codex Remote",
+            "no Profile E/product-runtime paid request is authorized while held",
+        ),
+        "docs/MILESTONE_CONTRACT.md": (
+            "**Implementation PR:** #79",
+            "**Status:** HELD — COST CONTROL",
+            "## Development/API cost boundary",
+            "While held: no Codex implementation/repair pass",
+        ),
+    }
+    forbidden = {
+        "README.md": ("implementation PR does not exist",),
+        "docs/FOREMAN_SETUP.md": ("there is no implementation PR",),
+        "docs/MILESTONE_CONTRACT.md": ("- **Status:** ACTIVE\n\nProve:",),
+    }
+    for relative, tokens in required.items():
+        text = (root / relative).read_text(encoding="utf-8")
+        for token in tokens:
+            if token not in text:
+                errors.append(f"{relative} does not project held PR #79 state: missing {token!r}")
+        for token in forbidden.get(relative, ()):
+            if token.casefold() in text.casefold():
+                errors.append(f"{relative} retains contradictory pre-hold claim {token!r}")
 
 
 def validate(root: Path) -> list[str]:
@@ -252,6 +303,8 @@ def validate(root: Path) -> list[str]:
             for stale in STALE_RESET_CLAIMS:
                 if stale.casefold() in text.casefold():
                     errors.append(f"{relative} retains stale activation claim: {stale}")
+
+    _validate_hold_projections(root, errors)
 
     foreman = (root / ".github/workflows/fxd-foreman.yml").read_text(encoding="utf-8")
     for token in ("RETIRED BY ISSUE #66", "contents: read", "exit 1"):
