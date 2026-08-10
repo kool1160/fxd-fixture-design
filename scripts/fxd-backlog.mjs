@@ -61,9 +61,14 @@ function runAuthoritativeValidation(registryPath) {
     ? [['py', ['-3']], ['python', []]]
     : [['python', []], ['python3', []]];
   for (const [command, prefix] of candidates) {
-    const validatorArgs = reviewControlActive
-      ? [...prefix, validator]
-      : [...prefix, validator, '--repo-root', repoRoot, '--registry', registryPath];
+    const validatorArgs = [
+      ...prefix,
+      validator,
+      '--repo-root',
+      repoRoot,
+      '--registry',
+      registryPath,
+    ];
     const result = spawnSync(
       command,
       validatorArgs,
