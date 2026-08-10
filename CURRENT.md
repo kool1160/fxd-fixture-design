@@ -2,20 +2,34 @@
 
 ## State
 
-**AWAITING_REVIEW — GOVERNANCE RESET; PRODUCT IMPLEMENTATION HELD**
+**REPAIR — POST-MERGE GOVERNANCE FINDINGS; PRODUCT IMPLEMENTATION HELD**
 
 This file is the concise operator-facing control surface. The matching machine-readable projection is [`docs/CONTROL_STATE.json`](docs/CONTROL_STATE.json); CI requires them to agree.
 
-GitHub Issue #66 is the active governance authority for the reset. The frozen pre-reset `docs/MILESTONE_STATE.json` remains historical evidence only and cannot select current work.
+Issue #66 and merged PR #67 establish the accepted AI-driven product reset. Issue #74 / PR #72 is the sole active repair gate. The frozen pre-reset `docs/MILESTONE_STATE.json` remains historical evidence only and cannot select current work.
+
+## Accepted reset
+
+- **Decision issue:** #66
+- **Merged reset PR:** #67
+- **Merge commit:** `592876fefde118b5325bbb5b4949eeb1490cdf6c`
 
 ## Active gate
 
-- **Issue:** #66 — Governance reset: AI-driven fixture synthesis and LaserX-style project control
-- **Lane:** product direction / architecture / governance
-- **Implementation PR:** #67 — draft governance reset
-- **Expected branch:** `governance/ai-driven-fxd-reset`
+- **Issue:** #74 — Post-merge repair: close Issue 66 governance findings and restore current state
+- **Lane:** governance repair
+- **Implementation PR:** #72 — draft repair PR
+- **Expected branch:** `governance/issue66-post-merge-repair`
 - **Review authority:** FXD Review-Control chat
 - **Builder/repair session:** Codex, only after `CONTINUE`
+
+## Repair scope
+
+- Keep automatic historical-milestone selection retired when `docs/OPERATOR_PROTOCOL.md` is absent but durable `docs/CONTROL_STATE.json` remains.
+- Require the frozen historical registry path to remain exactly `docs/MILESTONE_STATE.json` before validating its pinned blob.
+- Add focused regressions for both boundaries.
+- Keep machine and human current state synchronized to Issue #74 / PR #72.
+- Remove one-time write-enabled repair tooling.
 
 ## Held and superseded
 
@@ -26,37 +40,31 @@ GitHub Issue #66 is the active governance authority for the reset. The frozen pr
 
 Do not reopen or continue these items unless Issue #66 or a later accepted decision explicitly authorizes it.
 
-## In scope
+## Planned but blocked
 
-- Replace the old Foreman operating model with a LaserX-style Review-Control ↔ Codex loop.
-- Make AI the typed fixture-strategy author.
-- Keep OCP/deterministic systems responsible for authoring, validation, and failure evidence.
-- Prohibit silent live-AI fallback.
-- Define product reconstruction and structured fixture-precedent requirements.
-- Define the milestone transition that supersedes M32 without calling it complete.
-- Define one bounded AI-driven fixture-synthesis proof before broader work.
-- Repair deterministic governance/state validation exposed by PR #67 without broadening into product runtime work.
+- **M33:** Issue #68 — AI-Driven Fixture Synthesis Proof
+- **M33.1:** Issue #69 — Native product reconstruction and explicit live-AI mode
+
+M33.1 remains blocked until this repair merges and a separate current-state transition activates it.
 
 ## Out of scope
 
-- Product runtime implementation in this governance gate.
-- Merging or deleting PR #54.
+- FXD runtime implementation.
+- M33.1 implementation.
+- Provider requests.
+- Fixture-generation behavior.
+- Private fixture data.
+- Reopening M32.
 - Production fixture approval or release.
-- Multiple fixture families.
-- Full general-purpose CAD.
-- Customer or employer CAD in public automation.
-- Supplier scraping or unauthorized CAD redistribution.
 
 ## Success evidence
 
-- `AGENTS.md`, Product Direction, Architecture, Engineering Constitution, milestone governance, operator protocol, and Codex prompt all agree.
-- `docs/CONTROL_STATE.json` and this file agree and pass deterministic validation.
-- No active instruction or executable workflow authorizes the advisory-AI/deterministic-template product path.
-- The autonomous Foreman workflow and automatic selector fail closed.
-- The next bounded product gate has measurable acceptance criteria.
-- The old milestone registry is preserved byte-for-byte as historical evidence rather than silently rewritten.
-- Review-Control can issue one `CONTINUE`; Codex can repair one bounded pass and stop `AWAITING_REVIEW`.
+- `docs/CONTROL_STATE.json`, this file, Issue #74, branch, and PR #72 agree.
+- Both original PR #67 findings have exact code and regression evidence.
+- Full repository checks and pinned OCP acceptance pass on the reviewed exact head.
+- No unresolved blocking review thread remains.
+- Product implementation remains held through merge.
 
 ## Next valid action
 
-**Check PR #67's exact head and CI.** If repository-control validation fails, write bounded findings and issue `CONTINUE` for Codex to repair the same PR. Do not begin product implementation before this governance head is accepted.
+**Check PR #72's exact head and CI.** Merge only after both findings are resolved and exact-head evidence is green. Then create a separate governed transition that activates M33.1; do not begin product implementation from this repair PR.
