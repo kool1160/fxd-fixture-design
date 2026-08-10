@@ -116,12 +116,13 @@ class GovernanceResetTests(unittest.TestCase):
         self.assertNotIn("Active milestone 32", result.stdout)
         self.assertNotIn("Active Milestone 32", result.stdout)
 
-    def test_current_state_holds_product_work_and_targets_reset_pr(self) -> None:
+    def test_current_state_holds_product_work_and_targets_repair_pr(self) -> None:
         current = (ROOT / "CURRENT.md").read_text(encoding="utf-8")
-        self.assertIn("AWAITING_REVIEW — GOVERNANCE RESET", current)
+        self.assertIn("REPAIR — POST-MERGE GOVERNANCE FINDINGS", current)
         self.assertIn("PRODUCT IMPLEMENTATION HELD", current)
-        self.assertIn("Issue:** #66", current)
-        self.assertIn("Implementation PR:** #67", current)
+        self.assertIn("Issue:** #74", current)
+        self.assertIn("Implementation PR:** #72", current)
+        self.assertIn("592876fefde118b5325bbb5b4949eeb1490cdf6c", current)
         self.assertIn("PR #54 — closed unmerged", current)
 
     def test_operator_protocol_separates_builder_and_review_control(self) -> None:
