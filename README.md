@@ -12,11 +12,13 @@ The first product focus is practical weld fixturing for sheet-metal, plate, tube
 
 ## Current status
 
-**Governance and architecture reset active under Issue #66. Product implementation is held.**
+**M33 is active. M33.1 / Issue #69 is the sole active product gate.**
 
-The authoritative machine-readable state is [`docs/CONTROL_STATE.json`](docs/CONTROL_STATE.json). The concise human-facing projection is [`CURRENT.md`](CURRENT.md). CI requires them to agree.
+The Issue #66 reset was accepted through PR #67. Issue #70 advances the authoritative control state to product implementation under the Review-Control/Codex model. The machine-readable authority is [`docs/CONTROL_STATE.json`](docs/CONTROL_STATE.json); the concise scope surface is [`CURRENT.md`](CURRENT.md). CI requires them to agree.
 
-The previous Issue #57 / PR #54 path is closed as superseded. It proved substantial OCP, VTK, geometry, validation, persistence, fixture-library, and export capability, but it did not prove FXD's product value: AI remained advisory while deterministic templates generated the fixture, and repeated human reviews rejected fixture practicality.
+M33.1 is deliberately narrower than final fixture synthesis. It must establish trustworthy source-SHA-bound product reconstruction and make live OpenAI design mode explicit, undeniable, and fail-closed without silent deterministic fallback. The implementation PR does not exist until Review-Control issues `CONTINUE` and Codex opens one focused draft PR.
+
+The previous Issue #57 / PR #54 path remains closed as superseded. It proved substantial OCP, VTK, geometry, validation, persistence, fixture-library, and export capability, but it did not prove FXD's product value: AI remained advisory while deterministic templates generated the fixture, and repeated human reviews rejected fixture practicality.
 
 The closed branch and evidence are preserved for selective salvage. They are not authorization to continue the old flow.
 
@@ -59,7 +61,7 @@ See [`docs/AI_DRIVEN_SYNTHESIS_ARCHITECTURE.md`](docs/AI_DRIVEN_SYNTHESIS_ARCHIT
 
 ## Development model
 
-FXD now uses the same simple project-control shape proven in LaserX Design Studio:
+FXD uses the same simple project-control shape proven in LaserX Design Studio:
 
 > **Review-Control decides and reviews. GitHub remembers. Codex implements one bounded gate. Pull requests hold the evidence.**
 
@@ -93,9 +95,24 @@ Read [`docs/OPERATOR_PROTOCOL.md`](docs/OPERATOR_PROTOCOL.md) and [`AGENTS.md`](
 
 Historical milestone registries, roadmaps, binders, and handoffs remain evidence and context. They do not override current control state.
 
-## First new product proof
+## Active gate — M33.1
 
-The next product gate must prove one representative fixture:
+Issue #69 must prove:
+
+1. a versioned, deterministic, source-SHA-bound native product/manufacturing reconstruction;
+2. visible uncertainty and focused blockers/questions instead of guessed manufacturing meaning;
+3. explicit `ai_design_live` and `deterministic_offline` modes;
+4. visible and persisted provider/model/request/provenance state;
+5. one intentional bounded OpenAI request when live mode is selected;
+6. missing configuration, timeout, provider failure, quarantine, cancellation, or malformed output produces **AI DESIGN — FAILED — NO FALLBACK USED**;
+7. offline operation never claims a live AI result;
+8. focused, full, pinned-OCP, native-UI, privacy, secret, and exactly-one-live-request evidence.
+
+M33.1 does not author the final AI-driven fixture. Strategy-to-OCP authoring belongs to M33.2.
+
+## Full M33 proof
+
+The ordered milestone must eventually prove one representative fixture:
 
 1. trustworthy native product reconstruction;
 2. one intentional live OpenAI strategy request with visible provider/model provenance;
@@ -112,7 +129,7 @@ A fixture that is merely geometrically valid fails.
 
 On Windows, `launch-fxd.bat` starts the current engineering workbench using the repository `.venv`. Dragging a `.step` or `.stp` file onto the launcher opens that file.
 
-The current launcher and application behavior predate the Issue #66 reset. Until the new AI-mode gate is implemented, do not assume normal launch proves that a live AI provider was configured or used. Provider provenance must become explicit in the next product gate.
+The current launcher and application behavior predate the Issue #66 reset. Until M33.1 is accepted, do not assume normal launch proves that a live AI provider was configured or used. Provider provenance must become explicit in this gate.
 
 ## Repository health
 
