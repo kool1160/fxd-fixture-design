@@ -1,9 +1,9 @@
 {
   "schema_version": "fxd-control-state-v1",
-  "revision": 2,
-  "updated_at_utc": "2026-08-10T01:52:00Z",
+  "revision": 3,
+  "updated_at_utc": "2026-08-10T02:10:00Z",
   "authority_issue": 66,
-  "state": "REPAIR",
+  "state": "AWAITING_REVIEW",
   "product_implementation_held": true,
   "accepted_governance_reset": {
     "issue": 66,
@@ -15,7 +15,7 @@
     "issue": 74,
     "pull_request": 72,
     "branch": "governance/issue66-post-merge-repair",
-    "expected_pr_state": "open_draft",
+    "expected_pr_state": "open_ready",
     "objective": "Close the two post-merge Issue 66 governance findings and restore truthful current state before M33.1 activation."
   },
   "superseded": [
@@ -57,5 +57,5 @@
     "authority": "historical_only",
     "note": "The pre-reset registry is preserved byte-for-byte as historical evidence and cannot select current work."
   },
-  "next_valid_action": "Review PR #72 exact head and required checks, merge only after both Issue 66 findings are resolved, then use a separate transition to activate M33.1."
+  "next_valid_action": "Review PR #72 exact head and required checks; merge only after both Issue 66 findings are independently resolved, then use a separate transition to activate M33.1."
 }
