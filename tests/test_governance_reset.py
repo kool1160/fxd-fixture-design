@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -120,6 +121,42 @@ class GovernanceResetTests(unittest.TestCase):
             self.assertFalse(context.exists())
         self.assertNotEqual(0, result.returncode)
         self.assertIn("automatic milestone selection is retired by Issue #66", result.stderr)
+
+    def test_control_state_alone_keeps_selector_retired(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            scripts = root / "scripts"
+            docs = root / "docs"
+            scripts.mkdir()
+            docs.mkdir()
+            shutil.copy2(ROOT / "scripts" / "fxd-backlog.mjs", scripts / "fxd-backlog.mjs")
+            # Isolate selector authority: historical semantics are tested by the
+            # real validator suite, while this stub proves current-control gating.
+            (scripts / "validate_legacy_milestones.py").write_text(
+                "raise SystemExit(0)\n", encoding="utf-8"
+            )
+            (docs / "CONTROL_STATE.json").write_text("{}\n", encoding="utf-8")
+            (docs / "MILESTONE_STATE.json").write_text(
+                json.dumps(
+                    {
+                        "product_lane": {"paused": False, "active_milestone": 32},
+                        "milestones": [],
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            self.assertFalse((docs / "OPERATOR_PROTOCOL.md").exists())
+            result = subprocess.run(
+                ["node", "scripts/fxd-backlog.mjs", "select"],
+                cwd=root,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("automatic milestone selection is retired by Issue #66", result.stderr)
+        self.assertNotIn("Selected", result.stdout)
 
     def test_historical_validation_never_prints_m32_as_current_authority(self) -> None:
         result = subprocess.run(
