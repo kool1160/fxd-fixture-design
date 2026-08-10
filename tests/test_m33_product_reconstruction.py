@@ -15,6 +15,23 @@ from fxd_geometry import (
 from fxd_geometry.project import FxdProject, ProjectFormatError
 
 
+class _PreM33KernelFaceRepr:
+    """Independent reproduction of the historical six-field dataclass repr."""
+
+    def __init__(self, reference, face, surface_type):
+        self.reference = reference
+        self.face = face
+        self.surface_type = surface_type
+
+    def __repr__(self):
+        return (
+            f"KernelFace(reference={self.reference!r}, "
+            f"area_mm2={self.face.area_mm2!r}, center_mm={self.face.center_mm!r}, "
+            f"normal={self.face.normal!r}, surface_type={self.surface_type!r}, "
+            f"is_planar={self.face.is_planar!r})"
+        )
+
+
 class M33ProductReconstructionTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -211,9 +228,25 @@ class M33ProductReconstructionTests(unittest.TestCase):
             legacy.pop("product_reconstruction")
             legacy.pop("ai_execution")
             kernel_component = document.assembly.components[0]
+            from OCP.GeomAbs import GeomAbs_Plane
+            self.assertTrue(all(item.is_planar for item in kernel_component.faces))
+            historical_faces = []
+            historical_face_by_current = {}
+            for kernel_face in kernel_component.faces:
+                historical_face = "face:" + hashlib.sha256(repr((
+                    kernel_face.area_mm2, kernel_face.center_mm,
+                    kernel_face.normal, int(GeomAbs_Plane),
+                )).encode()).hexdigest()[:24]
+                historical_face_by_current[kernel_face.reference] = historical_face
+                historical_faces.append(_PreM33KernelFaceRepr(
+                    historical_face, kernel_face, "plane",
+                ))
+                self.assertEqual(kernel_face.legacy_reference, historical_face)
+                self.assertNotEqual(kernel_face.reference, historical_face)
             legacy_payload = repr((
                 (1,), kernel_component.name, kernel_component.transform,
-                kernel_component.topology, kernel_component.faces,
+                kernel_component.topology,
+                tuple(sorted(historical_faces, key=lambda item: item.reference)),
             )).encode()
             legacy_component = (
                 "component:" + hashlib.sha256(legacy_payload).hexdigest()[:24]
@@ -240,6 +273,11 @@ class M33ProductReconstructionTests(unittest.TestCase):
                         migrated["component_identity"] = legacy_component
                         if migrated.get("body_identity") == body.identity:
                             migrated["body_identity"] = legacy_body
+                        face_identity = migrated.get("face_identity")
+                        if face_identity in historical_face_by_current:
+                            migrated["face_identity"] = historical_face_by_current[
+                                face_identity
+                            ]
                     return migrated
                 return value
 
@@ -271,6 +309,15 @@ class M33ProductReconstructionTests(unittest.TestCase):
             invalid_path.write_text(json.dumps(invalid), encoding="utf-8")
             with self.assertRaisesRegex(ProjectFormatError, "unknown component reference"):
                 FxdProject.load(invalid_path)
+
+            invalid_face = json.loads(json.dumps(legacy))
+            invalid_face["annotations"]["permitted_locating_surfaces"][0][
+                "face_identity"
+            ] = "face:not-a-historical-alias"
+            invalid_face_path = Path(directory) / "invalid-face-v5.fxd.json"
+            invalid_face_path.write_text(json.dumps(invalid_face), encoding="utf-8")
+            with self.assertRaisesRegex(ProjectFormatError, "unknown face reference"):
+                FxdProject.load(invalid_face_path)
 
         changed_workflow = replace(
             workflow,

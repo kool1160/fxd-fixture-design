@@ -55,7 +55,24 @@ def _migrate_legacy_geometry_references(
     assembly = getattr(document, "assembly", None)
     kernel_components = tuple(getattr(assembly, "components", ()))
     current_components = {item.identity: item for item in product.components}
-    aliases: dict[str, tuple[Component, str]] = {}
+    aliases: dict[str, tuple[Component, str, dict[str, str]]] = {}
+
+    def legacy_face_aliases(faces: tuple[object, ...]) -> dict[str, str]:
+        result: dict[str, str] = {}
+        for face in faces:
+            legacy_reference = getattr(face, "legacy_reference", None)
+            current_reference = getattr(face, "reference", None)
+            if not isinstance(legacy_reference, str) or not isinstance(
+                current_reference, str,
+            ):
+                raise ProjectFormatError(
+                    "legacy project cannot reconstruct exact face identity aliases"
+                )
+            prior = result.get(legacy_reference)
+            if prior is not None and prior != current_reference:
+                raise ProjectFormatError("legacy face identity alias is ambiguous")
+            result[legacy_reference] = current_reference
+        return result
 
     if kernel_components:
         for kernel_component in kernel_components:
@@ -70,14 +87,20 @@ def _migrate_legacy_geometry_references(
             legacy_body = "body:" + hashlib.sha256(
                 legacy_component.encode()
             ).hexdigest()[:20]
-            aliases[legacy_component] = (current_component, legacy_body)
+            aliases[legacy_component] = (
+                current_component, legacy_body,
+                legacy_face_aliases(tuple(kernel_component.faces)),
+            )
     else:
         current_component = current_components.get("source:geometry")
         if current_component is None:
             raise ProjectFormatError(
                 "legacy project cannot reconstruct unstructured source geometry"
             )
-        aliases["source:geometry"] = (current_component, "body:source")
+        aliases["source:geometry"] = (
+            current_component, "body:source",
+            legacy_face_aliases(tuple(getattr(document, "faces", ()))),
+        )
 
     def migrate_reference(value: dict[str, object]) -> dict[str, object]:
         component_identity = value.get("component_identity")
@@ -86,9 +109,17 @@ def _migrate_legacy_geometry_references(
         alias = aliases.get(component_identity)
         if alias is None:
             return value
-        current_component, legacy_body = alias
+        current_component, legacy_body, face_aliases = alias
         result = dict(value)
         result["component_identity"] = current_component.identity
+        face_identity = value.get("face_identity")
+        current_face_ids = {
+            face.identity for body in current_component.bodies for face in body.faces
+        }
+        if (isinstance(face_identity, str)
+                and face_identity not in current_face_ids
+                and face_identity in face_aliases):
+            result["face_identity"] = face_aliases[face_identity]
         body_identity = value.get("body_identity")
         if body_identity is None:
             return result
@@ -98,13 +129,15 @@ def _migrate_legacy_geometry_references(
         if body_identity != legacy_body:
             return result
 
-        face_identity = value.get("face_identity")
+        face_identity = result.get("face_identity")
         edge_identity = value.get("edge_identity")
         if face_identity:
             matches = tuple(
                 body for body in current_component.bodies
                 if face_identity in {face.identity for face in body.faces}
             )
+            if not matches and len(current_component.bodies) == 1:
+                matches = tuple(current_component.bodies)
         elif edge_identity:
             matches = tuple(
                 body for body in current_component.bodies

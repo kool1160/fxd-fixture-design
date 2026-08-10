@@ -1,7 +1,7 @@
 """CAD-neutral boundary and reviewed OCP implementation for real B-Rep geometry."""
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import hashlib
 import logging
 from importlib.util import find_spec
@@ -81,6 +81,26 @@ class KernelFace:
     axis_direction: tuple[float, float, float] | None = None
     radius_mm: float | None = None
     orientation: str = "forward"
+    legacy_reference: str | None = field(default=None, repr=False, compare=False)
+    legacy_surface_type: str | None = field(default=None, repr=False, compare=False)
+
+
+class _LegacyKernelFaceRepr:
+    """Exact six-field dataclass repr used in pre-M33 component hashes."""
+
+    def __init__(self, face: KernelFace) -> None:
+        self._face = face
+
+    def __repr__(self) -> str:
+        face = self._face
+        if face.legacy_reference is None or face.legacy_surface_type is None:
+            raise KernelOperationError("pre-M33 face identity evidence is unavailable")
+        return (
+            f"KernelFace(reference={face.legacy_reference!r}, "
+            f"area_mm2={face.area_mm2!r}, center_mm={face.center_mm!r}, "
+            f"normal={face.normal!r}, surface_type={face.legacy_surface_type!r}, "
+            f"is_planar={face.is_planar!r})"
+        )
 
 
 @dataclass(frozen=True)
@@ -263,7 +283,18 @@ class OcpKernel:
                 topology = self.topology_counts(transformed)
                 bodies = self.body_records(transformed)
                 faces = self.face_records(transformed)
-                legacy_payload = repr((path, name, transform, topology, faces)).encode()
+                if any(face.legacy_reference is None for face in faces):
+                    raise KernelOperationError(
+                        "pre-M33 face identity evidence is unavailable"
+                    )
+                legacy_faces = tuple(
+                    _LegacyKernelFaceRepr(face) for face in sorted(
+                        faces, key=lambda item: item.legacy_reference or "",
+                    )
+                )
+                legacy_payload = repr((
+                    path, name, transform, topology, legacy_faces,
+                )).encode()
                 legacy_reference = (
                     "component:" + hashlib.sha256(legacy_payload).hexdigest()[:24]
                 )
@@ -581,6 +612,10 @@ class OcpKernel:
                 ))
                 radius = round(float(cylinder.Radius()), 9)
             orientation = "reversed" if face.Orientation() == TopAbs_REVERSED else "forward"
+            legacy_token = hashlib.sha256(repr((
+                area, center, direction, int(surface_type),
+            )).encode()).hexdigest()[:24]
+            legacy_surface_type = "plane" if planar else str(surface_type)
             token = hashlib.sha256(repr((
                 area, center, direction, int(surface_type), axis_origin,
                 axis_direction, radius, orientation,
@@ -589,6 +624,8 @@ class OcpKernel:
                 "face:" + token, area, center, direction,
                 "plane" if planar else ("cylinder" if cylindrical else str(surface_type)),
                 planar, axis_origin, axis_direction, radius, orientation,
+                legacy_reference="face:" + legacy_token,
+                legacy_surface_type=legacy_surface_type,
             ))
         return tuple(sorted(records, key=lambda item: item.reference))
 
