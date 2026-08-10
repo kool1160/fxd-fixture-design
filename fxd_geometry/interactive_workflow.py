@@ -593,6 +593,10 @@ def analyze_engineering_workflow(document: WorkbenchDocument,
     concept_started = perf_counter()
     state = replace(workflow, analysis_completed=True, active_stage="Validation")
     project = FxdProject.from_product(product, annotations, placement=placement, workflow=state)
+    from .product_reconstruction import reconstruct_product
+    project = project.with_product_reconstruction(
+        reconstruct_product(document, product, state)
+    )
     concept_ms = (perf_counter() - concept_started) * 1000.0
     validation_started = perf_counter()
     _ = tuple(project.validation_for(concept) for concept in project.concepts)

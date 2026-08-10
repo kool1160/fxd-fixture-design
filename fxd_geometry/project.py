@@ -25,9 +25,11 @@ from .access import evaluate_access
 from .weld_rules import evaluate_weld_rules
 
 if TYPE_CHECKING:
+    from .ai_execution import AiExecutionProvenance
     from .ai_fixture_engineer import FixtureProposal
     from .fabrication_workflow import FixtureBuildPlan
     from .interactive_workflow import InteractiveWorkflow
+    from .product_reconstruction import ProductReconstruction
 
 
 class ProjectFormatError(ValueError):
@@ -39,7 +41,7 @@ SUPPORTED_LAYERS = frozenset({
     "supports", "stops", "clamps", "welds", "access", "keep_out",
     "warnings", "provisional",
 })
-PROJECT_FORMAT = "fxd-neutral-project-v5"
+PROJECT_FORMAT = "fxd-neutral-project-v6"
 
 
 @dataclass(frozen=True)
@@ -136,6 +138,8 @@ class FxdProject:
     workflow: "InteractiveWorkflow | None" = None
     fixture_build: "FixtureBuildPlan | None" = None
     fixture_proposal: "FixtureProposal | None" = None
+    product_reconstruction: "ProductReconstruction | None" = None
+    ai_execution: "AiExecutionProvenance | None" = None
 
     def __post_init__(self) -> None:
         if self.annotations.source_sha256 != self.product.source_sha256:
@@ -162,6 +166,19 @@ class FxdProject:
         if self.fixture_proposal is not None:
             if self.fixture_proposal.source_sha256 != self.product.source_sha256:
                 raise ProjectFormatError("fixture proposal does not match the immutable source geometry")
+        if self.product_reconstruction is not None:
+            try:
+                self.product_reconstruction.require_current_source(self.product)
+            except ValueError as exc:
+                raise ProjectFormatError(str(exc)) from exc
+        if self.ai_execution is not None:
+            if self.ai_execution.source_sha256 != self.product.source_sha256:
+                raise ProjectFormatError("AI execution does not match the immutable source geometry")
+            if (self.ai_execution.reconstruction_identity is not None
+                    and (self.product_reconstruction is None
+                         or self.ai_execution.reconstruction_identity
+                         != self.product_reconstruction.reconstruction_identity)):
+                raise ProjectFormatError("AI execution does not match current reconstruction evidence")
 
     @classmethod
     def from_product(cls, product: ProductModel, annotations: EngineeringAnnotations,
@@ -215,16 +232,64 @@ class FxdProject:
 
     def _invalidate_derived_intent(self) -> "FxdProject":
         """Clear evidence derived from manufacturing or drawing state."""
-        return replace(self, drawing_intent=None, optimization_intent=None, fixture_build=None)
+        return replace(
+            self, drawing_intent=None, optimization_intent=None,
+            fixture_build=None, ai_execution=None,
+        )
 
-    def with_fixture_proposal(self, proposal: "FixtureProposal") -> "FxdProject":
+    def with_product_reconstruction(
+        self, reconstruction: "ProductReconstruction",
+    ) -> "FxdProject":
+        """Persist current source-bound reconstruction and invalidate stale AI state."""
+        try:
+            reconstruction.require_current_source(self.product)
+        except ValueError as exc:
+            raise ProjectFormatError(str(exc)) from exc
+        changed = (
+            self.product_reconstruction is None
+            or self.product_reconstruction.reconstruction_identity
+            != reconstruction.reconstruction_identity
+        )
+        candidate = replace(
+            self, product_reconstruction=reconstruction,
+            ai_execution=None if changed else self.ai_execution,
+            approved_revision=None if changed else self.approved_revision,
+        )
+        return candidate._record_revision(self.revision_id) if changed else candidate
+
+    def with_ai_execution(
+        self, execution: "AiExecutionProvenance", *, clear_proposal: bool = False,
+    ) -> "FxdProject":
+        """Persist safe mode/request provenance without retaining credentials or raw output."""
+        if execution.source_sha256 != self.product.source_sha256:
+            raise ProjectFormatError("AI execution does not match the immutable source geometry")
+        if (execution.reconstruction_identity is not None
+                and (self.product_reconstruction is None
+                     or execution.reconstruction_identity
+                     != self.product_reconstruction.reconstruction_identity)):
+            raise ProjectFormatError("AI execution does not match current reconstruction evidence")
+        candidate = replace(
+            self, ai_execution=execution,
+            fixture_proposal=None if clear_proposal else self.fixture_proposal,
+            fixture_build=None if clear_proposal else self.fixture_build,
+            drawing_intent=None if clear_proposal else self.drawing_intent,
+            optimization_intent=None if clear_proposal else self.optimization_intent,
+            approved_revision=None,
+        )
+        return candidate._record_revision(self.revision_id)
+
+    def with_fixture_proposal(
+        self, proposal: "FixtureProposal", *, preserve_ai_execution: bool = False,
+    ) -> "FxdProject":
         """Persist reviewed proposal evidence and invalidate authored downstream geometry."""
         if proposal.source_sha256 != self.product.source_sha256:
             raise ProjectFormatError("fixture proposal does not match the immutable source geometry")
         from .ai_fixture_engineer import validate_fixture_proposal
         candidate = replace(
             self, fixture_proposal=None, drawing_intent=None,
-            optimization_intent=None, fixture_build=None, approved_revision=None,
+            optimization_intent=None, fixture_build=None,
+            ai_execution=self.ai_execution if preserve_ai_execution else None,
+            approved_revision=None,
         )
         proposal = validate_fixture_proposal(candidate, proposal)
         candidate = replace(candidate, fixture_proposal=proposal)
@@ -239,7 +304,7 @@ class FxdProject:
             self.fixture_proposal, recommendation_id, decision, note,
         )
         proposal = validate_fixture_proposal(self, proposal)
-        return self.with_fixture_proposal(proposal)
+        return self.with_fixture_proposal(proposal, preserve_ai_execution=True)
 
     def edit_proposal_recommendation(self, recommendation_id: str,
                                      values: dict[str, object], note: str) -> "FxdProject":
@@ -248,13 +313,16 @@ class FxdProject:
         from .ai_fixture_engineer import edit_recommendation, validate_fixture_proposal
         proposal = edit_recommendation(self.fixture_proposal, recommendation_id, values, note)
         proposal = validate_fixture_proposal(self, proposal)
-        return self.with_fixture_proposal(proposal)
+        return self.with_fixture_proposal(proposal, preserve_ai_execution=True)
 
     def decide_fixture_proposal(self, decision: str, note: str = "") -> "FxdProject":
         if self.fixture_proposal is None:
             raise ProjectFormatError("project has no fixture proposal to decide")
         from .ai_fixture_engineer import decide_proposal
-        return self.with_fixture_proposal(decide_proposal(self.fixture_proposal, decision, note))
+        return self.with_fixture_proposal(
+            decide_proposal(self.fixture_proposal, decision, note),
+            preserve_ai_execution=True,
+        )
 
     def with_drawing_intent(self, intent: dict[str, object] | None) -> "FxdProject":
         """Attach drawing evidence and invalidate dependent cost evidence."""
@@ -288,7 +356,7 @@ class FxdProject:
         """Persist presentation inputs and record their revision deterministically."""
         if workflow.source_sha256 != self.product.source_sha256:
             raise ProjectFormatError("interactive workflow does not match the immutable source geometry")
-        candidate = replace(self, workflow=workflow, approved_revision=None)
+        candidate = replace(self, workflow=workflow, ai_execution=None, approved_revision=None)
         if candidate.fixture_proposal is not None:
             from .ai_fixture_engineer import (
                 proposal_engineering_context_identity, validate_fixture_proposal,
@@ -347,6 +415,10 @@ class FxdProject:
             payload["fixture_build"] = self.fixture_build.to_dict()
         if self.fixture_proposal is not None:
             payload["fixture_proposal"] = self.fixture_proposal.to_dict()
+        if self.product_reconstruction is not None:
+            payload["product_reconstruction"] = self.product_reconstruction.to_dict()
+        if self.ai_execution is not None:
+            payload["ai_execution"] = self.ai_execution.to_dict()
         encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"))
         return "rev-" + hashlib.sha256(encoded.encode()).hexdigest()[:16]
 
@@ -590,7 +662,7 @@ class FxdProject:
             for result in (self.validation_for(concept),)
         }
         return {
-            "format": PROJECT_FORMAT, "schema_version": 5, "units": "mm",
+            "format": PROJECT_FORMAT, "schema_version": 6, "units": "mm",
             "source_name": self.product.source_name,
             "source_sha256": self.product.source_sha256,
             "source_step_base64": base64.b64encode(self.product.source_bytes).decode("ascii"),
@@ -614,6 +686,10 @@ class FxdProject:
             "interactive_workflow": self.workflow.to_dict() if self.workflow else None,
             "fixture_build": self.fixture_build.to_dict() if self.fixture_build else None,
             "fixture_proposal": self.fixture_proposal.to_dict() if self.fixture_proposal else None,
+            "product_reconstruction": (
+                self.product_reconstruction.to_dict() if self.product_reconstruction else None
+            ),
+            "ai_execution": self.ai_execution.to_dict() if self.ai_execution else None,
             "validations": validations,
             "concept_corrections": {
                 concept.identity: [correction.__dict__ for correction in concept.corrections]
@@ -675,7 +751,7 @@ class FxdProject:
             data = json.loads(Path(source).read_text(encoding="utf-8"))
             if data.get("format") not in {
                     "fxd-neutral-project-v1", "fxd-neutral-project-v2", "fxd-neutral-project-v3",
-                    "fxd-neutral-project-v4", PROJECT_FORMAT
+                    "fxd-neutral-project-v4", "fxd-neutral-project-v5", PROJECT_FORMAT
             } or data.get("units") != "mm":
                 raise ProjectFormatError("unsupported FXD project format or units")
             raw = base64.b64decode(data["source_step_base64"], validate=True)
@@ -700,6 +776,12 @@ class FxdProject:
                 product, cls._annotations(data["annotations"], product),
                 placement=placement, workflow=workflow,
             )
+            reconstruction_data = data.get("product_reconstruction")
+            if reconstruction_data:
+                from .product_reconstruction import ProductReconstruction
+                project = project.with_product_reconstruction(
+                    ProductReconstruction.from_dict(reconstruction_data)
+                )
             for raw_edit in data.get("edit_log", []):
                 edit = FixtureEdit(raw_edit["operation"], raw_edit["target"],
                                    raw_edit.get("value"), raw_edit.get("reason", ""))
@@ -727,6 +809,12 @@ class FxdProject:
             if fixture_build_data:
                 from .fabrication_workflow import FixtureBuildPlan
                 project = project.with_fixture_build(FixtureBuildPlan.from_dict(fixture_build_data))
+            execution_data = data.get("ai_execution")
+            if execution_data:
+                from .ai_execution import AiExecutionProvenance
+                project = project.with_ai_execution(
+                    AiExecutionProvenance.from_dict(execution_data)
+                )
             for layer in data.get("hidden_layers", []):
                 if layer not in project.hidden_layers:
                     project = project.toggle_layer(layer)

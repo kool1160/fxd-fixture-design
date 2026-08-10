@@ -55,6 +55,12 @@ from .component_geometry import (ComponentClassification, ComponentExport, Compo
                                  generate_manufacturing_assembly, generate_manufacturing_assembly_for_product,
                                  validate_manufacturing_assembly, write_manufacturing_export_package)
 from .workbench import WorkbenchDocument, load_step_for_workbench
+from .product_reconstruction import (
+    RECONSTRUCTION_SCHEMA, AxisEvidence, HoleEvidence, InterpretedFeature,
+    ManufacturingClassification, PlaneEvidence, ProductReconstruction,
+    ProductReconstructionError, ReconstructionBody, ReconstructionComponent,
+    ReconstructionFace, ReconstructionQuestion, reconstruct_product,
+)
 from .vtk_viewer import (RenderDiagnostics, VtkSceneController,
                          VtkViewerUnavailable, VtkWorkbenchViewer)
 from .drawings import (APPROVAL_TEXT, NOT_RELEASED_TEXT, BomEntry, DrawingAnnotation,
@@ -110,7 +116,13 @@ from .ai_fixture_engineer import (
     apply_recommended_intent, build_ai_request, decide_proposal,
     decide_recommendation, deterministic_baseline_proposal, edit_recommendation,
     generate_fixture_proposal, minimal_intent_questions, proposal_from_ai_response,
-    proposal_engineering_context_identity, validate_fixture_proposal,
+    prepare_proposal_project, proposal_engineering_context_identity,
+    validate_fixture_proposal,
+)
+from .ai_execution import (
+    AI_EXECUTION_SCHEMA, AiExecutionError, AiExecutionProvenance,
+    DesignExecutionOutcome, ExecutionMode, FailureCategory, RequestStatus,
+    execute_design_mode, selected_mode_provenance,
 )
 
 
@@ -146,6 +158,11 @@ __all__ += ["ComponentClassification", "ComponentExport", "ComponentGeometryErro
             "generate_manufacturing_assembly_for_product", "validate_manufacturing_assembly",
             "write_manufacturing_export_package"]
 __all__ += ["WorkbenchDocument", "load_step_for_workbench"]
+__all__ += ["RECONSTRUCTION_SCHEMA", "AxisEvidence", "HoleEvidence",
+            "InterpretedFeature", "ManufacturingClassification", "PlaneEvidence",
+            "ProductReconstruction", "ProductReconstructionError", "ReconstructionBody",
+            "ReconstructionComponent", "ReconstructionFace", "ReconstructionQuestion",
+            "reconstruct_product"]
 __all__ += ["RenderDiagnostics", "VtkSceneController", "VtkViewerUnavailable",
             "VtkWorkbenchViewer"]
 __all__ += ["APPROVAL_TEXT", "NOT_RELEASED_TEXT", "BomEntry", "DrawingAnnotation", "DrawingDimension",
@@ -186,4 +203,7 @@ __all__ += ["PROMPT_CONTRACT_VERSION", "PROPOSAL_REQUEST_SCHEMA", "PROPOSAL_SCHE
             "apply_recommended_intent", "build_ai_request", "decide_proposal",
             "decide_recommendation", "deterministic_baseline_proposal", "edit_recommendation",
             "generate_fixture_proposal", "minimal_intent_questions", "proposal_from_ai_response",
-            "validate_fixture_proposal"]
+            "prepare_proposal_project", "validate_fixture_proposal"]
+__all__ += ["AI_EXECUTION_SCHEMA", "AiExecutionError", "AiExecutionProvenance",
+            "DesignExecutionOutcome", "ExecutionMode", "FailureCategory", "RequestStatus",
+            "execute_design_mode", "selected_mode_provenance"]

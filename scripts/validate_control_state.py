@@ -1,8 +1,8 @@
 """Validate the authoritative FXD control state and fail closed on drift."""
 from __future__ import annotations
 
-import hashlib
 import json
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -32,8 +32,12 @@ STALE_RESET_CLAIMS = (
 )
 
 
-def blob_sha(raw: bytes) -> str:
-    return hashlib.sha1(f"blob {len(raw)}\0".encode() + raw).hexdigest()  # nosec B324
+def canonical_worktree_blob(root: Path, relative: str) -> str:
+    """Hash the logical Git content so Windows checkout EOLs cannot forge drift."""
+    return subprocess.check_output(
+        ("git", "hash-object", f"--path={relative}", relative),
+        cwd=root, text=True, stderr=subprocess.DEVNULL,
+    ).strip()
 
 
 def mapping(data: dict[str, Any], key: str, errors: list[str]) -> dict[str, Any]:
@@ -140,8 +144,8 @@ def validate(root: Path) -> list[str]:
     if legacy.get("path") != "docs/MILESTONE_STATE.json" or legacy.get("authority") != "historical_only":
         errors.append("legacy milestone registry must remain historical-only at docs/MILESTONE_STATE.json")
     try:
-        actual_blob = blob_sha((root / "docs/MILESTONE_STATE.json").read_bytes())
-    except OSError as exc:
+        actual_blob = canonical_worktree_blob(root, "docs/MILESTONE_STATE.json")
+    except (OSError, subprocess.CalledProcessError) as exc:
         errors.append(f"cannot read legacy milestone registry: {exc}")
     else:
         if legacy.get("git_blob_sha") != LEGACY_BLOB or actual_blob != LEGACY_BLOB:
