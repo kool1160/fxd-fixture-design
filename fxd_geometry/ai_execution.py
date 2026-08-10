@@ -50,6 +50,7 @@ class FailureCategory(str, Enum):
     CONTRACT_QUARANTINE = "contract_quarantine"
     MALFORMED_OUTPUT = "malformed_output"
     CANCELLATION = "cancellation"
+    REQUEST_BUDGET_VIOLATION = "request_budget_violation"
 
 
 @dataclass(frozen=True)
@@ -91,10 +92,18 @@ class AiExecutionProvenance:
             raise AiExecutionError("M33.1 automatic provider retries must remain zero")
         if not 0.1 <= self.timeout_seconds <= 60.0:
             raise AiExecutionError("M33.1 request timeout must be within 0.1 to 60 seconds")
-        if self.request_count not in {0, 1}:
-            raise AiExecutionError("M33.1 execution may record at most one request")
-        if self.request_attempted != (self.request_count == 1):
+        if self.request_count < 0:
+            raise AiExecutionError("M33.1 request count cannot be negative")
+        if self.request_attempted != (self.request_count > 0):
             raise AiExecutionError("request attempted state does not match request count")
+        if self.request_count > 1 and not (
+            self.mode == ExecutionMode.AI_DESIGN_LIVE
+            and self.request_status == RequestStatus.FAILED
+            and self.failure_category == FailureCategory.REQUEST_BUDGET_VIOLATION
+        ):
+            raise AiExecutionError(
+                "an over-budget request count requires explicit failed provenance"
+            )
         if self.mode == ExecutionMode.DETERMINISTIC_OFFLINE:
             if self.request_count or self.provider_identity or self.model_identity:
                 raise AiExecutionError("offline mode cannot record a live provider request")
@@ -288,6 +297,8 @@ def _safe_failure_message(category: FailureCategory) -> str:
             "OpenAI output was malformed and was rejected; no fallback was used.",
         FailureCategory.CANCELLATION:
             "The live OpenAI request was cancelled; no fallback was used.",
+        FailureCategory.REQUEST_BUDGET_VIOLATION:
+            "The live provider exceeded the one-request budget; execution failed with no fallback.",
         FailureCategory.NONE: "",
     }[category]
 
@@ -425,13 +436,17 @@ def execute_design_mode(
     except Exception as exc:
         category = _failure_category(exc)
         after_requests = int(getattr(active_provider, "request_count", before_requests))
-        request_count = max(0, min(1, after_requests - before_requests))
+        request_count = after_requests - before_requests
+        if request_count < 0:
+            raise AiExecutionError("live provider request counter moved backwards") from exc
+        if request_count > 1:
+            category = FailureCategory.REQUEST_BUDGET_VIOLATION
         status = RequestStatus.CANCELLED if category == FailureCategory.CANCELLATION else RequestStatus.FAILED
         provenance = _record(
             mode=mode, source_sha256=document.source_sha256,
             reconstruction_identity=reconstruction.reconstruction_identity,
             provider_identity="openai", model_identity=model.strip(),
-            request_attempted=request_count == 1, request_count=request_count,
+            request_attempted=request_count > 0, request_count=request_count,
             request_status=status,
             generated_at_utc=datetime.now(timezone.utc).isoformat(),
             failure_category=category, timeout_seconds=timeout,

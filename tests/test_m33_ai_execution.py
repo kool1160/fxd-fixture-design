@@ -42,6 +42,13 @@ class _MissingModelProvider:
     request_count = 0
 
 
+class _OverrunProvider(_LiveProvider):
+    def generate(self, request, *, timeout_seconds, cancellation):
+        cancellation.raise_if_cancelled()
+        self.request_count += 2
+        return self.response
+
+
 class M33AiExecutionTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -199,6 +206,37 @@ class M33AiExecutionTests(unittest.TestCase):
         self.assertEqual(outcome.provenance.failure_category, FailureCategory.CANCELLATION)
         self.assertEqual(outcome.provenance.request_status, RequestStatus.CANCELLED)
         self.assertIsNone(outcome.proposal)
+
+    def test_provider_request_overrun_preserves_actual_count_and_fails_closed(self):
+        offline = execute_design_mode(
+            self.document, self.workflow, ExecutionMode.DETERMINISTIC_OFFLINE,
+        )
+        provider = _OverrunProvider(ai_response_from_proposal(offline.proposal))
+        outcome = execute_design_mode(
+            self.document, self.workflow, ExecutionMode.AI_DESIGN_LIVE,
+            provider=provider, current_project=offline.project,
+        )
+        self.assertEqual(provider.request_count, 2)
+        self.assertEqual(outcome.provider_state, ProviderState.FAILED)
+        self.assertEqual(outcome.provenance.request_count, 2)
+        self.assertTrue(outcome.provenance.request_attempted)
+        self.assertEqual(
+            outcome.provenance.failure_category,
+            FailureCategory.REQUEST_BUDGET_VIOLATION,
+        )
+        self.assertIsNone(outcome.proposal)
+        self.assertIsNone(outcome.project.fixture_proposal)
+        self.assertFalse(outcome.provenance.fallback_used)
+
+        with tempfile.TemporaryDirectory() as directory:
+            restored = FxdProject.load(
+                outcome.project.save(Path(directory) / "request-overrun.fxd.json")
+            )
+        self.assertEqual(restored.ai_execution.request_count, 2)
+        self.assertEqual(
+            restored.ai_execution.failure_category,
+            FailureCategory.REQUEST_BUDGET_VIOLATION,
+        )
 
     def test_environment_configuration_is_not_a_mode_selector(self):
         with patch.dict("os.environ", {

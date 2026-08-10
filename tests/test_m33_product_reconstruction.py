@@ -6,8 +6,9 @@ from pathlib import Path
 
 from fxd_geometry import (
     AnnotationRole, EngineeringAnnotations, GeometryReference, InteractiveWorkflow,
-    ManufacturingClassification, OcpKernel, ProcessSetup, ProductReconstruction,
-    ProductReconstructionError, Vec3, face_annotation, load_step_for_workbench,
+    KernelAssembly, KernelComponent, ManufacturingClassification, OcpKernel,
+    ProcessSetup, ProductReconstruction,
+    ProductReconstructionError, TopologyCounts, Vec3, face_annotation, load_step_for_workbench,
     product_from_workbench_document, reconstruct_product,
 )
 from fxd_geometry.project import FxdProject
@@ -63,6 +64,69 @@ class M33ProductReconstructionTests(unittest.TestCase):
             ManufacturingClassification.UNKNOWN,
         )
         self.assertTrue(reconstruction.blocked)
+
+    def test_multi_solid_component_preserves_exact_body_face_ownership(self):
+        source = self.kernel.export_step(self.kernel.compound((
+            self.kernel.make_box((0, 0, 0), (40, 30, 4)),
+            self.kernel.make_box((60, 0, 0), (100, 30, 4)),
+        )))
+        imported = load_step_for_workbench(source, source_name="multi-solid.step")
+        combined = KernelComponent(
+            "component:synthetic-multi-solid", "assembly:root", "multi-solid",
+            (1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0,
+             0.0, 0.0, 1.0, 0.0),
+            self.kernel.topology_counts(imported.shape), imported.bodies,
+            imported.faces,
+        )
+        document = replace(imported, assembly=KernelAssembly(
+            "assembly:root", imported.source_sha256, "mm", ("assembly:root",),
+            (combined,),
+        ))
+        product = product_from_workbench_document(document)
+        reconstruction = reconstruct_product(document, product)
+
+        self.assertEqual(len(product.components), 1)
+        self.assertEqual(len(product.components[0].bodies), 2)
+        self.assertEqual(len(reconstruction.bodies), 2)
+        self.assertTrue(all(
+            item.topology == TopologyCounts(1, 1, 6, 12)
+            for item in reconstruction.bodies
+        ))
+        owned = [set(item.face_identities) for item in reconstruction.bodies]
+        self.assertTrue(all(len(item) == 6 for item in owned))
+        self.assertFalse(owned[0] & owned[1])
+        self.assertEqual(set.union(*owned), {item.identity for item in reconstruction.faces})
+        self.assertEqual(
+            reconstruction.components[0].manufacturing_classification,
+            ManufacturingClassification.UNKNOWN,
+        )
+        self.assertTrue(reconstruction.blocked)
+
+    def test_tube_and_formed_channel_remain_unknown(self):
+        outer = self.kernel.make_box((0, 0, 0), (100, 40, 20))
+        inner = self.kernel.make_box((-1, 3, 3), (101, 37, 17))
+        tube = self.kernel.cut(outer, inner)
+        channel = self.kernel.boolean(
+            "fuse",
+            self.kernel.boolean(
+                "fuse",
+                self.kernel.make_box((0, 0, 0), (100, 40, 3)),
+                self.kernel.make_box((0, 0, 0), (100, 3, 20)),
+            ),
+            self.kernel.make_box((0, 37, 0), (100, 40, 20)),
+        )
+        for name, shape in (("tube", tube), ("formed-channel", channel)):
+            with self.subTest(name=name):
+                source = self.kernel.export_step(shape)
+                document = load_step_for_workbench(source, source_name=f"{name}.step")
+                reconstruction = reconstruct_product(
+                    document, product_from_workbench_document(document),
+                )
+                self.assertEqual(
+                    reconstruction.components[0].manufacturing_classification,
+                    ManufacturingClassification.UNKNOWN,
+                )
+                self.assertTrue(reconstruction.blocked)
 
     def test_explicit_classification_override_is_traceable(self):
         source = self.kernel.export_step(self.kernel.make_box((0, 0, 0), (20, 20, 20)))
@@ -140,6 +204,20 @@ class M33ProductReconstructionTests(unittest.TestCase):
             self.assertIsNone(migrated.product_reconstruction)
             self.assertIsNone(migrated.ai_execution)
 
+        changed_workflow = replace(
+            workflow,
+            setup=replace(workflow.setup, manufacturing_process="TIG welding"),
+        )
+        with self.assertRaisesRegex(ProductReconstructionError, "workflow"):
+            reconstruction.require_current_source(product, changed_workflow)
+        changed = project.with_workflow(changed_workflow)
+        self.assertIsNone(changed.product_reconstruction)
+        with tempfile.TemporaryDirectory() as directory:
+            restored = FxdProject.load(
+                changed.save(Path(directory) / "changed-workflow.fxd.json")
+            )
+        self.assertIsNone(restored.product_reconstruction)
+
     def test_tampered_or_stale_reconstruction_fails_closed(self):
         _, document = self._document()
         product = product_from_workbench_document(document)
@@ -148,6 +226,14 @@ class M33ProductReconstructionTests(unittest.TestCase):
         tampered["source_sha256"] = "0" * 64
         with self.assertRaisesRegex(ProductReconstructionError, "identity"):
             ProductReconstruction.from_dict(tampered)
+        with self.assertRaisesRegex(ProductReconstructionError, "exact reconstruction face"):
+            replace(
+                reconstruction, reconstruction_identity="",
+                bodies=(replace(
+                    reconstruction.bodies[0],
+                    face_identities=reconstruction.bodies[0].face_identities[:-1],
+                ),),
+            )
         other_source = self.kernel.export_step(
             self.kernel.make_box((0, 0, 0), (121, 80, 8))
         )

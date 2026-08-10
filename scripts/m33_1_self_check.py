@@ -12,7 +12,7 @@ if str(ROOT) not in sys.path:
 
 from fxd_geometry import (  # noqa: E402
     AnnotationRole, ExecutionMode, GeometryReference, InteractiveWorkflow,
-    OcpKernel, ProcessSetup, Vec3, execute_design_mode, face_annotation,
+    OcpKernel, ProcessSetup, TopologyCounts, Vec3, execute_design_mode, face_annotation,
     load_step_for_workbench, orientation_from_faces,
     product_from_workbench_document,
 )
@@ -69,6 +69,11 @@ def main() -> int:
     assert document.source_bytes == source
     assert reconstruction is not None and not reconstruction.blocked
     assert reconstruction.reconstruction_identity == reconstruction.expected_identity()
+    assert len(reconstruction.bodies) == 1
+    assert reconstruction.bodies[0].topology == TopologyCounts(1, 1, 6, 12)
+    assert set(reconstruction.bodies[0].face_identities) == {
+        item.identity for item in reconstruction.faces
+    }
     assert execution is not None
     assert execution.mode == ExecutionMode.DETERMINISTIC_OFFLINE
     assert execution.request_count == 0 and not execution.request_attempted
@@ -84,6 +89,7 @@ def main() -> int:
         "source_sha256": document.source_sha256,
         "reconstruction_identity": reconstruction.reconstruction_identity,
         "component_count": len(reconstruction.components),
+        "body_count": len(reconstruction.bodies),
         "face_count": len(reconstruction.faces),
         "plane_count": len(reconstruction.planes),
         "confirmed_weld_count": len(reconstruction.confirmed_weld_intent),

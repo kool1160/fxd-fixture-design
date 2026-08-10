@@ -64,14 +64,17 @@ class AiFixtureEngineerTests(unittest.TestCase):
         cls.original = cls.source.read_bytes()
         cls.document = load_step_for_workbench(cls.source)
         component = cls.document.assembly.components[0]
-        body = "body:" + sha256(component.reference.encode()).hexdigest()[:20]
 
         def reference(normal):
             face = next(item for item in component.faces if all(
                 abs(actual - expected) < 1.0e-7
                 for actual, expected in zip(item.normal, normal)
             ))
-            return GeometryReference(component.reference, body, face.reference)
+            body = next(
+                item for item in component.bodies
+                if any(owned.reference == face.reference for owned in item.faces)
+            )
+            return GeometryReference(component.reference, body.reference, face.reference)
 
         cls.bottom = reference((0.0, 0.0, -1.0))
         cls.front = reference((0.0, -1.0, 0.0))

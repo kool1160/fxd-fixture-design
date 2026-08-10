@@ -23,6 +23,16 @@ Unsupported meaning remains `unknown`. The reconstruction identity is the
 SHA-256-derived identity of its canonical evidence payload. Loading a project
 checks both that identity and the immutable source SHA.
 
+Each OCP solid has its own stable body identity, exact bounds, volume, unique
+topology counts, and owned face identities. Multi-solid components therefore
+remain multi-body rather than assigning every component face to every body.
+Automatic `plate_sheet` classification is limited to one proven full
+rectangular prismatic solid with the expected exact topology and a bounded
+thickness ratio; tube, channel, formed, hollow, or multi-body evidence remains
+`unknown` without an engineer override. Reconstruction-derived manufacturing
+meaning is also bound to a deterministic workflow-context identity. A process,
+orientation, or geometry-annotation change clears the stale reconstruction.
+
 Project format v6 persists the reconstruction and safely migrates v1-v5
 projects with no invented reconstruction evidence. Old projects remain
 readable with reconstruction absent until current OCP evidence is created.
@@ -57,6 +67,10 @@ timeout, provider failure, cancellation, malformed output, or contract
 quarantine produces no deterministic substitute. Offline mode may run the
 legacy deterministic analysis/proposal path but is labeled as offline and
 cannot claim an AI-authored result.
+
+If a provider reports more than one request, FXD preserves the actual observed
+count and records `request_budget_violation` as a failed execution. It never
+clamps an overrun back to a compliant count.
 
 The reused `fxd-fixture-proposal-v1` response is only the bounded M33.1 live
 request proof payload. This gate does not introduce or impersonate the future

@@ -168,7 +168,9 @@ class FxdProject:
                 raise ProjectFormatError("fixture proposal does not match the immutable source geometry")
         if self.product_reconstruction is not None:
             try:
-                self.product_reconstruction.require_current_source(self.product)
+                self.product_reconstruction.require_current_source(
+                    self.product, self.workflow,
+                )
             except ValueError as exc:
                 raise ProjectFormatError(str(exc)) from exc
         if self.ai_execution is not None:
@@ -242,7 +244,7 @@ class FxdProject:
     ) -> "FxdProject":
         """Persist current source-bound reconstruction and invalidate stale AI state."""
         try:
-            reconstruction.require_current_source(self.product)
+            reconstruction.require_current_source(self.product, self.workflow)
         except ValueError as exc:
             raise ProjectFormatError(str(exc)) from exc
         changed = (
@@ -356,7 +358,14 @@ class FxdProject:
         """Persist presentation inputs and record their revision deterministically."""
         if workflow.source_sha256 != self.product.source_sha256:
             raise ProjectFormatError("interactive workflow does not match the immutable source geometry")
-        candidate = replace(self, workflow=workflow, ai_execution=None, approved_revision=None)
+        reconstruction = self.product_reconstruction
+        if (reconstruction is not None
+                and reconstruction.stale_reason(self.product.source_sha256, workflow) is not None):
+            reconstruction = None
+        candidate = replace(
+            self, workflow=workflow, product_reconstruction=reconstruction,
+            ai_execution=None, approved_revision=None,
+        )
         if candidate.fixture_proposal is not None:
             from .ai_fixture_engineer import (
                 proposal_engineering_context_identity, validate_fixture_proposal,
@@ -779,9 +788,13 @@ class FxdProject:
             reconstruction_data = data.get("product_reconstruction")
             if reconstruction_data:
                 from .product_reconstruction import ProductReconstruction
-                project = project.with_product_reconstruction(
-                    ProductReconstruction.from_dict(reconstruction_data)
-                )
+                reconstruction = ProductReconstruction.from_dict(reconstruction_data)
+                try:
+                    project = project.with_product_reconstruction(reconstruction)
+                except ProjectFormatError as exc:
+                    if not (orientation_revalidation_required
+                            and "manufacturing workflow" in str(exc)):
+                        raise
             for raw_edit in data.get("edit_log", []):
                 edit = FixtureEdit(raw_edit["operation"], raw_edit["target"],
                                    raw_edit.get("value"), raw_edit.get("reason", ""))

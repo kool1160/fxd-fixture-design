@@ -998,7 +998,11 @@ def _infer_minimum_annotations(document: WorkbenchDocument,
         face = faces[0]
         component = next(item for item in document.assembly.components
                          if face in item.faces)
-        body_identity = "body:" + sha256(component.reference.encode()).hexdigest()[:20]
+        body = next(
+            item for item in component.bodies
+            if any(owned.reference == face.reference for owned in item.faces)
+        )
+        body_identity = body.reference
         candidates.append((GeometryReference(component.reference, body_identity, face.reference),
                            AnnotationRole.TERTIARY_DATUM))
     result = workflow
@@ -1058,7 +1062,10 @@ def build_ai_request(project: FxdProject) -> AiProposalRequest:
         "annotations": [{"identity": item.identity, "role": item.role.value,
                          "reference": item.reference.__dict__, "area_mm2": item.surface_area_mm2,
                          "normal": item.normal.__dict__}
-                        for item in workflow.geometry_annotations],
+                        for item in sorted(
+                            workflow.geometry_annotations,
+                            key=lambda value: value.identity,
+                        )],
         "customer_tooling": [{
             "identity": item.identity,
             "kind": item.kind,

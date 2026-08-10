@@ -406,41 +406,47 @@ class ConceptComparison:
     rationale: tuple[str, ...]
 
 
-def _bounds(points: tuple[tuple[float, float, float], ...]) -> Aabb:
-    if not points:
-        raise InteractiveWorkflowError("real OCP face evidence contains no tessellation vertices")
-    return Aabb(
-        Vec3(*(min(point[index] for point in points) for index in range(3))),
-        Vec3(*(max(point[index] for point in points) for index in range(3))),
-    )
-
-
 def product_from_workbench_document(document: WorkbenchDocument) -> ProductModel:
     """Create a neutral product only from real OCP identities and vertices."""
     mesh_by_face = {mesh.face_reference: mesh for mesh in document.meshes}
     components: list[Component] = []
     if document.assembly.components:
         for kernel_component in document.assembly.components:
-            face_ids = tuple(face.reference for face in kernel_component.faces)
-            meshes = tuple(mesh_by_face[item] for item in face_ids if item in mesh_by_face)
-            if not meshes:
+            face_ids = {face.reference for face in kernel_component.faces}
+            body_face_sequence = tuple(
+                face.reference for body in kernel_component.bodies for face in body.faces
+            )
+            body_face_ids = set(body_face_sequence)
+            if (body_face_ids != face_ids
+                    or len(body_face_sequence) != len(body_face_ids)):
                 raise InteractiveWorkflowError(
-                    f"component {kernel_component.reference} has no mapped real OCP tessellation evidence"
+                    f"component {kernel_component.reference} does not have one-to-one exact body/face ownership"
                 )
-            points = tuple(point for mesh in meshes for point in mesh.vertices_mm)
-            body_token = sha256(kernel_component.reference.encode()).hexdigest()[:20]
-            body = Body("body:" + body_token, _bounds(points), tuple(Face(item) for item in face_ids))
+            bodies = []
+            for kernel_body in kernel_component.bodies:
+                owned_faces = tuple(face.reference for face in kernel_body.faces)
+                if any(item not in mesh_by_face for item in owned_faces):
+                    raise InteractiveWorkflowError(
+                        f"body {kernel_body.reference} has no mapped real OCP tessellation evidence"
+                    )
+                bodies.append(Body(
+                    kernel_body.reference,
+                    Aabb(Vec3(*kernel_body.minimum_mm), Vec3(*kernel_body.maximum_mm)),
+                    tuple(Face(item) for item in owned_faces),
+                ))
             components.append(Component(
                 kernel_component.reference, kernel_component.name,
-                kernel_component.parent_reference, Transform(), (body,),
+                kernel_component.parent_reference, Transform(), tuple(bodies),
                 kernel_component.reference,
             ))
     else:
-        points = tuple(point for mesh in document.meshes for point in mesh.vertices_mm)
-        body = Body("body:source", _bounds(points),
-                    tuple(Face(mesh.face_reference) for mesh in document.meshes))
+        bodies = tuple(Body(
+            kernel_body.reference,
+            Aabb(Vec3(*kernel_body.minimum_mm), Vec3(*kernel_body.maximum_mm)),
+            tuple(Face(face.reference) for face in kernel_body.faces),
+        ) for kernel_body in document.bodies)
         components.append(Component(
-            "source:geometry", document.source_name, None, Transform(), (body,),
+            "source:geometry", document.source_name, None, Transform(), bodies,
             "source:geometry",
         ))
     return ProductModel(

@@ -84,12 +84,25 @@ class KernelFace:
 
 
 @dataclass(frozen=True)
+class KernelBody:
+    """Exact solid record with deterministic face ownership and mass evidence."""
+
+    reference: str
+    minimum_mm: tuple[float, float, float]
+    maximum_mm: tuple[float, float, float]
+    volume_mm3: float
+    topology: TopologyCounts
+    faces: tuple[KernelFace, ...]
+
+
+@dataclass(frozen=True)
 class KernelComponent:
     reference: str
     parent_reference: str
     name: str
     transform: tuple[float, ...]
     topology: TopologyCounts
+    bodies: tuple[KernelBody, ...]
     faces: tuple[KernelFace, ...]
 
 
@@ -116,6 +129,7 @@ class RealKernel(Protocol):
     def boolean(self, operation: str, left: object, right: object) -> object: ...
     def clearance(self, left: object, right: object) -> float: ...
     def topology_counts(self, model: object) -> TopologyCounts: ...
+    def body_records(self, model: object) -> tuple[KernelBody, ...]: ...
     def face_records(self, model: object) -> tuple[KernelFace, ...]: ...
     def make_box(self, minimum: tuple[float, float, float], maximum: tuple[float, float, float]) -> object: ...
     def make_cylinder(self, center: tuple[float, float, float], radius: float, height: float) -> object: ...
@@ -246,11 +260,12 @@ class OcpKernel:
                 name = self._label_name(label) or "component-" + ".".join(map(str, path))
                 transform = self._location_record(location)
                 topology = self.topology_counts(transformed)
+                bodies = self.body_records(transformed)
                 faces = self.face_records(transformed)
-                payload = repr((path, name, transform, topology, faces)).encode()
+                payload = repr((path, name, transform, topology, bodies, faces)).encode()
                 reference = "component:" + hashlib.sha256(payload).hexdigest()[:24]
                 components.append(KernelComponent(reference, parent_reference, name,
-                                                  transform, topology, faces))
+                                                  transform, topology, bodies, faces))
                 try:
                     color = Quantity_Color()
                     for color_type in (XCAFDoc_ColorType.XCAFDoc_ColorGen,
@@ -476,6 +491,46 @@ class OcpKernel:
     def topology_counts(self, model: object) -> TopologyCounts:
         return TopologyCounts(*(len(self._subshapes(model, kind))
                                 for kind in ("solid", "shell", "face", "edge")))
+
+    def body_records(self, model: object) -> tuple[KernelBody, ...]:
+        """Return one exact record per OCP solid, including owned faces."""
+        from OCP.Bnd import Bnd_Box
+        from OCP.BRepBndLib import BRepBndLib
+        from OCP.BRepGProp import BRepGProp
+        from OCP.GProp import GProp_GProps
+
+        records: list[KernelBody] = []
+        for solid in self._subshapes(model, "solid"):
+            bounds = Bnd_Box()
+            BRepBndLib.AddOptimal_s(solid, bounds)
+            raw_bounds = tuple(round(float(value), 9) for value in bounds.Get())
+            minimum = raw_bounds[:3]
+            maximum = raw_bounds[3:]
+            props = GProp_GProps()
+            BRepGProp.VolumeProperties_s(solid, props)
+            volume = round(float(props.Mass()), 9)
+            topology = self._unique_topology_counts(solid)
+            faces = self.face_records(solid)
+            payload = repr((minimum, maximum, volume, topology, faces)).encode()
+            records.append(KernelBody(
+                "body:" + hashlib.sha256(payload).hexdigest()[:24],
+                minimum, maximum, volume, topology, faces,
+            ))
+        return tuple(sorted(records, key=lambda item: item.reference))
+
+    @staticmethod
+    def _unique_topology_counts(model: object) -> TopologyCounts:
+        """Count unique owned subshapes rather than explorer occurrences."""
+        from OCP.TopAbs import TopAbs_EDGE, TopAbs_FACE, TopAbs_SHELL, TopAbs_SOLID
+        from OCP.TopExp import TopExp
+        from OCP.TopTools import TopTools_IndexedMapOfShape
+
+        counts = []
+        for kind in (TopAbs_SOLID, TopAbs_SHELL, TopAbs_FACE, TopAbs_EDGE):
+            mapped = TopTools_IndexedMapOfShape()
+            TopExp.MapShapes_s(model, kind, mapped)
+            counts.append(int(mapped.Extent()))
+        return TopologyCounts(*counts)
 
     def face_records(self, model: object) -> tuple[KernelFace, ...]:
         from OCP.BRepAdaptor import BRepAdaptor_Surface
