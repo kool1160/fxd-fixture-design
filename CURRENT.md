@@ -2,7 +2,7 @@
 
 ## State
 
-**GOVERNANCE RESET — PRODUCT IMPLEMENTATION HELD**
+**AWAITING_REVIEW — GOVERNANCE RESET; PRODUCT IMPLEMENTATION HELD**
 
 This file is the concise operator-facing control surface. GitHub Issue #66 is the active governance authority for the reset. Historical milestone records remain evidence, but they do not authorize continuing the superseded M32 implementation.
 
@@ -10,9 +10,10 @@ This file is the concise operator-facing control surface. GitHub Issue #66 is th
 
 - **Issue:** #66 — Governance reset: AI-driven fixture synthesis and LaserX-style project control
 - **Lane:** product direction / architecture / governance
-- **Implementation PR:** none until the governance-reset PR is opened
+- **Implementation PR:** #67 — draft governance reset
+- **Expected branch:** `governance/ai-driven-fxd-reset`
 - **Review authority:** FXD Review-Control chat
-- **Builder:** Codex, only after `CONTINUE`
+- **Builder/repair session:** Codex, only after `CONTINUE`
 
 ## Held and superseded
 
@@ -32,6 +33,7 @@ Do not reopen or continue these items unless Issue #66 or a later accepted decis
 - Define product reconstruction and structured fixture-precedent requirements.
 - Define the milestone transition that supersedes M32 without calling it complete.
 - Define one bounded AI-driven fixture-synthesis proof before broader work.
+- Repair deterministic governance/state validation exposed by PR #67 without broadening into product runtime work.
 
 ## Out of scope
 
@@ -48,8 +50,9 @@ Do not reopen or continue these items unless Issue #66 or a later accepted decis
 - `AGENTS.md`, Product Direction, Architecture, Engineering Constitution, milestone governance, operator protocol, and Codex prompt all agree.
 - No active instruction still authorizes the advisory-AI/deterministic-template product path.
 - The next bounded product gate has measurable acceptance criteria.
-- Review-Control can issue one `CONTINUE`; Codex can implement one bounded pass and stop `AWAITING_REVIEW`.
+- Legacy registry/validator behavior is migrated or explicitly retired without weakening repository checks.
+- Review-Control can issue one `CONTINUE`; Codex can repair one bounded pass and stop `AWAITING_REVIEW`.
 
 ## Next valid action
 
-Open and independently review the governance-reset pull request. Do not begin product implementation before that exact head is accepted.
+**Check PR #67's exact head and CI.** If repository-control validation fails, write bounded findings and issue `CONTINUE` for Codex to repair the same PR. Do not begin product implementation before this governance head is accepted.
